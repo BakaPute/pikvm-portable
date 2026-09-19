@@ -29,6 +29,47 @@ rw
 pinctrl set 17 op dh
 
 echo "[OK] GPIO17 maintenu à HIGH"
+echo
+echo ">>> TU PEUX MAINTENANT RELACHER LE BOUTON POWER <<<"
+echo
+
+# GPIO18 = bouton physique.
+pinctrl set 18 ip pd
+
+# Attend réellement que le bouton soit relâché.
+while pinctrl get 18 | grep -q "| hi"
+do
+    sleep 0.1
+done
+
+sleep 0.3
+
+echo "[OK] Bouton POWER relâché"
+
+# ------------------------------------------------------------
+# I2C OLED / MAX17048
+# ------------------------------------------------------------
+
+REBOOT_I2C=0
+
+if [ ! -e /dev/i2c-1 ]; then
+
+    if ! grep -qxF "dtparam=i2c_arm=on" /boot/config.txt; then
+        echo "dtparam=i2c_arm=on" >> /boot/config.txt
+        echo "[OK] I2C activé dans /boot/config.txt"
+    else
+        echo "[OK] I2C déjà configuré dans /boot/config.txt"
+    fi
+
+    REBOOT_I2C=1
+
+    echo "[INFO] I2C sera disponible après redémarrage"
+
+else
+
+    echo "[OK] Bus I2C déjà disponible"
+
+fi
 
 # Fonction exécutée automatiquement si le script s'arrête.
 fin_installation() {
@@ -40,16 +81,48 @@ trap fin_installation EXIT
 echo
 echo "[1/8] Installation des dépendances..."
 
-pacman -S --needed --noconfirm \
-    hostapd \
-    dnsmasq \
-    qrencode \
-    i2c-tools \
-    v4l-utils \
-    python-luma-oled \
-    python-pillow \
-    python-smbus2 \
+# N'installe que les paquets réellement absents.
+# Cela évite une mise à jour partielle de Python / KVMD.
+
+PAQUETS=(
+    hostapd
+    dnsmasq
+    qrencode
+    i2c-tools
+    v4l-utils
     patch
+)
+
+MANQUANTS=()
+
+for PAQUET in "${PAQUETS[@]}"
+do
+    if ! pacman -Q "$PAQUET" >/dev/null 2>&1; then
+        MANQUANTS+=("$PAQUET")
+    fi
+done
+
+if [ "${#MANQUANTS[@]}" -gt 0 ]; then
+
+    echo "Paquets manquants : ${MANQUANTS[*]}"
+
+    pacman -Sy --needed --noconfirm "${MANQUANTS[@]}"
+
+else
+
+    echo "[OK] Tous les paquets système sont déjà présents"
+
+fi
+
+# Ces bibliothèques Python sont normalement fournies par PiKVM.
+python3 - <<'PYDEPS'
+import PIL
+import smbus2
+import luma.core
+import luma.oled
+
+print("[OK] Bibliothèques Python présentes")
+PYDEPS
 
 echo "[OK] Dépendances installées"
 
@@ -364,9 +437,20 @@ echo "[OK] Scripts Python valides"
 echo
 echo "Démarrage des services personnalisés..."
 
+# Le bouton a déjà été relâché plus haut.
 systemctl restart pikvm-power-hold.service
-systemctl restart pikvm-oled-custom.service
-systemctl restart pikvm-button-menu.service
+
+if [ "$REBOOT_I2C" -eq 0 ]; then
+
+    systemctl restart pikvm-oled-custom.service
+    systemctl restart pikvm-button-menu.service
+
+else
+
+    echo "[INFO] OLED et menu bouton démarreront après le redémarrage I2C"
+
+fi
+
 systemctl restart wifi-wizard-api.service
 systemctl restart pikvm-auto-shutdown.service
 
@@ -406,21 +490,31 @@ done
 echo
 echo "Contrôle I2C..."
 
-I2C_RESULT="$(i2cdetect -y 1)"
+if [ -e /dev/i2c-1 ]; then
 
-if echo "$I2C_RESULT" | grep -q "36"; then
-    echo "[OK] MAX17048 détecté à 0x36"
-else
-    echo "[ATTENTION] MAX17048 non détecté"
-fi
+    I2C_RESULT="$(i2cdetect -y 1)"
 
-if echo "$I2C_RESULT" | grep -q "3c"; then
-    echo "[OK] OLED détecté à 0x3C"
+    if echo "$I2C_RESULT" | grep -q "36"; then
+        echo "[OK] MAX17048 détecté à 0x36"
+    else
+        echo "[ATTENTION] MAX17048 non détecté"
+    fi
+
+    if echo "$I2C_RESULT" | grep -q "3c"; then
+        echo "[OK] OLED détecté à 0x3C"
+    else
+        echo "[ATTENTION] OLED non détecté"
+    fi
+
 else
-    echo "[ATTENTION] OLED non détecté"
+
+    echo "[ATTENTION] /dev/i2c-1 absent"
+    echo "[INFO] Redémarrage nécessaire pour activer I2C"
+
 fi
 
 echo
+
 echo "======================================"
 echo " Installation terminée"
 echo "======================================"

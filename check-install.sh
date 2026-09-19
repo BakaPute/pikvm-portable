@@ -17,7 +17,12 @@ pinctrl get 18
 echo
 echo "=== I2C ==="
 
-i2cdetect -y 1
+if [ -e /dev/i2c-1 ]; then
+    i2cdetect -y 1
+else
+    echo "[ATTENTION] /dev/i2c-1 absent"
+    echo "Un redémarrage peut être nécessaire après activation de I2C."
+fi
 
 echo
 echo "=== SERVICES ==="
