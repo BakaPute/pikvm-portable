@@ -120,3 +120,24 @@ Certaines modifications de ce projet touchent directement des fichiers de PiKVM.
 Une mise à jour de PiKVM peut donc écraser certaines modifications.
 
 Après une mise à jour de PiKVM, il peut être nécessaire de relancer `install.sh`.
+
+## Premier démarrage sur une carte microSD neuve
+
+Le montage d'alimentation nécessite de maintenir physiquement le bouton POWER pendant le premier démarrage, car GPIO17 n'est pas encore configuré par le projet.
+
+Lancer ensuite `install.sh`.
+
+Dès que l'installateur affiche :
+
+    [OK] GPIO17 maintenu à HIGH
+    >>> TU PEUX MAINTENANT RELACHER LE BOUTON POWER <<<
+
+le bouton doit être relâché.
+
+Si `/dev/i2c-1` n'existe pas, l'installateur ajoute automatiquement :
+
+    dtparam=i2c_arm=on
+
+dans `/boot/config.txt`.
+
+Un redémarrage est alors nécessaire pour l'OLED et le MAX17048.

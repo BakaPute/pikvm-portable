@@ -478,6 +478,16 @@ pikvm-auto-shutdown
 for SERVICE in $SERVICES
 do
 
+    if [ "$REBOOT_I2C" -eq 1 ] && {
+        [ "$SERVICE" = "pikvm-oled-custom" ] ||
+        [ "$SERVICE" = "pikvm-button-menu" ];
+    }; then
+
+        echo "[INFO] $SERVICE : en attente du redémarrage I2C"
+        continue
+
+    fi
+
     if systemctl is-active --quiet "$SERVICE.service"; then
         echo "[OK] $SERVICE"
     else
@@ -529,3 +539,19 @@ echo "Pour effectuer un contrôle complet :"
 echo "cd $REPO"
 echo "./check-install.sh"
 echo
+
+if [ "$REBOOT_I2C" -eq 1 ]; then
+
+    echo "======================================"
+    echo " REDÉMARRAGE NÉCESSAIRE"
+    echo "======================================"
+    echo
+    echo "I2C vient d'être activé."
+    echo
+    echo "1. Maintiens le bouton POWER appuyé."
+    echo "2. Lance : reboot"
+    echo "3. Garde le bouton appuyé pendant le redémarrage."
+    echo "4. Relâche-le lorsque l'écran OLED le demande."
+    echo
+
+fi
