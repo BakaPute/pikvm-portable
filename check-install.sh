@@ -85,8 +85,26 @@ p = Path("/run/kvmd/pikvm-hid-last-activity")
 
 try:
     timestamp = float(p.read_text().strip())
-    age = max(0, time.time() - timestamp)
-    print(f"Dernière activité HID : il y a {age:.1f} secondes")
+    now = time.time()
+    uptime = float(
+        Path("/proc/uptime").read_text().split()[0]
+    )
+
+    age = now - timestamp
+
+    # Si l'âge dépasse largement l'uptime, l'horloge système
+    # a probablement été corrigée par NTP depuis l'écriture.
+    if age < 0 or age > uptime + 60:
+        print(
+            "Marqueur HID présent ; "
+            "âge non fiable après synchronisation de l'heure"
+        )
+    else:
+        print(
+            f"Dernière activité HID : "
+            f"il y a {age:.1f} secondes"
+        )
+
 except Exception as err:
     print(f"Erreur : {err}")
 PY

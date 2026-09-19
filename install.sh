@@ -47,22 +47,41 @@ sleep 0.3
 echo "[OK] Bouton POWER relâché"
 
 # ------------------------------------------------------------
-# I2C OLED / MAX17048
+# Configuration de démarrage
 # ------------------------------------------------------------
 
 REBOOT_I2C=0
 
+# Modifie config.txt avec Python afin de garantir un retour à
+# la ligne correct, même si le fichier n'en avait pas à la fin.
+python3 - <<'PYBOOT'
+from pathlib import Path
+
+p = Path("/boot/config.txt")
+s = p.read_text()
+
+if s and not s.endswith("\n"):
+    s += "\n"
+
+lignes = {line.strip() for line in s.splitlines()}
+
+for line in (
+    "gpio=17=op,dh",
+    "dtparam=i2c_arm=on",
+):
+    if line not in lignes:
+        s += line + "\n"
+        lignes.add(line)
+
+p.write_text(s)
+PYBOOT
+
+echo "[OK] GPIO17 configuré HIGH dès le firmware"
+echo "[OK] I2C configuré dans /boot/config.txt"
+
 if [ ! -e /dev/i2c-1 ]; then
 
-    if ! grep -qxF "dtparam=i2c_arm=on" /boot/config.txt; then
-        echo "dtparam=i2c_arm=on" >> /boot/config.txt
-        echo "[OK] I2C activé dans /boot/config.txt"
-    else
-        echo "[OK] I2C déjà configuré dans /boot/config.txt"
-    fi
-
     REBOOT_I2C=1
-
     echo "[INFO] I2C sera disponible après redémarrage"
 
 else

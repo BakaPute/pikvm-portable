@@ -35,12 +35,19 @@ def hdmi_present():
         return False
 
 
-def hid_last_activity():
+def hid_activity_token():
+    """
+    Retourne le contenu du marqueur HID.
+
+    On ne compare volontairement PAS son horodatage à l'heure
+    système, car celle-ci peut changer brutalement après une
+    synchronisation NTP au démarrage.
+    """
     try:
         with open(HID_FILE, "r") as file:
-            return float(file.read().strip())
+            return file.read().strip()
     except Exception:
-        return time.time()
+        return None
 
 
 def write_state(data):
@@ -58,26 +65,34 @@ def main():
         flush=True,
     )
 
-    now = time.time()
+    # time.monotonic() n'est jamais affecté par une correction
+    # de l'heure système ou une synchronisation NTP.
+    last_active = time.monotonic()
 
-    # Empêche un arrêt immédiat au démarrage du service.
-    last_active = now
+    # On mémorise simplement la valeur du fichier HID.
+    # Lorsqu'elle change, une activité clavier/souris a eu lieu.
+    last_hid_token = hid_activity_token()
 
     while True:
 
-        now = time.time()
+        now = time.monotonic()
 
         hdmi = hdmi_present()
-        hid_time = hid_last_activity()
+        hid_token = hid_activity_token()
 
         if hdmi:
             # Tant qu'un signal HDMI existe, le compteur
             # reste continuellement remis à zéro.
             last_active = now
 
-        elif hid_time > last_active:
-            # Activité clavier/souris pendant l'absence HDMI.
-            last_active = hid_time
+        elif (
+            hid_token is not None
+            and hid_token != last_hid_token
+        ):
+            # Une nouvelle activité clavier/souris a été détectée.
+            last_active = now
+
+        last_hid_token = hid_token
 
         idle = max(0, now - last_active)
         remaining = max(0, TIMEOUT - idle)
