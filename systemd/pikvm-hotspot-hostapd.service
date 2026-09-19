@@ -1,0 +1,8 @@
+[Unit]
+Description=PiKVM Rescue Hotspot hostapd
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/hostapd /etc/kvmd/pikvm-hotspot-hostapd.conf
+Restart=on-failure
+RestartSec=2

@@ -1,0 +1,6 @@
+name: Wi-Fi Wizard
+description: Gestion graphique des réseaux Wi-Fi
+icon: extras/wifi-wizard/wifi-grey.svg
+path: extras/wifi-wizard/
+daemon: wifi-wizard-api
+place: 20

@@ -1,0 +1,8 @@
+[Unit]
+Description=PiKVM Rescue Hotspot DHCP
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/dnsmasq --keep-in-foreground --conf-file=/etc/kvmd/pikvm-hotspot-dnsmasq.conf
+Restart=on-failure
+RestartSec=2

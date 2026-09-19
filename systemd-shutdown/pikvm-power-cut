@@ -1,0 +1,10 @@
+#!/bin/sh
+
+# Seulement pour un arrêt demandé par notre bouton.
+# Ne coupe pas POWER_HOLD lors d'un reboot normal.
+
+if [ "$1" = "poweroff" ] && \
+   [ -e /run/pikvm-poweroff-requested ]; then
+
+    /usr/bin/pinctrl set 17 op dl 2>/dev/null || true
+fi

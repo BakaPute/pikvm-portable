@@ -1,0 +1,168 @@
+#!/bin/bash
+
+set -u
+
+ENV_FILE="/etc/kvmd/pikvm-hotspot.env"
+AP_NETWORK="/run/systemd/network/05-pikvm-hotspot.network"
+STATE_FILE="/run/pikvm-hotspot-active"
+
+source "$ENV_FILE"
+
+
+generate_hotspot_config() {
+
+    cat > /etc/kvmd/pikvm-hotspot-hostapd.conf <<CONF
+interface=wlan0
+driver=nl80211
+
+ssid=${HOTSPOT_SSID}
+
+country_code=FR
+hw_mode=g
+channel=6
+
+ieee80211n=1
+wmm_enabled=1
+
+auth_algs=1
+
+wpa=2
+wpa_key_mgmt=WPA-PSK
+rsn_pairwise=CCMP
+wpa_passphrase=${HOTSPOT_PASS}
+CONF
+
+    cat > /etc/kvmd/pikvm-hotspot-dnsmasq.conf <<CONF
+interface=wlan0
+bind-interfaces
+
+dhcp-range=192.168.50.10,192.168.50.100,255.255.255.0,12h
+
+dhcp-option=3,${HOTSPOT_IP}
+dhcp-option=6,${HOTSPOT_IP}
+
+dhcp-leasefile=/run/pikvm-hotspot.leases
+pid-file=/run/pikvm-hotspot-dnsmasq.pid
+
+address=/pikvm.setup/${HOTSPOT_IP}
+
+no-resolv
+log-dhcp
+CONF
+}
+
+hotspot_on() {
+
+    generate_hotspot_config
+
+    if [ -e "$STATE_FILE" ]; then
+        echo "Hotspot already active"
+        exit 0
+    fi
+
+    echo "Stopping normal Wi-Fi..."
+
+    systemctl stop wpa_supplicant@wlan0.service
+
+    mkdir -p /run/systemd/network
+
+    cat > "$AP_NETWORK" <<APEOF
+[Match]
+Name=wlan0
+
+[Network]
+Address=${HOTSPOT_IP}/24
+DHCP=no
+IPv6AcceptRA=no
+LinkLocalAddressing=no
+ConfigureWithoutCarrier=yes
+APEOF
+
+    networkctl reload
+
+    ip addr flush dev wlan0
+    ip link set wlan0 up
+
+    networkctl reconfigure wlan0
+
+    sleep 1
+
+    # Sécurité au cas où networkd n'a pas encore posé l'IP.
+    if ! ip -4 addr show wlan0 | grep -q "${HOTSPOT_IP}/24"; then
+        ip addr add "${HOTSPOT_IP}/24" dev wlan0
+    fi
+
+    echo "Starting hotspot..."
+
+    systemctl start pikvm-hotspot-hostapd.service
+
+    sleep 1
+
+    systemctl start pikvm-hotspot-dnsmasq.service
+
+    touch "$STATE_FILE"
+
+    echo
+    echo "Hotspot active"
+    echo "SSID : $HOTSPOT_SSID"
+    echo "PASS : $HOTSPOT_PASS"
+    echo "IP   : $HOTSPOT_IP"
+}
+
+
+hotspot_off() {
+
+    echo "Stopping hotspot..."
+
+    systemctl stop pikvm-hotspot-dnsmasq.service 2>/dev/null || true
+    systemctl stop pikvm-hotspot-hostapd.service 2>/dev/null || true
+
+    rm -f "$STATE_FILE"
+    rm -f "$AP_NETWORK"
+
+    ip addr flush dev wlan0
+
+    networkctl reload
+    networkctl reconfigure wlan0
+
+    systemctl start wpa_supplicant@wlan0.service
+
+    ip link set wlan0 up
+
+    networkctl reconfigure wlan0
+
+    echo "Normal Wi-Fi restored"
+}
+
+
+hotspot_status() {
+
+    if [ -e "$STATE_FILE" ]; then
+        echo "ACTIVE"
+        echo "SSID=$HOTSPOT_SSID"
+        echo "PASS=$HOTSPOT_PASS"
+        echo "IP=$HOTSPOT_IP"
+    else
+        echo "INACTIVE"
+    fi
+}
+
+
+case "${1:-}" in
+    on)
+        hotspot_on
+        ;;
+
+    off)
+        hotspot_off
+        ;;
+
+    status)
+        hotspot_status
+        ;;
+
+    *)
+        echo "Usage: pikvm-hotspot on|off|status"
+        exit 1
+        ;;
+esac

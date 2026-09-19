@@ -1,0 +1,611 @@
+#!/usr/bin/env python3
+import json
+import os
+import re
+import shutil
+import socketserver
+import subprocess
+from datetime import datetime
+from http.server import BaseHTTPRequestHandler
+from pathlib import Path
+from urllib.parse import urlparse
+
+CONF = Path("/etc/wpa_supplicant/wpa_supplicant-wlan0.conf")
+FORCED_PRIORITY = "9999"
+HOST = "127.0.0.1"
+PORT = 9876
+
+
+def run(cmd, check=False):
+    if isinstance(cmd, str):
+        return subprocess.run(cmd, shell=True, text=True, capture_output=True, check=check)
+    return subprocess.run(cmd, text=True, capture_output=True, check=check)
+
+
+def make_rw():
+    if shutil.which("rw"):
+        run(["rw"])
+
+
+def make_ro():
+    if shutil.which("ro"):
+        run(["ro"])
+
+
+def restart_wifi_service():
+    run("systemctl restart wpa_supplicant@wlan0.service || systemctl restart wpa_supplicant.service || true")
+
+
+def backup_conf():
+    backup = CONF.with_name(CONF.name + ".backup." + datetime.now().strftime("%Y%m%d-%H%M%S"))
+    shutil.copy2(CONF, backup)
+    return str(backup)
+
+
+def read_conf():
+    if not CONF.exists():
+        return []
+    return CONF.read_text(errors="ignore").splitlines()
+
+
+def write_conf(lines):
+    CONF.write_text("\n".join(lines) + "\n")
+
+
+def split_blocks(lines):
+    items = []
+    raw = []
+    in_block = False
+    block = []
+
+    for line in lines:
+        if not in_block and re.match(r"^\s*network\s*=\s*\{", line):
+            if raw:
+                items.append(("raw", raw))
+                raw = []
+            in_block = True
+            block = [line]
+        elif in_block:
+            block.append(line)
+            if re.match(r"^\s*\}", line):
+                items.append(("network", block))
+                in_block = False
+                block = []
+        else:
+            raw.append(line)
+
+    if block:
+        items.append(("network", block))
+    if raw:
+        items.append(("raw", raw))
+
+    return items
+
+
+def get_value(block, key):
+    pattern = re.compile(rf'^\s*{re.escape(key)}\s*=\s*"?([^"]*)"?\s*$')
+    for line in block:
+        m = pattern.match(line)
+        if m:
+            return m.group(1).strip()
+    return ""
+
+
+def get_comment_psk(block):
+    for line in block:
+        m = re.match(r'^\s*#psk\s*=\s*"([^"]*)"', line)
+        if m:
+            return m.group(1)
+    return ""
+
+
+def is_forced(block):
+    return any("#wifi-wizard-forced=1" in line for line in block)
+
+
+def get_old_priority(block):
+    for line in block:
+        m = re.match(r"^\s*#wifi-wizard-old-priority=(.*)$", line)
+        if m:
+            return m.group(1).strip()
+    return ""
+
+
+def get_networks():
+    items = split_blocks(read_conf())
+    nets = []
+    idx = 0
+
+    for kind, block in items:
+        if kind != "network":
+            continue
+
+        idx += 1
+        ssid = get_value(block, "ssid") or "<SSID inconnu>"
+        priority = get_value(block, "priority") or "0"
+        psk = get_comment_psk(block) or ""
+        hidden = get_value(block, "scan_ssid") == "1"
+        forced = is_forced(block)
+
+        nets.append({
+            "id": idx,
+            "ssid": ssid,
+            "password": psk,
+            "password_visible": bool(psk),
+            "priority": priority,
+            "hidden": hidden,
+            "forced": forced,
+        })
+
+    return nets
+
+
+def clean_forced_markers(block):
+    return [
+        line for line in block
+        if "#wifi-wizard-forced=1" not in line
+        and not re.match(r"^\s*#wifi-wizard-old-priority=", line)
+    ]
+
+
+def remove_priority_lines(block):
+    return [
+        line for line in block
+        if not re.match(r"^\s*priority\s*=", line)
+    ]
+
+
+def insert_before_closing(block, lines_to_insert):
+    new_block = []
+    inserted = False
+
+    for line in block:
+        if not inserted and re.match(r"^\s*\}", line):
+            new_block.extend(lines_to_insert)
+            inserted = True
+        new_block.append(line)
+
+    if not inserted:
+        new_block.extend(lines_to_insert)
+
+    return new_block
+
+
+def wifi_status():
+    link = run(["iw", "wlan0", "link"]).stdout.strip()
+    ip_out = run("ip -4 addr show wlan0 | grep -oP '(?<=inet\\s)\\d+(\\.\\d+){3}' | head -1").stdout.strip()
+
+    status = {
+        "connected": False,
+        "ssid": "",
+        "ip": ip_out,
+        "signal": "",
+        "raw": link,
+    }
+
+    for line in link.splitlines():
+        line = line.strip()
+        if line.startswith("SSID:"):
+            status["connected"] = True
+            status["ssid"] = line.replace("SSID:", "", 1).strip()
+        elif line.startswith("signal:"):
+            status["signal"] = line.replace("signal:", "", 1).strip()
+
+    return status
+
+
+def parse_signal(signal):
+    m = re.search(r"(-?\d+)", signal or "")
+    if not m:
+        return -999
+    return int(m.group(1))
+
+
+def scan_wifi():
+    result = run(["iw", "dev", "wlan0", "scan"])
+    output = result.stdout
+
+    networks = []
+    current = None
+
+    for line in output.splitlines():
+        line = line.strip()
+
+        if line.startswith("BSS "):
+            if current and current.get("ssid"):
+                networks.append(current)
+            current = {"ssid": "", "signal": "", "security": "open"}
+
+        elif current is not None and line.startswith("signal:"):
+            current["signal"] = line.replace("signal:", "", 1).strip()
+
+        elif current is not None and line.startswith("SSID:"):
+            current["ssid"] = line.replace("SSID:", "", 1).strip()
+
+        elif current is not None and ("RSN:" in line or "WPA:" in line):
+            current["security"] = "secured"
+
+    if current and current.get("ssid"):
+        networks.append(current)
+
+    merged = {}
+    for net in networks:
+        ssid = net["ssid"]
+        if ssid not in merged:
+            merged[ssid] = net
+        else:
+            old_sig = parse_signal(merged[ssid].get("signal", ""))
+            new_sig = parse_signal(net.get("signal", ""))
+            if new_sig > old_sig:
+                merged[ssid] = net
+
+    return sorted(merged.values(), key=lambda n: parse_signal(n.get("signal", "")), reverse=True)
+
+
+def add_wifi(data):
+    ssid = str(data.get("ssid", "")).strip()
+    password = str(data.get("password", "")).strip()
+    priority = str(data.get("priority", "10")).strip() or "10"
+    hidden = bool(data.get("hidden", False))
+
+    if not ssid:
+        raise ValueError("SSID vide.")
+    if not password:
+        raise ValueError("Mot de passe vide.")
+
+    result = run(["wpa_passphrase", ssid, password])
+    if result.returncode != 0:
+        raise RuntimeError(result.stderr or "Erreur wpa_passphrase.")
+
+    block = result.stdout.splitlines()
+    new_block = []
+
+    for line in block:
+        if re.match(r"^\s*\}", line):
+            if hidden:
+                new_block.append("    scan_ssid=1")
+            new_block.append(f"    priority={priority}")
+        new_block.append(line)
+
+    make_rw()
+    try:
+        backup_conf()
+        lines = read_conf()
+        lines.append("")
+        lines.extend(new_block)
+        write_conf(lines)
+        restart_wifi_service()
+    finally:
+        make_ro()
+
+    return {"message": f"Réseau ajouté : {ssid}"}
+
+
+def delete_wifi(data):
+    target = int(data.get("id", 0))
+    nets = get_networks()
+
+    if target < 1 or target > len(nets):
+        raise ValueError("Réseau introuvable.")
+
+    ssid = nets[target - 1]["ssid"]
+
+    lines = read_conf()
+    items = split_blocks(lines)
+
+    new_lines = []
+    net_index = 0
+
+    for kind, block in items:
+        if kind != "network":
+            new_lines.extend(block)
+            continue
+
+        net_index += 1
+        if net_index == target:
+            continue
+
+        new_lines.extend(block)
+
+    make_rw()
+    try:
+        backup_conf()
+        write_conf(new_lines)
+        restart_wifi_service()
+    finally:
+        make_ro()
+
+    return {"message": f"Réseau supprimé : {ssid}"}
+
+
+def force_wifi(data):
+    target = int(data.get("id", 0))
+    nets = get_networks()
+
+    if target < 1 or target > len(nets):
+        raise ValueError("Réseau introuvable.")
+
+    selected_ssid = nets[target - 1]["ssid"]
+
+    lines = read_conf()
+    items = split_blocks(lines)
+
+    new_lines = []
+    net_index = 0
+
+    for kind, block in items:
+        if kind != "network":
+            new_lines.extend(block)
+            continue
+
+        net_index += 1
+        current_priority = get_value(block, "priority")
+        old_priority = get_old_priority(block)
+
+        block = clean_forced_markers(block)
+        block = remove_priority_lines(block)
+
+        if net_index == target:
+            block = insert_before_closing(block, [
+                "    #wifi-wizard-forced=1",
+                f"    #wifi-wizard-old-priority={current_priority}",
+                f"    priority={FORCED_PRIORITY}",
+            ])
+        else:
+            if old_priority != "":
+                block = insert_before_closing(block, [
+                    f"    priority={old_priority}",
+                ])
+
+        new_lines.extend(block)
+
+    make_rw()
+    try:
+        backup_conf()
+        write_conf(new_lines)
+        restart_wifi_service()
+    finally:
+        make_ro()
+
+    return {"message": f"Wi-Fi prioritaire : {selected_ssid}"}
+
+
+
+def update_wifi(data):
+    target = int(data.get("id", 0))
+    ssid = str(data.get("ssid", "")).strip()
+    password = str(data.get("password", "")).strip()
+    priority = str(data.get("priority", "10")).strip() or "10"
+    hidden = bool(data.get("hidden", False))
+
+    nets = get_networks()
+
+    if target < 1 or target > len(nets):
+        raise ValueError("Réseau introuvable.")
+    if not ssid:
+        raise ValueError("SSID vide.")
+
+    lines = read_conf()
+    items = split_blocks(lines)
+
+    old_block = None
+    net_index = 0
+
+    for kind, block in items:
+        if kind != "network":
+            continue
+        net_index += 1
+        if net_index == target:
+            old_block = block
+            break
+
+    if old_block is None:
+        raise ValueError("Bloc réseau introuvable.")
+
+    old_ssid = get_value(old_block, "ssid")
+    old_password = get_comment_psk(old_block)
+    was_forced = is_forced(old_block)
+
+    if not password:
+        password = old_password
+
+    if not password:
+        raise ValueError("Mot de passe manquant. Entre un nouveau mot de passe.")
+
+    result = run(["wpa_passphrase", ssid, password])
+    if result.returncode != 0:
+        raise RuntimeError(result.stderr or "Erreur wpa_passphrase.")
+
+    generated = result.stdout.splitlines()
+    new_block = []
+
+    for line in generated:
+        if re.match(r"^\s*\}", line):
+            if hidden:
+                new_block.append("    scan_ssid=1")
+
+            if was_forced:
+                new_block.append("    #wifi-wizard-forced=1")
+                new_block.append(f"    #wifi-wizard-old-priority={priority}")
+                new_block.append(f"    priority={FORCED_PRIORITY}")
+            else:
+                new_block.append(f"    priority={priority}")
+
+        new_block.append(line)
+
+    new_lines = []
+    net_index = 0
+
+    for kind, block in items:
+        if kind != "network":
+            new_lines.extend(block)
+            continue
+
+        net_index += 1
+
+        if net_index == target:
+            new_lines.extend(new_block)
+        else:
+            new_lines.extend(block)
+
+    make_rw()
+    try:
+        backup_conf()
+        write_conf(new_lines)
+        restart_wifi_service()
+    finally:
+        make_ro()
+
+    return {"message": f"Réseau modifié : {old_ssid} → {ssid}"}
+
+
+def restart_wifi_action():
+    make_rw()
+    try:
+        restart_wifi_service()
+    finally:
+        make_ro()
+    return {"message": "Wi-Fi redémarré."}
+
+
+
+def get_battery_status():
+    def read_word(reg):
+        hi = int(subprocess.check_output(
+            ["i2cget", "-y", "1", "0x36", hex(reg), "b"],
+            text=True,
+            stderr=subprocess.DEVNULL
+        ).strip(), 16)
+
+        lo = int(subprocess.check_output(
+            ["i2cget", "-y", "1", "0x36", hex(reg + 1), "b"],
+            text=True,
+            stderr=subprocess.DEVNULL
+        ).strip(), 16)
+
+        return (hi << 8) | lo
+
+    vcell = read_word(0x02)
+    crate = read_word(0x16)
+
+    voltage = vcell * 78.125 / 1_000_000
+
+    percent = (voltage - 3.10) / (4.13 - 3.10) * 100.0
+    percent = max(0, min(100, percent))
+
+    if crate & 0x8000:
+        crate -= 65536
+
+    charge_rate = crate * 0.208
+    charging = charge_rate > 0.5
+
+    if charging:
+        state = "charging"
+    elif percent >= 100:
+        state = "full"
+    else:
+        state = "battery"
+
+    return {
+        "percent": round(percent, 1),
+        "voltage": round(voltage, 3),
+        "charge_rate": round(charge_rate, 2),
+        "charging": charging,
+        "state": state
+    }
+
+class Handler(BaseHTTPRequestHandler):
+    def log_message(self, fmt, *args):
+        return
+
+    def send_json(self, code, payload):
+        body = json.dumps(payload).encode("utf-8")
+        self.send_response(code)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def read_body(self):
+        length = int(self.headers.get("Content-Length", "0") or "0")
+        if length <= 0:
+            return {}
+        raw = self.rfile.read(length).decode("utf-8")
+        return json.loads(raw or "{}")
+
+    def do_GET(self):
+        path = urlparse(self.path).path
+
+        try:
+            if path == "/api/battery":
+                try:
+                    self.send_json(200, {
+                        "ok": True,
+                        "battery": get_battery_status()
+                    })
+                except Exception as e:
+                    self.send_json(500, {
+                        "ok": False,
+                        "error": str(e)
+                    })
+
+            elif path == "/api/status":
+                self.send_json(200, {"ok": True, "status": wifi_status()})
+            elif path == "/api/networks":
+                self.send_json(200, {"ok": True, "networks": get_networks()})
+            elif path == "/api/scan":
+                self.send_json(200, {"ok": True, "scan": scan_wifi()})
+            else:
+                self.send_json(404, {"ok": False, "error": "Endpoint introuvable."})
+        except Exception as e:
+            self.send_json(500, {"ok": False, "error": str(e)})
+
+    def do_POST(self):
+        path = urlparse(self.path).path
+
+        try:
+            data = self.read_body()
+
+            if path == "/api/add":
+                self.send_json(200, {"ok": True, **add_wifi(data)})
+            elif path == "/api/update":
+                self.send_json(200, {"ok": True, **update_wifi(data)})
+            elif path == "/api/delete":
+                self.send_json(200, {"ok": True, **delete_wifi(data)})
+            elif path == "/api/force":
+                self.send_json(200, {"ok": True, **force_wifi(data)})
+            elif path == "/api/pikvm-restart":
+                self.send_json(200, {"ok": True, "message": "Restarting PiKVM"})
+                subprocess.Popen([
+                    "/bin/sh", "-c",
+                    "sleep 1; systemctl restart kvmd.service kvmd-nginx.service"
+                ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
+
+            elif path == "/api/pikvm-poweroff":
+                Path("/run/pikvm-poweroff-requested").write_text("1\n")
+                self.send_json(200, {"ok": True, "message": "Powering off PiKVM"})
+                subprocess.Popen([
+                    "/bin/sh", "-c",
+                    "sleep 1; systemctl poweroff"
+                ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
+
+            elif path == "/api/restart":
+                self.send_json(200, {"ok": True, **restart_wifi_action()})
+            else:
+                self.send_json(404, {"ok": False, "error": "Endpoint introuvable."})
+        except Exception as e:
+            self.send_json(500, {"ok": False, "error": str(e)})
+
+
+class ReuseTCPServer(socketserver.TCPServer):
+    allow_reuse_address = True
+
+
+def main():
+    with ReuseTCPServer((HOST, PORT), Handler) as httpd:
+        httpd.serve_forever()
+
+
+if __name__ == "__main__":
+    main()

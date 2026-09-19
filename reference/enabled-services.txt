@@ -1,0 +1,30 @@
+UNIT FILE                            STATE   PRESET
+getty@.service                       enabled enabled
+kvmd-bootconfig.service              enabled disabled
+kvmd-janus.service                   enabled disabled
+kvmd-media.service                   enabled disabled
+kvmd-nginx.service                   enabled disabled
+kvmd-oled-reboot.service             enabled disabled
+kvmd-oled-shutdown.service           enabled disabled
+kvmd-otg.service                     enabled disabled
+kvmd-pst.service                     enabled disabled
+kvmd-tc358743.service                enabled disabled
+kvmd-webterm.service                 enabled disabled
+kvmd.service                         enabled disabled
+pikvm-auto-shutdown.service          enabled disabled
+pikvm-button-menu.service            enabled disabled
+pikvm-oled-custom.service            enabled disabled
+pikvm-power-hold.service             enabled disabled
+rngd.service                         enabled disabled
+sshd.service                         enabled disabled
+systemd-network-generator.service    enabled enabled
+systemd-networkd-wait-online.service enabled enabled
+systemd-networkd.service             enabled enabled
+systemd-resolved.service             enabled enabled
+systemd-timesyncd.service            enabled enabled
+watchdog.service                     enabled disabled
+wifi-wizard-api.service              enabled disabled
+systemd-networkd.socket              enabled disabled
+remote-fs.target                     enabled enabled
+
+27 unit files listed.

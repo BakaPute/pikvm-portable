@@ -1,0 +1,13 @@
+[Unit]
+Description=PiKVM automatic inactivity shutdown
+After=kvmd.service
+Requires=kvmd.service
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/pikvm-auto-shutdown
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

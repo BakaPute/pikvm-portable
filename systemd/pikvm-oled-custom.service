@@ -1,0 +1,13 @@
+[Unit]
+Description=PiKVM Custom OLED
+After=network.target
+After=systemd-modules-load.service
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/pikvm-oled-custom
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target

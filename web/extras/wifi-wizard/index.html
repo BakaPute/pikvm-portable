@@ -1,0 +1,1054 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="utf-8">
+    <title>PiKVM Wi-Fi Wizard</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+
+    <style>
+        :root {
+            --page-bg: #30343b;
+            --top-bg: #111419;
+            --panel-bg: #2f343c;
+            --panel-dark: #1b1f25;
+            --panel-mid: #252a31;
+            --panel-light: #3a4049;
+            --line: #1d2229;
+            --line-light: #4a515d;
+            --text: #c8c8c8;
+            --text-strong: #e2e2e2;
+            --muted: #9ba1a8;
+            --blue: #5f9fcf;
+            --blue2: #426f94;
+            --green: #00c767;
+            --red: #d65d5d;
+            --yellow: #c6a24a;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            min-height: 100vh;
+            background: var(--page-bg);
+            color: var(--text);
+            font-family: Arial, Helvetica, sans-serif;
+            font-size: 14px;
+        }
+
+        a {
+            color: inherit;
+            text-decoration: none;
+        }
+
+        .kv-top {
+            height: 48px;
+            background: var(--top-bg);
+            border-bottom: 1px solid #050608;
+            display: flex;
+            align-items: stretch;
+            justify-content: space-between;
+        }
+
+        .kv-left {
+            display: flex;
+            align-items: center;
+        }
+
+        .back {
+            width: 42px;
+            display: grid;
+            place-items: center;
+            color: #9aa1aa;
+            border-right: 1px solid #252a31;
+            font-size: 20px;
+        }
+
+        .brand {
+            height: 48px;
+            display: flex;
+            align-items: center;
+            padding: 0 14px;
+            border-right: 1px solid #252a31;
+        }
+
+        .brand-logo {
+            font-weight: 900;
+            font-size: 24px;
+            letter-spacing: -2px;
+            color: #c6c9cc;
+            line-height: 1;
+        }
+
+        .brand-title {
+            margin-left: 14px;
+            color: #d0d0d0;
+            font-size: 15px;
+            font-weight: bold;
+        }
+
+        .tabs {
+            display: flex;
+            align-items: stretch;
+        }
+
+        .tab {
+            min-width: 108px;
+            padding: 0 14px;
+            border-left: 1px solid #252a31;
+            border-right: 1px solid #07090c;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            color: #cfcfcf;
+            background: #171b20;
+            cursor: pointer;
+            font: inherit;
+        }
+
+        .tab-button {
+            height: 48px;
+        }
+
+        .tab:hover {
+            background: #22272f;
+        }
+
+        .tab.active {
+            background: var(--panel-bg);
+            border-top: 4px solid var(--blue);
+            color: #ffffff;
+        }
+
+        .tab-icon {
+            color: var(--blue);
+            font-size: 18px;
+        }
+
+        .page {
+            max-width: 1180px;
+            margin: 22px auto;
+            padding: 0 18px 32px;
+        }
+
+        .main-layout {
+            display: grid;
+            grid-template-columns: 360px 1fr;
+            gap: 18px;
+        }
+
+        .block {
+            background: var(--panel-bg);
+            border: 1px solid var(--line);
+            box-shadow: 0 0 0 1px rgba(255,255,255,0.03) inset;
+        }
+
+        .block + .block {
+            margin-top: 18px;
+        }
+
+        .block-title {
+            background: #262b33;
+            border-bottom: 1px solid var(--line);
+            padding: 10px 14px;
+            color: var(--text-strong);
+            font-weight: bold;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            min-height: 42px;
+        }
+
+        .block-body {
+            padding: 14px;
+        }
+
+        .status-main {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 14px;
+        }
+
+        .status-dot {
+            width: 13px;
+            height: 13px;
+            background: var(--red);
+            border-radius: 50%;
+            border: 1px solid #111;
+        }
+
+        .status-dot.ok {
+            background: var(--green);
+            box-shadow: 0 0 8px rgba(0, 199, 103, 0.55);
+        }
+
+        .status-name {
+            font-size: 20px;
+            font-weight: bold;
+            color: #eeeeee;
+        }
+
+        .status-sub {
+            color: var(--muted);
+            font-size: 13px;
+            margin-top: 2px;
+        }
+
+        .info-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .info-table td {
+            padding: 7px 0;
+            border-top: 1px solid #262b32;
+            vertical-align: middle;
+        }
+
+        .info-table td:first-child {
+            width: 110px;
+            color: var(--muted);
+        }
+
+        .info-table td:last-child {
+            color: var(--text-strong);
+            font-weight: bold;
+        }
+
+        .form-row {
+            margin-bottom: 12px;
+        }
+
+        .form-row label {
+            display: block;
+            margin-bottom: 5px;
+            color: var(--text);
+        }
+
+        input {
+            width: 100%;
+            height: 34px;
+            background: #15191e;
+            border: 1px solid #59616d;
+            color: #eeeeee;
+            padding: 7px 9px;
+            font-size: 14px;
+            outline: none;
+        }
+
+        input:focus {
+            border-color: var(--blue);
+            box-shadow: 0 0 0 1px var(--blue);
+        }
+
+        input[type="checkbox"] {
+            width: auto;
+            height: auto;
+            margin-right: 7px;
+        }
+
+        .check-row {
+            display: flex;
+            align-items: center;
+            color: var(--text);
+            margin-bottom: 12px;
+        }
+
+        .btn-row {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        .btn {
+            min-height: 34px;
+            padding: 7px 12px;
+            border: 1px solid #1c2026;
+            border-top-color: #59616b;
+            background: #3a4048;
+            color: #e0e0e0;
+            cursor: pointer;
+            font-weight: bold;
+            font-size: 14px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+        }
+
+        .btn:hover {
+            background: #454c56;
+        }
+
+        .btn:active {
+            background: #2a3038;
+            transform: translateY(1px);
+        }
+
+        .btn.primary {
+            background: var(--blue2);
+            border-top-color: #7fb7e1;
+        }
+
+        .btn.primary:hover {
+            background: #4e83ad;
+        }
+
+        .btn.green {
+            background: #1e6a48;
+            border-top-color: #4bb87f;
+        }
+
+        .btn.yellow {
+            background: #6e5b2a;
+            border-top-color: #d0b45b;
+        }
+
+        .btn.red {
+            background: #743434;
+            border-top-color: #d07878;
+        }
+
+        .btn.small {
+            min-height: 28px;
+            padding: 4px 9px;
+            font-size: 13px;
+            font-weight: normal;
+        }
+
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .list {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .net-item {
+            background: #252a31;
+            border: 1px solid #181c22;
+        }
+
+        .net-head {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 12px;
+            padding: 10px 12px;
+            border-bottom: 1px solid #1b2026;
+        }
+
+        .net-name {
+            font-size: 15px;
+            font-weight: bold;
+            color: #eeeeee;
+            word-break: break-word;
+        }
+
+        .net-meta {
+            margin-top: 5px;
+            color: var(--muted);
+            font-size: 13px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            align-items: center;
+        }
+
+        .net-actions {
+            padding: 8px 12px 10px;
+            display: flex;
+            gap: 7px;
+            flex-wrap: wrap;
+        }
+
+        .badge {
+            display: inline-flex;
+            align-items: center;
+            min-height: 22px;
+            padding: 2px 7px;
+            background: #171b20;
+            border: 1px solid #3b434e;
+            color: #bfc5cc;
+            font-size: 12px;
+            font-weight: bold;
+            white-space: nowrap;
+        }
+
+        .badge.green {
+            color: #82e6ad;
+            border-color: #2d8859;
+        }
+
+        .badge.yellow {
+            color: #dfc36e;
+            border-color: #8b7134;
+        }
+
+        .badge.blue {
+            color: #9fd0f0;
+            border-color: #4a7fa8;
+        }
+
+        .wifi-bars {
+            display: inline-flex;
+            align-items: flex-end;
+            gap: 2px;
+            height: 18px;
+            vertical-align: middle;
+        }
+
+        .wifi-bars span {
+            width: 5px;
+            background: #4a515b;
+            border: 1px solid #22272d;
+        }
+
+        .wifi-bars span:nth-child(1) { height: 5px; }
+        .wifi-bars span:nth-child(2) { height: 8px; }
+        .wifi-bars span:nth-child(3) { height: 11px; }
+        .wifi-bars span:nth-child(4) { height: 14px; }
+        .wifi-bars span:nth-child(5) { height: 17px; }
+
+        .wifi-bars.level-1 span:nth-child(-n+1),
+        .wifi-bars.level-2 span:nth-child(-n+2),
+        .wifi-bars.level-3 span:nth-child(-n+3),
+        .wifi-bars.level-4 span:nth-child(-n+4),
+        .wifi-bars.level-5 span:nth-child(-n+5) {
+            background: var(--green);
+        }
+
+        .signal-label {
+            color: var(--text);
+            font-weight: bold;
+            margin-left: 5px;
+        }
+
+        .empty {
+            border: 1px dashed #555d68;
+            padding: 16px;
+            text-align: center;
+            color: var(--muted);
+            background: #282d35;
+        }
+
+        .toast {
+            position: fixed;
+            right: 18px;
+            bottom: 18px;
+            display: none;
+            max-width: 420px;
+            background: #1f242b;
+            border: 1px solid #5c6470;
+            color: #eeeeee;
+            padding: 12px 14px;
+            z-index: 50;
+            box-shadow: 0 6px 18px rgba(0,0,0,0.45);
+        }
+
+        .toast.ok {
+            border-color: #2d8859;
+        }
+
+        .toast.err {
+            border-color: #a34d4d;
+        }
+
+        .modal-backdrop {
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.55);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            padding: 24px;
+            z-index: 40;
+        }
+
+        .modal {
+            width: min(560px, 100%);
+            background: var(--panel-bg);
+            border: 1px solid var(--blue);
+            box-shadow: 0 8px 28px rgba(0,0,0,0.6);
+        }
+
+        .modal-title {
+            background: #262b33;
+            border-bottom: 1px solid var(--line);
+            padding: 10px 14px;
+            color: #eeeeee;
+            font-weight: bold;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .modal-body {
+            padding: 14px;
+        }
+
+        .section-tabs {
+            display: flex;
+            background: #15191e;
+            border: 1px solid #0e1115;
+            margin-bottom: 18px;
+        }
+
+        .section-tabs button {
+            flex: 1;
+            border: 0;
+            border-right: 1px solid #0e1115;
+            background: #20252c;
+            color: #cfcfcf;
+            padding: 10px;
+            cursor: pointer;
+            font-weight: bold;
+        }
+
+        .section-tabs button:last-child {
+            border-right: 0;
+        }
+
+        .section-tabs button.active {
+            background: var(--blue2);
+            color: white;
+        }
+
+        .mobile-section {
+            display: block;
+        }
+
+        @media (max-width: 900px) {
+            .main-layout {
+                grid-template-columns: 1fr;
+            }
+
+            .brand-title {
+                display: none;
+            }
+
+            .tab {
+                min-width: auto;
+                padding: 0 11px;
+            }
+
+            .page {
+                margin-top: 14px;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="kv-top">
+        <div class="kv-left">
+            <a class="back" href="/">←</a>
+            <a class="brand" href="/">
+                <div class="brand-logo">PiKVM</div>
+                <div class="brand-title">Wi-Fi Wizard</div>
+            </a>
+        </div>
+
+        <div class="tabs">
+            <a class="tab" href="/kvm/"><span class="tab-icon">▣</span>KVM</a>
+            <a class="tab" href="/power-terminal/"><span class="tab-icon">▤</span>Terminal</a>
+            <div class="tab active"><span class="tab-icon">▥</span>Wi-Fi</div>
+            <button class="tab tab-button" onclick="logoutPikvm()"><span class="tab-icon">⚿</span>Logout</button>
+        </div>
+    </div>
+
+    <div class="page">
+        <div class="main-layout">
+            <div>
+                <section class="block">
+                    <div class="block-title">
+                        <span>Wi-Fi status</span>
+                        <span id="statusBadge" class="badge">Loading</span>
+                    </div>
+
+                    <div class="block-body">
+                        <div class="status-main">
+                            <div id="statusDot" class="status-dot"></div>
+                            <div>
+                                <div id="statusSsid" class="status-name">Chargement...</div>
+                                <div id="statusText" class="status-sub">Lecture de wlan0</div>
+                            </div>
+                        </div>
+
+                        <table class="info-table">
+                            <tr>
+                                <td>IP address:</td>
+                                <td id="statusIp">-</td>
+                            </tr>
+                            <tr>
+                                <td>Signal:</td>
+                                <td id="statusSignal">-</td>
+                            </tr>
+                            <tr>
+                                <td>Interface:</td>
+                                <td>wlan0</td>
+                            </tr>
+                        </table>
+
+                        <div class="btn-row" style="margin-top: 14px;">
+                            <button class="btn small" onclick="loadAll()">↻ Refresh</button>
+                            <button class="btn yellow small" onclick="restartWifi()">Restart Wi-Fi</button>
+                            <a class="btn small" href="/">Back</a>
+                        </div>
+                    </div>
+                </section>
+
+                <section class="block">
+                    <div class="block-title">Add network</div>
+
+                    <div class="block-body">
+                        <form onsubmit="addNetwork(event)">
+                            <div class="form-row">
+                                <label>SSID:</label>
+                                <input id="addSsid" autocomplete="off">
+                            </div>
+
+                            <div class="form-row">
+                                <label>Password:</label>
+                                <input id="addPassword" type="text">
+                            </div>
+
+                            <div class="form-row">
+                                <label>Priority:</label>
+                                <input id="addPriority" type="number" value="10">
+                            </div>
+
+                            <label class="check-row">
+                                <input id="addHidden" type="checkbox">
+                                Hidden network
+                            </label>
+
+                            <div class="btn-row">
+                                <button class="btn primary" type="submit">Add and connect</button>
+                            </div>
+                        </form>
+                    </div>
+                </section>
+            </div>
+
+            <div>
+                <section class="block">
+                    <div class="block-title">
+                        <span>Known networks</span>
+                        <button class="btn small" onclick="loadNetworks()">↻ Reload</button>
+                    </div>
+
+                    <div class="block-body">
+                        <div id="knownList" class="list">
+                            <div class="empty">Chargement...</div>
+                        </div>
+                    </div>
+                </section>
+
+                <section class="block">
+                    <div class="block-title">
+                        <span>Available networks</span>
+                        <button id="scanBtn" class="btn primary small" onclick="scanNetworks()">Scan</button>
+                    </div>
+
+                    <div class="block-body">
+                        <div id="scanList" class="list">
+                            <div class="empty">Click Scan to search nearby Wi-Fi networks.</div>
+                        </div>
+                    </div>
+                </section>
+            </div>
+        </div>
+    </div>
+
+    <div id="editModal" class="modal-backdrop">
+        <div class="modal">
+            <div class="modal-title">
+                <span>Edit network</span>
+                <button class="btn small" onclick="closeEditModal()">×</button>
+            </div>
+
+            <div class="modal-body">
+                <form onsubmit="saveEditNetwork(event)">
+                    <input id="editId" type="hidden">
+
+                    <div class="form-row">
+                        <label>SSID:</label>
+                        <input id="editSsid" autocomplete="off">
+                    </div>
+
+                    <div class="form-row">
+                        <label>Password:</label>
+                        <input id="editPassword" type="text">
+                    </div>
+
+                    <div class="form-row">
+                        <label>Priority:</label>
+                        <input id="editPriority" type="number">
+                    </div>
+
+                    <label class="check-row">
+                        <input id="editHidden" type="checkbox">
+                        Hidden network
+                    </label>
+
+                    <div class="btn-row" style="justify-content: flex-end;">
+                        <button class="btn" type="button" onclick="closeEditModal()">Cancel</button>
+                        <button class="btn primary" type="submit">Save</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <div id="toast" class="toast"></div>
+
+    <script>
+        const API = "/extras/wifi-wizard/api";
+        let knownNetworksCache = [];
+
+        function escapeHtml(value) {
+            return String(value ?? "")
+                .replaceAll("&", "&amp;")
+                .replaceAll("<", "&lt;")
+                .replaceAll(">", "&gt;")
+                .replaceAll('"', "&quot;")
+                .replaceAll("'", "&#039;");
+        }
+
+        function signalLevel(signal) {
+            const match = String(signal || "").match(/-?\d+/);
+            if (!match) return 0;
+            const dbm = parseInt(match[0], 10);
+
+            if (dbm >= -50) return 5;
+            if (dbm >= -60) return 4;
+            if (dbm >= -70) return 3;
+            if (dbm >= -80) return 2;
+            return 1;
+        }
+
+        function signalText(level) {
+            if (level >= 5) return "excellent";
+            if (level === 4) return "very good";
+            if (level === 3) return "good";
+            if (level === 2) return "weak";
+            if (level === 1) return "poor";
+            return "unknown";
+        }
+
+        function signalBars(signal) {
+            const level = signalLevel(signal);
+            const bars = `<span></span><span></span><span></span><span></span><span></span>`;
+            return `<span class="wifi-bars level-${level}">${bars}</span><span class="signal-label">${signalText(level)}</span>`;
+        }
+
+        function toast(message, ok = true) {
+            const el = document.getElementById("toast");
+            el.textContent = message;
+            el.className = "toast " + (ok ? "ok" : "err");
+            el.style.display = "block";
+            setTimeout(() => {
+                el.style.display = "none";
+            }, 4200);
+        }
+
+        async function apiGet(path) {
+            const res = await fetch(API + path, { cache: "no-store" });
+            const data = await res.json();
+            if (!data.ok) throw new Error(data.error || "Erreur API");
+            return data;
+        }
+
+        async function apiPost(path, payload = {}) {
+            const res = await fetch(API + path, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(payload)
+            });
+            const data = await res.json();
+            if (!data.ok) throw new Error(data.error || "Erreur API");
+            return data;
+        }
+
+        async function loadStatus() {
+            try {
+                const data = await apiGet("/status");
+                const s = data.status;
+
+                document.getElementById("statusDot").classList.toggle("ok", !!s.connected);
+                document.getElementById("statusSsid").textContent = s.connected ? s.ssid : "Not connected";
+                document.getElementById("statusText").textContent = s.connected ? "Connected to Wi-Fi network" : "No active Wi-Fi connection";
+                document.getElementById("statusIp").textContent = s.ip || "-";
+                document.getElementById("statusSignal").innerHTML = s.signal ? signalBars(s.signal) : "-";
+
+                const badge = document.getElementById("statusBadge");
+                badge.textContent = s.connected ? "Connected" : "Disconnected";
+                badge.className = "badge " + (s.connected ? "green" : "yellow");
+            } catch (e) {
+                toast(e.message, false);
+            }
+        }
+
+        async function loadNetworks() {
+            const list = document.getElementById("knownList");
+            list.innerHTML = '<div class="empty">Loading...</div>';
+
+            try {
+                const data = await apiGet("/networks");
+                const nets = data.networks || [];
+                knownNetworksCache = nets;
+
+                if (!nets.length) {
+                    list.innerHTML = '<div class="empty">No known Wi-Fi network.</div>';
+                    return;
+                }
+
+                list.innerHTML = nets.map(net => {
+                    const pwd = net.password_visible ? escapeHtml(net.password) : "Not visible";
+                    const forced = net.forced ? '<span class="badge green">Forced</span>' : '';
+                    const hidden = net.hidden ? '<span class="badge yellow">Hidden</span>' : '';
+
+                    return `
+                        <div class="net-item">
+                            <div class="net-head">
+                                <div>
+                                    <div class="net-name">${escapeHtml(net.ssid)}</div>
+                                    <div class="net-meta">
+                                        <span>priority: ${escapeHtml(net.priority)}</span>
+                                        <span>password: <span id="pwd-${net.id}">••••••••</span></span>
+                                    </div>
+                                </div>
+                                <div>${forced}${hidden}</div>
+                            </div>
+
+                            <div class="net-actions">
+                                <button class="btn green small" onclick="forceNetwork(${net.id})">Select</button>
+                                <button class="btn yellow small" onclick="openEditModal(${net.id})">Edit</button>
+                                <button class="btn small" onclick="togglePassword(${net.id}, '${pwd.replaceAll("'", "\\'")}')">Show password</button>
+                                <button class="btn red small" onclick="deleteNetwork(${net.id})">Delete</button>
+                            </div>
+                        </div>
+                    `;
+                }).join("");
+            } catch (e) {
+                list.innerHTML = '<div class="empty">Error: ' + escapeHtml(e.message) + '</div>';
+            }
+        }
+
+        function getKnownNetwork(id) {
+            return knownNetworksCache.find(n => Number(n.id) === Number(id));
+        }
+
+        function togglePassword(id, password) {
+            const el = document.getElementById("pwd-" + id);
+            if (!el) return;
+
+            if (el.dataset.visible === "1") {
+                el.textContent = "••••••••";
+                el.dataset.visible = "0";
+            } else {
+                el.textContent = password || "Not visible";
+                el.dataset.visible = "1";
+            }
+        }
+
+        function openEditModal(id) {
+            const net = getKnownNetwork(id);
+            if (!net) {
+                toast("Network not found.", false);
+                return;
+            }
+
+            document.getElementById("editId").value = net.id;
+            document.getElementById("editSsid").value = net.ssid || "";
+            document.getElementById("editPassword").value = net.password || "";
+            document.getElementById("editPriority").value = net.forced ? "10" : (net.priority || "10");
+            document.getElementById("editHidden").checked = !!net.hidden;
+
+            document.getElementById("editModal").style.display = "flex";
+        }
+
+        function closeEditModal() {
+            document.getElementById("editModal").style.display = "none";
+        }
+
+        async function saveEditNetwork(event) {
+            event.preventDefault();
+
+            const id = Number(document.getElementById("editId").value);
+            const ssid = document.getElementById("editSsid").value.trim();
+            const password = document.getElementById("editPassword").value.trim();
+            const priority = document.getElementById("editPriority").value.trim() || "10";
+            const hidden = document.getElementById("editHidden").checked;
+
+            if (!ssid || !password) {
+                toast("SSID and password are required.", false);
+                return;
+            }
+
+            try {
+                const data = await apiPost("/update", { id, ssid, password, priority, hidden });
+                toast(data.message || "Network updated.");
+                closeEditModal();
+                await loadAll();
+            } catch (e) {
+                toast(e.message, false);
+            }
+        }
+
+        async function addNetwork(event) {
+            event.preventDefault();
+
+            const ssid = document.getElementById("addSsid").value.trim();
+            const password = document.getElementById("addPassword").value.trim();
+            const priority = document.getElementById("addPriority").value.trim() || "10";
+            const hidden = document.getElementById("addHidden").checked;
+
+            if (!ssid || !password) {
+                toast("SSID and password are required.", false);
+                return;
+            }
+
+            try {
+                const data = await apiPost("/add", { ssid, password, priority, hidden });
+                toast(data.message || "Network added.");
+                document.getElementById("addSsid").value = "";
+                document.getElementById("addPassword").value = "";
+                await loadAll();
+            } catch (e) {
+                toast(e.message, false);
+            }
+        }
+
+        async function deleteNetwork(id) {
+            const net = getKnownNetwork(id);
+            const ssid = net ? net.ssid : "this network";
+
+            if (!confirm('Delete network "' + ssid + '"?')) return;
+
+            try {
+                const data = await apiPost("/delete", { id });
+                toast(data.message || "Network deleted.");
+                await loadAll();
+            } catch (e) {
+                toast(e.message, false);
+            }
+        }
+
+        async function forceNetwork(id) {
+            const net = getKnownNetwork(id);
+            const ssid = net ? net.ssid : "this network";
+
+            if (!confirm('Use "' + ssid + '" as preferred network?')) return;
+
+            try {
+                const data = await apiPost("/force", { id });
+                toast(data.message || "Preferred network changed.");
+                await loadAll();
+            } catch (e) {
+                toast(e.message, false);
+            }
+        }
+
+        async function restartWifi() {
+            if (!confirm("Restart Wi-Fi? The page may disconnect for a few seconds.")) return;
+
+            try {
+                const data = await apiPost("/restart", {});
+                toast(data.message || "Wi-Fi restarted.");
+                setTimeout(loadAll, 3000);
+            } catch (e) {
+                toast(e.message, false);
+            }
+        }
+
+        async function scanNetworks() {
+            const list = document.getElementById("scanList");
+            const btn = document.getElementById("scanBtn");
+
+            btn.disabled = true;
+            btn.textContent = "Scanning...";
+            list.innerHTML = '<div class="empty">Scanning...</div>';
+
+            try {
+                const data = await apiGet("/scan");
+                const scan = data.scan || [];
+
+                if (!scan.length) {
+                    list.innerHTML = '<div class="empty">No network found.</div>';
+                    return;
+                }
+
+                list.innerHTML = scan.map(net => {
+                    const lock = net.security === "secured" ? "locked" : "open";
+                    return `
+                        <div class="net-item">
+                            <div class="net-head">
+                                <div>
+                                    <div class="net-name">${escapeHtml(net.ssid)}</div>
+                                    <div class="net-meta">
+                                        <span>${signalBars(net.signal)}</span>
+                                        <span>security: ${escapeHtml(lock)}</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="net-actions">
+                                <button class="btn primary small" onclick="prefillSsid('${escapeHtml(net.ssid).replaceAll("'", "\\'")}')">Add this network</button>
+                            </div>
+                        </div>
+                    `;
+                }).join("");
+            } catch (e) {
+                list.innerHTML = '<div class="empty">Error: ' + escapeHtml(e.message) + '</div>';
+            } finally {
+                btn.disabled = false;
+                btn.textContent = "Scan";
+            }
+        }
+
+        function prefillSsid(ssid) {
+            document.getElementById("addSsid").value = ssid;
+            document.getElementById("addPassword").focus();
+            toast("SSID filled. Enter password and add network.");
+            window.scrollTo({ top: 0, behavior: "smooth" });
+        }
+
+        async function logoutPikvm() {
+            try {
+                await fetch("/auth/logout", {
+                    method: "POST",
+                    credentials: "same-origin",
+                    cache: "no-store"
+                });
+            } catch (e) {
+            }
+
+            window.location.href = "/login/";
+        }
+
+        async function loadAll() {
+            await loadStatus();
+            await loadNetworks();
+        }
+
+        document.getElementById("editModal").addEventListener("click", function(event) {
+            if (event.target === this) closeEditModal();
+        });
+
+        loadAll();
+        setInterval(loadStatus, 10000);
+    </script>
+
+<!-- PIKVM-POWER-CONTROL -->
+<script src="/share/js/power-control.js"></script>
+
+</body>
+</html>

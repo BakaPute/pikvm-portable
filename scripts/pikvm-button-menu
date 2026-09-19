@@ -1,0 +1,1943 @@
+#!/usr/bin/env python3
+
+import re
+import shlex
+import subprocess
+import time
+from pathlib import Path
+
+from PIL import Image, ImageDraw, ImageFont
+from luma.core.interface.serial import i2c
+from luma.oled.device import ssd1306
+
+
+BUTTON = 18
+
+MENU_TIMEOUT = 10.0
+WIFI_MENU_TIMEOUT = 20.0
+
+MENU_COUNTDOWN = None
+SHORT_CLICK = 0.8
+
+POWER_RESTART = 2.0
+POWER_OFF = 5.0
+
+WIFI_QR = 2.0
+
+RESCUE_QR = 2.0
+RESCUE_TOGGLE = 5.0
+
+OLED_SERVICE = "pikvm-oled-custom.service"
+
+WPA_CONF = Path(
+    "/etc/wpa_supplicant/wpa_supplicant-wlan0.conf"
+)
+
+HOTSPOT_ENV = Path(
+    "/etc/kvmd/pikvm-hotspot.env"
+)
+
+HOTSPOT_STATE = Path(
+    "/run/pikvm-hotspot-active"
+)
+
+QR_FILE = "/run/pikvm-oled-qr.png"
+
+DEVICE = None
+
+SCROLL_START = time.monotonic()
+
+
+def cmd(args, timeout=10):
+
+    p = subprocess.run(
+        args,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        timeout=timeout
+    )
+
+    return p.stdout.strip()
+
+
+def button_setup():
+
+    subprocess.run(
+        ["pinctrl", "set", str(BUTTON), "ip", "pd"],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL
+    )
+
+
+def button_down():
+
+    try:
+
+        out = cmd(
+            ["pinctrl", "get", str(BUTTON)],
+            2
+        )
+
+        return (
+            "| hi" in out
+            or re.search(r"\bhi\b", out) is not None
+        )
+
+    except Exception:
+
+        return False
+
+
+def wait_release():
+
+    while button_down():
+        time.sleep(0.04)
+
+    time.sleep(0.06)
+
+
+def wait_press_until(deadline):
+
+    while time.monotonic() < deadline:
+
+        if button_down():
+
+            time.sleep(0.04)
+
+            if button_down():
+                return True
+
+        time.sleep(0.04)
+
+    return False
+
+
+def get_device():
+
+    global DEVICE
+
+    if DEVICE is None:
+
+        serial = i2c(
+            port=1,
+            address=0x3C
+        )
+
+        DEVICE = ssd1306(
+            serial,
+            width=128,
+            height=64
+        )
+
+    return DEVICE
+
+
+def load_font(bold=False):
+
+    if bold:
+
+        paths = [
+            "/usr/share/fonts/TTF/DejaVuSans-Bold.ttf",
+            "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
+        ]
+
+    else:
+
+        paths = [
+            "/usr/share/fonts/TTF/DejaVuSans.ttf",
+            "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
+        ]
+
+    for path in paths:
+
+        if Path(path).exists():
+
+            return ImageFont.truetype(
+                path,
+                9
+            )
+
+    return ImageFont.load_default()
+
+
+FONT = load_font(False)
+BOLD = load_font(True)
+
+
+def frame():
+
+    return Image.new(
+        "1",
+        (128, 64),
+        0
+    )
+
+
+def show(image):
+
+    get_device().display(image)
+
+
+def draw_text(draw, xy, value, bold=False):
+
+    draw.text(
+        xy,
+        str(value),
+        font=BOLD if bold else FONT,
+        fill=255
+    )
+
+
+def reset_scroll():
+
+    global SCROLL_START
+    SCROLL_START = time.monotonic()
+
+
+def fit(value, width=124):
+
+    value = str(value)
+
+    im = frame()
+    d = ImageDraw.Draw(im)
+
+    # Le texte tient : aucun défilement
+    if d.textbbox(
+        (0, 0),
+        value,
+        font=FONT
+    )[2] <= width:
+
+        return value
+
+
+    # 1 seconde immobile au début
+    elapsed = (
+        time.monotonic()
+        - SCROLL_START
+    )
+
+    if elapsed < 1.0:
+        position = 0
+
+    else:
+        # Une lettre environ toutes les 180 ms
+        position = int(
+            (elapsed - 1.0) / 0.36
+        )
+
+
+    # Espacement entre la fin et le début
+    loop = value + "   "
+
+    position %= len(loop)
+
+    rotated = (
+        loop[position:]
+        + loop[:position]
+    )
+
+
+    # On prend uniquement ce qui tient
+    # réellement sur la largeur disponible.
+    output = ""
+
+    for char in rotated * 2:
+
+        test = output + char
+
+        if d.textbbox(
+            (0, 0),
+            test,
+            font=FONT
+        )[2] > width:
+
+            break
+
+        output = test
+
+
+    return output
+
+
+def bar(draw, x, y, w, h, ratio):
+
+    ratio = max(
+        0.0,
+        min(1.0, ratio)
+    )
+
+    draw.rectangle(
+        (x, y, x + w, y + h),
+        outline=255
+    )
+
+    fw = int(
+        (w - 2) * ratio
+    )
+
+    if fw > 0:
+
+        draw.rectangle(
+            (
+                x + 1,
+                y + 1,
+                x + 1 + fw,
+                y + h - 1
+            ),
+            fill=255
+        )
+
+
+def header(draw, title, number):
+
+    draw_text(
+        draw,
+        (0, 0),
+        title,
+        True
+    )
+
+    if MENU_COUNTDOWN is not None:
+
+        draw_text(
+            draw,
+            (80, 0),
+            f"{MENU_COUNTDOWN}s"
+        )
+
+    draw_text(
+        draw,
+        (108, 0),
+        number
+    )
+
+
+BATTERY_CACHE_TIME = 0.0
+BATTERY_CACHE_VALUE = None
+
+
+def battery_percent():
+
+    global BATTERY_CACHE_TIME
+    global BATTERY_CACHE_VALUE
+
+    now = time.monotonic()
+
+    if (
+        BATTERY_CACHE_VALUE is not None
+        and now - BATTERY_CACHE_TIME < 2.0
+    ):
+        return BATTERY_CACHE_VALUE
+
+    try:
+        hi = int(
+            cmd(
+                ["i2cget", "-y", "1", "0x36", "0x02", "b"],
+                2
+            ),
+            16
+        )
+
+        lo = int(
+            cmd(
+                ["i2cget", "-y", "1", "0x36", "0x03", "b"],
+                2
+            ),
+            16
+        )
+
+        raw = (hi << 8) | lo
+        voltage = raw * 78.125 / 1_000_000
+
+        percent = (voltage - 3.10) / (4.13 - 3.10) * 100.0
+        percent = max(0, min(100, percent))
+
+        BATTERY_CACHE_VALUE = int(round(percent))
+        BATTERY_CACHE_TIME = now
+
+        return BATTERY_CACHE_VALUE
+
+    except Exception:
+        return BATTERY_CACHE_VALUE
+
+
+def battery_charging():
+
+    try:
+        hi = int(
+            cmd(
+                ["i2cget", "-y", "1", "0x36", "0x16", "b"],
+                2
+            ),
+            16
+        )
+
+        lo = int(
+            cmd(
+                ["i2cget", "-y", "1", "0x36", "0x17", "b"],
+                2
+            ),
+            16
+        )
+
+        raw = (hi << 8) | lo
+
+        if raw & 0x8000:
+            raw -= 65536
+
+        rate = raw * 0.208
+
+        return rate > 0.5
+
+    except Exception:
+        return False
+
+
+def current_ssid():
+
+    if HOTSPOT_STATE.exists():
+        return None
+
+    try:
+
+        out = cmd(
+            ["iw", "dev", "wlan0", "link"],
+            3
+        )
+
+        m = re.search(
+            r"^\s*SSID:\s*(.+)$",
+            out,
+            re.M
+        )
+
+        if m:
+            return m.group(1).strip()
+
+    except Exception:
+        pass
+
+    return None
+
+
+def unquote(value):
+
+    value = value.strip()
+
+    if (
+        len(value) >= 2
+        and value[0] == '"'
+        and value[-1] == '"'
+    ):
+
+        value = value[1:-1]
+
+    value = value.replace(
+        r'\"',
+        '"'
+    )
+
+    value = value.replace(
+        r'\\',
+        '\\'
+    )
+
+    return value
+
+
+def wifi_password(ssid):
+
+    if not ssid:
+        return None
+
+    if not WPA_CONF.exists():
+        return None
+
+    data = WPA_CONF.read_text(
+        errors="ignore"
+    )
+
+    blocks = re.findall(
+        r"network\s*=\s*\{(.*?)\}",
+        data,
+        re.S
+    )
+
+    for block in blocks:
+
+        mssid = re.search(
+            r'^\s*ssid\s*=\s*("(?:\\.|[^"])*")',
+            block,
+            re.M
+        )
+
+        if not mssid:
+            continue
+
+        if unquote(
+            mssid.group(1)
+        ) != ssid:
+
+            continue
+
+        patterns = [
+            r'^\s*#psk\s*=\s*("(?:\\.|[^"])*")',
+            r'^\s*psk\s*=\s*("(?:\\.|[^"])*")'
+        ]
+
+        for pattern in patterns:
+
+            m = re.search(
+                pattern,
+                block,
+                re.M
+            )
+
+            if m:
+
+                return unquote(
+                    m.group(1)
+                )
+
+    return None
+
+
+def load_hotspot():
+
+    values = {}
+
+    if not HOTSPOT_ENV.exists():
+        return values
+
+    for line in HOTSPOT_ENV.read_text(
+        errors="ignore"
+    ).splitlines():
+
+        line = line.strip()
+
+        if (
+            not line
+            or line.startswith("#")
+            or "=" not in line
+        ):
+            continue
+
+        key, value = line.split(
+            "=",
+            1
+        )
+
+        try:
+
+            parts = shlex.split(value)
+
+            values[key] = (
+                parts[0]
+                if parts
+                else ""
+            )
+
+        except Exception:
+
+            values[key] = value.strip(
+                "\"'"
+            )
+
+    return values
+
+
+def wifi_escape(value):
+
+    value = str(value)
+
+    replacements = [
+        ("\\", "\\\\"),
+        (";", "\\;"),
+        (",", "\\,"),
+        (":", "\\:"),
+        ('"', '\\"')
+    ]
+
+    for old, new in replacements:
+
+        value = value.replace(
+            old,
+            new
+        )
+
+    return value
+
+def make_wifi_qr(ssid, password):
+
+    if not ssid or not password:
+        return False
+
+    payload = (
+        "WIFI:T:WPA;"
+        f"S:{wifi_escape(ssid)};"
+        f"P:{wifi_escape(password)};;"
+    )
+
+    subprocess.run(
+        [
+            "qrencode",
+            "-t", "PNG",
+            "-l", "L",
+            "-m", "0",
+            "-s", "1",
+            "-o", QR_FILE,
+            payload
+        ],
+        check=True,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL
+    )
+
+    qr = Image.open(
+        QR_FILE
+    ).convert("1")
+
+    # Agrandissement uniquement par facteur entier :
+    # les modules du QR restent parfaitement carres.
+    factor = max(
+        1,
+        58 // max(qr.width, qr.height)
+    )
+
+    qr = qr.resize(
+        (
+            qr.width * factor,
+            qr.height * factor
+        ),
+        Image.Resampling.NEAREST
+    )
+
+    im = frame()
+
+    # Zone blanche pour garder un QR classique noir/blanc.
+    white = Image.new(
+        "1",
+        (64, 64),
+        255
+    )
+
+    im.paste(
+        white,
+        (0, 0)
+    )
+
+    x = (
+        64 - qr.width
+    ) // 2
+
+    y = (
+        64 - qr.height
+    ) // 2
+
+    im.paste(
+        qr,
+        (x, y)
+    )
+
+    d = ImageDraw.Draw(im)
+
+    draw_text(
+        d,
+        (68, 4),
+        "SCAN WIFI",
+        True
+    )
+
+    draw_text(
+        d,
+        (68, 20),
+        fit(ssid, 58)
+    )
+
+    draw_text(
+        d,
+        (68, 39),
+        "clic:"
+    )
+
+    draw_text(
+        d,
+        (68, 50),
+        "retour"
+    )
+
+    show(im)
+
+    return True
+
+
+def draw_power(held=0):
+
+    im = frame()
+    d = ImageDraw.Draw(im)
+
+    header(
+        d,
+        "POWER",
+        "1/3"
+    )
+
+    draw_text(
+        d,
+        (0, 14),
+        "RESTART 2s"
+    )
+
+    bar(
+        d,
+        0,
+        25,
+        126,
+        8,
+        held / POWER_RESTART
+    )
+
+    draw_text(
+        d,
+        (0, 39),
+        "POWER OFF 5s"
+    )
+
+    bar(
+        d,
+        0,
+        50,
+        126,
+        8,
+        held / POWER_OFF
+    )
+
+    show(im)
+
+
+def draw_wifi(held=0):
+
+    ssid = current_ssid()
+    password = wifi_password(ssid)
+
+    im = frame()
+    d = ImageDraw.Draw(im)
+
+    header(
+        d,
+        "WIFI",
+        "2/3"
+    )
+
+    if not ssid:
+
+        draw_text(
+            d,
+            (0, 17),
+            "Non connecte"
+        )
+
+        if HOTSPOT_STATE.exists():
+
+            draw_text(
+                d,
+                (0, 31),
+                "Hotspot actif"
+            )
+
+    else:
+
+        draw_text(
+            d,
+            (0, 13),
+            "SSID: " + fit(
+                ssid,
+                94
+            )
+        )
+
+        draw_text(
+            d,
+            (0, 26),
+            "PASS: " + fit(
+                password
+                if password
+                else "indisponible",
+                94
+            )
+        )
+
+        draw_text(
+            d,
+            (0, 41),
+            "Hold 2s -> QR"
+        )
+
+        bar(
+            d,
+            0,
+            54,
+            126,
+            7,
+            held / WIFI_QR
+        )
+
+    show(im)
+
+    return ssid, password
+
+
+def draw_rescue(held=0):
+
+    active = HOTSPOT_STATE.exists()
+
+    env = load_hotspot()
+
+    im = frame()
+    d = ImageDraw.Draw(im)
+
+
+    # ========================================================
+    # HOTSPOT ACTIF = ECRAN PRINCIPAL DEPANNAGE
+    # ========================================================
+
+    if active:
+
+        percent = battery_percent()
+        charging = battery_charging()
+
+        if percent is None:
+            battery_text = "--%"
+        elif charging:
+            battery_text = f"C{percent}%"
+        else:
+            battery_text = f"{percent}%"
+
+        # Batterie en haut à gauche
+        draw_text(
+            d,
+            (0, 0),
+            battery_text,
+            True
+        )
+
+        # Titre
+        draw_text(
+            d,
+            (31, 0),
+            "DEPANNAGE",
+            True
+        )
+
+
+        ssid = env.get(
+            "HOTSPOT_SSID",
+            "PiKVM-Setup"
+        )
+
+        password = env.get(
+            "HOTSPOT_PASS",
+            "?"
+        )
+
+        ip = env.get(
+            "HOTSPOT_IP",
+            "192.168.50.1"
+        )
+
+
+        # SSID
+        draw_text(
+            d,
+            (0, 13),
+            fit(ssid, 128),
+            True
+        )
+
+
+        # Mot de passe
+        draw_text(
+            d,
+            (0, 25),
+            "PASS:"
+        )
+
+        draw_text(
+            d,
+            (31, 25),
+            fit(password, 97)
+        )
+
+
+        # IP
+        draw_text(
+            d,
+            (0, 37),
+            "IP: " + ip
+        )
+
+
+        draw_text(
+            d,
+            (0, 48),
+            "2s QR / 5s WIFI"
+        )
+
+
+        # Barre 0 -> 5 secondes
+        bar(
+            d,
+            0,
+            58,
+            126,
+            5,
+            held / RESCUE_TOGGLE
+        )
+
+
+        # ====================================================
+        # MARQUEUR A 2 SECONDES
+        # 2 / 5 = 40 %
+        # ====================================================
+
+        marker_x = (
+            1
+            + int(
+                124
+                * (
+                    RESCUE_QR
+                    / RESCUE_TOGGLE
+                )
+            )
+        )
+
+        # Marqueur 2s directement dans la barre.
+        # Blanc tant que la barre n'est pas arrivée à 2s,
+        # puis noir lorsque le remplissage passe dessus.
+        marker_color = (
+            0
+            if held >= RESCUE_QR
+            else 255
+        )
+
+        d.line(
+            (
+                marker_x,
+                59,
+                marker_x,
+                62
+            ),
+            fill=marker_color
+        )
+
+
+    # ========================================================
+    # MODE NORMAL : MENU 3/3 EXISTANT
+    # ========================================================
+
+    else:
+
+        header(
+            d,
+            "DEPANNAGE",
+            "3/3"
+        )
+
+        draw_text(
+            d,
+            (0, 16),
+            "Hotspot: OFF"
+        )
+
+        draw_text(
+            d,
+            (0, 31),
+            "Hold 5s -> ON"
+        )
+
+        bar(
+            d,
+            0,
+            48,
+            126,
+            9,
+            held / RESCUE_TOGGLE
+        )
+
+
+    show(im)
+
+
+def message(line1, line2="", delay=1):
+
+    im = frame()
+    d = ImageDraw.Draw(im)
+
+    draw_text(
+        d,
+        (0, 16),
+        fit(line1, 126),
+        True
+    )
+
+    if line2:
+
+        draw_text(
+            d,
+            (0, 32),
+            fit(line2, 126)
+        )
+
+    show(im)
+
+    if delay:
+        time.sleep(delay)
+
+
+def show_qr(ssid, password):
+
+    if not ssid or not password:
+
+        message(
+            "QR indisponible",
+            "SSID/PASS absent",
+            2
+        )
+
+        return
+
+
+    try:
+
+        payload = (
+            "WIFI:T:WPA;"
+            f"S:{wifi_escape(ssid)};"
+            f"P:{wifi_escape(password)};;"
+        )
+
+        subprocess.run(
+            [
+                "qrencode",
+                "-t", "PNG",
+                "-l", "L",
+                "-m", "0",
+                "-s", "1",
+                "-o", QR_FILE,
+                payload
+            ],
+            check=True,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL
+        )
+
+        qr = Image.open(
+            QR_FILE
+        ).convert("1")
+
+
+        factor = max(
+            1,
+            58 // max(
+                qr.width,
+                qr.height
+            )
+        )
+
+        qr = qr.resize(
+            (
+                qr.width * factor,
+                qr.height * factor
+            ),
+            Image.Resampling.NEAREST
+        )
+
+
+    except Exception as e:
+
+        message(
+            "Erreur QR",
+            str(e),
+            2
+        )
+
+        return
+
+
+    # On attend que le bouton ayant déclenché
+    # le QR soit complètement relâché.
+    wait_release()
+
+
+    # Le SSID repart du début à chaque ouverture du QR.
+    reset_scroll()
+
+
+    # Le QR reste affiche sans limite de temps.
+    # Un clic court permet de revenir.
+    while True:
+
+        im = frame()
+
+
+        # ====================================================
+        # QR CODE A GAUCHE
+        # ====================================================
+
+        white = Image.new(
+            "1",
+            (64, 64),
+            255
+        )
+
+        im.paste(
+            white,
+            (0, 0)
+        )
+
+
+        x = (
+            64 - qr.width
+        ) // 2
+
+        y = (
+            64 - qr.height
+        ) // 2
+
+        im.paste(
+            qr,
+            (x, y)
+        )
+
+
+        # ====================================================
+        # INFORMATIONS A DROITE
+        # ====================================================
+
+        d = ImageDraw.Draw(im)
+
+        draw_text(
+            d,
+            (68, 3),
+            "SCAN WIFI",
+            True
+        )
+
+
+        draw_text(
+            d,
+            (68, 16),
+            "SSID:"
+        )
+
+
+        # fit() est recalculé à chaque frame :
+        # le SSID défile réellement.
+        draw_text(
+            d,
+            (68, 28),
+            fit(
+                ssid,
+                58
+            )
+        )
+
+
+        draw_text(
+            d,
+            (68, 45),
+            "clic retour"
+        )
+
+
+        show(im)
+
+
+        # ====================================================
+        # CLIC = RETOUR
+        # ====================================================
+
+        if button_down():
+
+            wait_release()
+
+            break
+
+
+        # Environ 8 rafraîchissements / seconde
+        time.sleep(0.12)
+
+def restart_pikvm():
+
+    message(
+        "RESTART PiKVM",
+        "Services...",
+        0.5
+    )
+
+    subprocess.run(
+        [
+            "systemctl",
+            "restart",
+            "kvmd.service",
+            "kvmd-nginx.service"
+        ],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL
+    )
+
+    time.sleep(2)
+
+
+def poweroff():
+
+    try:
+
+        Path(
+            "/run/pikvm-poweroff-requested"
+        ).write_text("1\n")
+
+    except Exception:
+        pass
+
+    message(
+        "POWER OFF",
+        "Arret en cours...",
+        0.5
+    )
+
+    subprocess.Popen(
+        [
+            "systemctl",
+            "poweroff"
+        ],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        start_new_session=True
+    )
+
+
+def hotspot_toggle(enable):
+
+    if enable:
+
+        message(
+            "DEPANNAGE",
+            "Activation...",
+            0.2
+        )
+
+        action = "on"
+
+    else:
+
+        message(
+            "DEPANNAGE",
+            "Retour WiFi...",
+            0.2
+        )
+
+        action = "off"
+
+    try:
+
+        p = subprocess.run(
+            [
+                "/usr/local/bin/pikvm-hotspot",
+                action
+            ],
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            timeout=25
+        )
+
+        if p.returncode != 0:
+
+            message(
+                "Erreur hotspot",
+                p.stdout.splitlines()[-1]
+                if p.stdout
+                else "",
+                3
+            )
+
+            return False
+
+        return True
+
+    except Exception as e:
+
+        message(
+            "Erreur hotspot",
+            str(e),
+            3
+        )
+
+        return False
+
+
+def draw_menu(index, held=0):
+
+    if index == 0:
+        draw_power(held)
+
+    elif index == 1:
+        draw_wifi(held)
+
+    else:
+        draw_rescue(held)
+
+def draw_rescue_power(held=0):
+
+    im = frame()
+    d = ImageDraw.Draw(im)
+
+    draw_text(
+        d,
+        (0, 0),
+        "POWER",
+        True
+    )
+
+    draw_text(
+        d,
+        (72, 0),
+        "clic retour"
+    )
+
+
+    draw_text(
+        d,
+        (0, 14),
+        "RESTART 2s"
+    )
+
+    bar(
+        d,
+        0,
+        25,
+        126,
+        8,
+        held / POWER_RESTART
+    )
+
+
+    draw_text(
+        d,
+        (0, 39),
+        "POWER OFF 5s"
+    )
+
+    bar(
+        d,
+        0,
+        50,
+        126,
+        8,
+        held / POWER_OFF
+    )
+
+
+    show(im)
+
+
+
+def run_rescue_power():
+
+    reset_scroll()
+
+    deadline = (
+        time.monotonic()
+        + MENU_TIMEOUT
+    )
+
+
+    while HOTSPOT_STATE.exists():
+
+        # ----------------------------------------------------
+        # Attente dans le menu POWER
+        # ----------------------------------------------------
+
+        while not button_down():
+
+            if (
+                time.monotonic()
+                >= deadline
+            ):
+                return
+
+            draw_rescue_power(0)
+
+            time.sleep(0.12)
+
+
+        start = time.monotonic()
+
+
+        # ----------------------------------------------------
+        # Bouton maintenu
+        # ----------------------------------------------------
+
+        while button_down():
+
+            held = (
+                time.monotonic()
+                - start
+            )
+
+            draw_rescue_power(
+                held
+            )
+
+
+            # POWER OFF à 5 secondes
+            if held >= POWER_OFF:
+
+                poweroff()
+
+                return
+
+
+            time.sleep(0.05)
+
+
+        held = (
+            time.monotonic()
+            - start
+        )
+
+
+        # ----------------------------------------------------
+        # Clic court = retour DEPANNAGE
+        # ----------------------------------------------------
+
+        if held < SHORT_CLICK:
+
+            return
+
+
+        # ----------------------------------------------------
+        # Restart entre 2 et 5 secondes
+        # ----------------------------------------------------
+
+        if held >= POWER_RESTART:
+
+            restart_pikvm()
+
+            return
+
+
+        # Entre clic court et 2 secondes
+        message(
+            "Trop court",
+            "2s restart / 5s off",
+            1
+        )
+
+        return
+
+
+
+def run_rescue_mode():
+
+    # L'OLED normal ne doit PLUS tourner pendant
+    # le mode dépannage.
+    subprocess.run(
+        [
+            "systemctl",
+            "stop",
+            OLED_SERVICE
+        ],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL
+    )
+
+    get_device()
+
+    reset_scroll()
+
+
+    try:
+
+        while HOTSPOT_STATE.exists():
+
+            # =================================================
+            # ECRAN PRINCIPAL DEPANNAGE
+            # =================================================
+
+            while (
+                HOTSPOT_STATE.exists()
+                and not button_down()
+            ):
+
+                draw_rescue(0)
+
+                time.sleep(0.12)
+
+
+            if not HOTSPOT_STATE.exists():
+                break
+
+
+            start = time.monotonic()
+
+
+            # =================================================
+            # APPUI SUR LE BOUTON
+            # =================================================
+
+            while button_down():
+
+                held = (
+                    time.monotonic()
+                    - start
+                )
+
+                draw_rescue(
+                    held
+                )
+
+
+                # ---------------------------------------------
+                # 5 SECONDES
+                # Retour au Wi-Fi normal
+                # ---------------------------------------------
+
+                if held >= RESCUE_TOGGLE:
+
+                    message(
+                        "DEPANNAGE OFF",
+                        "Retour au WiFi...",
+                        0.5
+                    )
+
+                    hotspot_toggle(False)
+
+                    wait_release()
+
+                    return
+
+
+                time.sleep(0.05)
+
+
+            held = (
+                time.monotonic()
+                - start
+            )
+
+
+            # =================================================
+            # CLIC COURT
+            # Ouvre uniquement le menu POWER
+            # =================================================
+
+            if held < SHORT_CLICK:
+
+                run_rescue_power()
+
+                reset_scroll()
+
+                continue
+
+
+            # =================================================
+            # 2 -> 5 SECONDES
+            # QR DU HOTSPOT
+            # =================================================
+
+            if held >= RESCUE_QR:
+
+                env = load_hotspot()
+
+                show_qr(
+                    env.get(
+                        "HOTSPOT_SSID"
+                    ),
+                    env.get(
+                        "HOTSPOT_PASS"
+                    )
+                )
+
+                reset_scroll()
+
+                continue
+
+
+            message(
+                "Trop court",
+                "2s QR / 5s WiFi",
+                1
+            )
+
+            reset_scroll()
+
+
+    finally:
+
+        # On ne remet l'OLED normal que lorsque
+        # le hotspot n'est plus actif.
+        if (
+            not HOTSPOT_STATE.exists()
+            and not Path(
+                "/run/pikvm-poweroff-requested"
+            ).exists()
+        ):
+
+            subprocess.run(
+                [
+                    "systemctl",
+                    "start",
+                    OLED_SERVICE
+                ],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL
+            )
+
+
+def run_menu():
+
+    global MENU_COUNTDOWN
+
+    subprocess.run(
+        [
+            "systemctl",
+            "stop",
+            OLED_SERVICE
+        ],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL
+    )
+
+    get_device()
+
+    index = 0
+
+    last_action = time.monotonic()
+
+    reset_scroll()
+
+    MENU_COUNTDOWN = int(
+        WIFI_MENU_TIMEOUT
+        if index == 1
+        else MENU_TIMEOUT
+    )
+
+    draw_menu(index)
+
+    try:
+
+        while True:
+
+            timeout = (
+                WIFI_MENU_TIMEOUT
+                if index == 1
+                else MENU_TIMEOUT
+            )
+
+            deadline = (
+                last_action
+                + timeout
+            )
+
+            while not button_down():
+
+                if time.monotonic() >= deadline:
+                    return
+
+                remaining = max(
+                    0,
+                    int(
+                        deadline
+                        - time.monotonic()
+                        + 0.999
+                    )
+                )
+
+                MENU_COUNTDOWN = remaining
+
+                draw_menu(index)
+
+                time.sleep(0.12)
+
+            start = time.monotonic()
+
+            last_draw = 0
+
+            action_done = False
+
+            while button_down():
+
+                held = (
+                    time.monotonic()
+                    - start
+                )
+
+                now = time.monotonic()
+
+                if (
+                    now - last_draw
+                    > 0.08
+                ):
+
+                    draw_menu(
+                        index,
+                        held
+                    )
+
+                    last_draw = now
+
+
+                # =============================================
+                # POWER OFF A 5 SECONDES
+                # =============================================
+
+                if (
+                    index == 0
+                    and held >= POWER_OFF
+                ):
+
+                    poweroff()
+
+                    return
+
+
+                # =============================================
+                # ACTIVATION HOTSPOT
+                # =============================================
+
+                if (
+                    index == 2
+                    and not HOTSPOT_STATE.exists()
+                    and held >= RESCUE_TOGGLE
+                ):
+
+                    if hotspot_toggle(True):
+
+                        wait_release()
+
+                        env = load_hotspot()
+
+                        show_qr(
+                            env.get(
+                                "HOTSPOT_SSID"
+                            ),
+                            env.get(
+                                "HOTSPOT_PASS"
+                            )
+                        )
+
+                        # Le hotspot est maintenant actif.
+                        # On quitte complètement le menu normal.
+                        # main() détectera ensuite le hotspot
+                        # et lancera run_rescue_mode().
+                        return
+
+                    action_done = True
+
+                    break
+
+
+                # =============================================
+                # DESACTIVATION HOTSPOT
+                # =============================================
+
+                if (
+                    index == 2
+                    and HOTSPOT_STATE.exists()
+                    and held >= RESCUE_TOGGLE
+                ):
+
+                    hotspot_toggle(False)
+
+                    action_done = True
+
+                    break
+
+
+                time.sleep(0.04)
+
+
+            if button_down():
+                wait_release()
+
+
+            held = (
+                time.monotonic()
+                - start
+            )
+
+            last_action = time.monotonic()
+
+
+            if action_done:
+
+                draw_menu(index)
+
+                continue
+
+
+            # =============================================
+            # CLIC COURT = MENU SUIVANT
+            # =============================================
+
+            if held < SHORT_CLICK:
+
+                index = (
+                    index + 1
+                ) % 3
+
+                reset_scroll()
+
+                draw_menu(index)
+
+                continue
+
+
+            # =============================================
+            # MENU POWER
+            # =============================================
+
+            if index == 0:
+
+                if held >= POWER_RESTART:
+
+                    restart_pikvm()
+
+                    return
+
+                message(
+                    "Trop court",
+                    "2s restart / 5s off",
+                    1
+                )
+
+
+            # =============================================
+            # MENU WIFI
+            # =============================================
+
+            elif index == 1:
+
+                if held >= WIFI_QR:
+
+                    ssid = current_ssid()
+
+                    password = wifi_password(
+                        ssid
+                    )
+
+                    show_qr(
+                        ssid,
+                        password
+                    )
+
+                else:
+
+                    message(
+                        "Trop court",
+                        "Hold 2s pour QR",
+                        1
+                    )
+
+
+            # =============================================
+            # MENU DEPANNAGE
+            # =============================================
+
+            else:
+
+                if (
+                    HOTSPOT_STATE.exists()
+                    and held >= RESCUE_QR
+                ):
+
+                    env = load_hotspot()
+
+                    show_qr(
+                        env.get(
+                            "HOTSPOT_SSID"
+                        ),
+                        env.get(
+                            "HOTSPOT_PASS"
+                        )
+                    )
+
+                else:
+
+                    message(
+                        "Trop court",
+                        "Hold 5s",
+                        1
+                    )
+
+
+            draw_menu(index)
+
+            last_action = time.monotonic()
+
+
+    finally:
+
+        if (
+            not Path(
+                "/run/pikvm-poweroff-requested"
+            ).exists()
+            and not HOTSPOT_STATE.exists()
+        ):
+
+            subprocess.run(
+                [
+                    "systemctl",
+                    "start",
+                    OLED_SERVICE
+                ],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL
+            )
+
+
+def main():
+
+    button_setup()
+
+
+    while True:
+
+        # ====================================================
+        # MODE DEPANNAGE ACTIF
+        # ====================================================
+
+        if HOTSPOT_STATE.exists():
+
+            run_rescue_mode()
+
+            button_setup()
+
+            time.sleep(0.2)
+
+            continue
+
+
+        # ====================================================
+        # MODE NORMAL
+        # ====================================================
+
+        if button_down():
+
+            wait_release()
+
+            run_menu()
+
+            button_setup()
+
+            time.sleep(0.2)
+
+
+        time.sleep(0.05)
+
+
+if __name__ == "__main__":
+    main()

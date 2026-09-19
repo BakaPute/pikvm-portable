@@ -1,0 +1,14 @@
+[Unit]
+Description=PiKVM Power Button Menu
+After=pikvm-power-hold.service
+After=pikvm-oled-custom.service
+Requires=pikvm-power-hold.service
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/pikvm-button-menu
+Restart=always
+RestartSec=1
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,185 @@
+#!/usr/bin/env python3
+
+import subprocess
+import time
+
+from luma.core.interface.serial import i2c
+from luma.oled.device import ssd1306
+from luma.core.render import canvas
+
+
+POWER_GPIO = 17
+BUTTON_GPIO = 18
+
+
+def pinctrl(*args):
+    return subprocess.run(
+        ["pinctrl", *map(str, args)],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True
+    )
+
+
+def pin_get(gpio):
+    p = pinctrl("get", gpio)
+
+    if p.returncode != 0:
+        return None
+
+    text = p.stdout.lower()
+
+    if "| hi" in text:
+        return True
+
+    if "| lo" in text:
+        return False
+
+    return None
+
+
+# ---------------------------------------------------------
+# OLED
+# ---------------------------------------------------------
+
+oled = None
+
+try:
+    serial = i2c(port=1, address=0x3C)
+    oled = ssd1306(serial, width=128, height=64)
+except Exception:
+    oled = None
+
+
+def screen(lines):
+    if oled is None:
+        return
+
+    try:
+        with canvas(oled) as draw:
+            y = 1
+
+            for text, x in lines:
+                draw.text((x, y), text, fill="white")
+                y += 15
+    except Exception:
+        pass
+
+
+# ---------------------------------------------------------
+# Préparation du bouton
+# ---------------------------------------------------------
+
+pinctrl("set", BUTTON_GPIO, "ip", "pd")
+
+
+# ---------------------------------------------------------
+# Demande de maintenir le bouton
+# ---------------------------------------------------------
+
+screen([
+    ("PiKVM STARTING", 20),
+    ("", 0),
+    ("KEEP HOLDING", 27),
+    ("BUTTON", 47),
+])
+
+time.sleep(0.5)
+
+
+# ---------------------------------------------------------
+# Activation POWER HOLD
+# ---------------------------------------------------------
+
+pinctrl("set", POWER_GPIO, "op", "dh")
+
+time.sleep(0.25)
+
+
+# ---------------------------------------------------------
+# Vérification que GPIO17 est réellement HIGH
+# ---------------------------------------------------------
+
+power_ok = False
+
+for _ in range(10):
+    if pin_get(POWER_GPIO) is True:
+        power_ok = True
+        break
+
+    time.sleep(0.1)
+
+
+if not power_ok:
+
+    screen([
+        ("POWER HOLD ERROR", 12),
+        ("", 0),
+        ("KEEP HOLDING", 27),
+        ("BUTTON !", 41),
+    ])
+
+    # Ne jamais demander de relâcher si POWER HOLD a échoué
+    while True:
+        pinctrl("set", POWER_GPIO, "op", "dh")
+        time.sleep(1)
+
+
+# ---------------------------------------------------------
+# POWER HOLD actif
+# ---------------------------------------------------------
+
+screen([
+    ("POWER HOLD OK", 22),
+    ("", 0),
+    ("RELEASE", 41),
+    ("BUTTON", 47),
+])
+
+
+# ---------------------------------------------------------
+# Attend réellement le relâchement du bouton
+#
+# 300 ms de debounce pour éviter un faux relâchement
+# ---------------------------------------------------------
+
+release_start = None
+
+while True:
+
+    pressed = pin_get(BUTTON_GPIO)
+
+    if pressed is False:
+
+        if release_start is None:
+            release_start = time.monotonic()
+
+        elif time.monotonic() - release_start >= 0.30:
+            break
+
+    else:
+        release_start = None
+
+    time.sleep(0.05)
+
+
+# ---------------------------------------------------------
+# Confirmation
+# ---------------------------------------------------------
+
+screen([
+    ("POWER HOLD OK", 22),
+    ("", 0),
+    ("BUTTON RELEASED", 16),
+    ("Starting PiKVM", 23),
+])
+
+time.sleep(1.2)
+
+
+# Efface avant de rendre l'écran au service principal
+if oled is not None:
+    try:
+        oled.clear()
+    except Exception:
+        pass

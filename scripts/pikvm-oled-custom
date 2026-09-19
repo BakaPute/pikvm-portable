@@ -1,0 +1,480 @@
+#!/usr/bin/env python3
+
+import glob
+import os
+import re
+import subprocess
+import time
+
+from luma.core.interface.serial import i2c
+from luma.oled.device import ssd1306
+from luma.core.render import canvas
+
+
+OLED_ADDR = 0x3C
+MAX17048_ADDR = "0x36"
+
+PAGE_DURATION = 10
+REFRESH = 1
+
+
+def cmd(args):
+    try:
+        p = subprocess.run(
+            args,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            timeout=2
+        )
+        return p.returncode, p.stdout.strip()
+    except Exception:
+        return 1, ""
+
+
+# ------------------------------------------------------------
+# Batterie MAX17048
+# ------------------------------------------------------------
+
+def max17048_word(reg):
+    try:
+        hi = int(subprocess.check_output(
+            ["i2cget", "-y", "1", MAX17048_ADDR, hex(reg), "b"],
+            text=True,
+            stderr=subprocess.DEVNULL
+        ).strip(), 16)
+
+        lo = int(subprocess.check_output(
+            ["i2cget", "-y", "1", MAX17048_ADDR, hex(reg + 1), "b"],
+            text=True,
+            stderr=subprocess.DEVNULL
+        ).strip(), 16)
+
+        return (hi << 8) | lo
+
+    except Exception:
+        return None
+
+
+def battery():
+    vr = max17048_word(0x02)
+
+    if vr is None:
+        return None, None
+
+    voltage = vr * 78.125 / 1_000_000
+
+    percent = (voltage - 3.10) / (4.13 - 3.10) * 100.0
+    percent = max(0, min(100, percent))
+
+    return percent, voltage
+
+
+def battery_charge_rate():
+    raw = max17048_word(0x16)
+
+    if raw is None:
+        return None
+
+    if raw & 0x8000:
+        raw -= 65536
+
+    return raw * 0.208
+
+
+def battery_charging():
+    rate = battery_charge_rate()
+
+    if rate is None:
+        return False
+
+    return rate > 0.5
+
+
+# ------------------------------------------------------------
+# Wi-Fi
+# ------------------------------------------------------------
+
+def wifi():
+    rc, out = cmd(["iw", "dev", "wlan0", "link"])
+
+    if rc != 0 or "Not connected" in out:
+        return None, None
+
+    ssid = None
+    signal = None
+
+    for line in out.splitlines():
+        line = line.strip()
+
+        if line.startswith("SSID:"):
+            ssid = line.split(":", 1)[1].strip()
+
+        elif line.startswith("signal:"):
+            m = re.search(r"(-?\d+)", line)
+            if m:
+                signal = int(m.group(1))
+
+    return ssid, signal
+
+
+def wifi_level(dbm):
+    if dbm is None:
+        return 0
+
+    if dbm >= -50:
+        return 5
+    if dbm >= -60:
+        return 4
+    if dbm >= -70:
+        return 3
+    if dbm >= -80:
+        return 2
+
+    return 1
+
+
+def ip_address():
+    rc, out = cmd([
+        "ip", "-4", "-o",
+        "addr", "show", "dev", "wlan0"
+    ])
+
+    if rc != 0:
+        return "-"
+
+    m = re.search(r"inet\s+([0-9.]+)", out)
+
+    if m:
+        return m.group(1)
+
+    return "-"
+
+
+# ------------------------------------------------------------
+# USB gadget
+# ------------------------------------------------------------
+
+def usb_state():
+    states = []
+
+    for path in glob.glob("/sys/class/udc/*/state"):
+        try:
+            with open(path) as f:
+                states.append(f.read().strip())
+        except Exception:
+            pass
+
+    if not states:
+        return "?"
+
+    if "configured" in states:
+        return "OK"
+
+    if "addressed" in states:
+        return "WAIT"
+
+    if "powered" in states:
+        return "POWER"
+
+    if "not attached" in states:
+        return "OFF"
+
+    return states[0][:6].upper()
+
+
+# ------------------------------------------------------------
+# HDMI / CSI
+# ------------------------------------------------------------
+
+def hdmi_state():
+    if not os.path.exists("/usr/bin/v4l2-ctl"):
+        return "?"
+
+    devices = sorted(glob.glob("/dev/video*"))
+
+    for dev in devices:
+        rc, out = cmd([
+            "v4l2-ctl",
+            "-d", dev,
+            "--query-dv-timings"
+        ])
+
+        if rc != 0:
+            continue
+
+        width = None
+        height = None
+
+        mw = re.search(r"Width:\s*(\d+)", out, re.I)
+        mh = re.search(r"Height:\s*(\d+)", out, re.I)
+
+        if mw:
+            width = mw.group(1)
+
+        if mh:
+            height = mh.group(1)
+
+        if width and height:
+            return f"{width}x{height}"
+
+        if out:
+            return "ON"
+
+    return "OFF"
+
+
+# ------------------------------------------------------------
+# Température CPU
+# ------------------------------------------------------------
+
+def cpu_temp():
+    try:
+        with open("/sys/class/thermal/thermal_zone0/temp") as f:
+            return int(f.read().strip()) / 1000
+    except Exception:
+        return None
+
+
+# ------------------------------------------------------------
+# Uptime
+# ------------------------------------------------------------
+
+def uptime():
+    try:
+        with open("/proc/uptime") as f:
+            seconds = int(float(f.read().split()[0]))
+
+        hours = seconds // 3600
+        minutes = (seconds % 3600) // 60
+
+        if hours >= 24:
+            days = hours // 24
+            hours %= 24
+            return f"{days}d{hours}h"
+
+        return f"{hours}h{minutes:02d}"
+
+    except Exception:
+        return "?"
+
+
+# ------------------------------------------------------------
+# Dessins
+# ------------------------------------------------------------
+
+def draw_wifi_bars(draw, x, y, level):
+    heights = [4, 7, 10, 13, 16]
+
+    for i, h in enumerate(heights):
+        x1 = x + i * 6
+        y1 = y + 16 - h
+        x2 = x1 + 4
+        y2 = y + 16
+
+        if i < level:
+            draw.rectangle((x1, y1, x2, y2), fill="white")
+        else:
+            draw.rectangle((x1, y1, x2, y2), outline="white")
+
+
+def draw_battery_bar(draw, x, y, width, height, soc):
+    draw.rectangle(
+        (x, y, x + width, y + height),
+        outline="white"
+    )
+
+    inner = width - 4
+
+    fill_width = int(inner * soc / 100)
+
+    if fill_width > 0:
+        draw.rectangle(
+            (
+                x + 2,
+                y + 2,
+                x + 2 + fill_width,
+                y + height - 2
+            ),
+            fill="white"
+        )
+
+
+# ------------------------------------------------------------
+# Pages
+# ------------------------------------------------------------
+
+def page_main(device, remaining):
+    soc, voltage = battery()
+    charging = battery_charging()
+    ssid, dbm = wifi()
+    ip = ip_address()
+    level = wifi_level(dbm)
+
+    if soc is None:
+        soc_text = "--%"
+        voltage_text = "--.--V"
+    else:
+        soc_text = f"CHG {soc:.0f}%" if charging else f"{soc:.0f}%"
+        voltage_text = f"{voltage:.2f}V"
+
+    ssid_text = ssid if ssid else "WiFi disconnected"
+
+    if len(ssid_text) > 16:
+        ssid_text = ssid_text[:16]
+
+    with canvas(device) as draw:
+        draw.text((0, 0), "PiKVM", fill="white")
+        draw.text((108, 0), f"{remaining}s", fill="white")
+
+        draw.text(
+            (0, 14),
+            f"IP {ip}",
+            fill="white"
+        )
+
+        draw.text(
+            (0, 29),
+            ssid_text,
+            fill="white"
+        )
+
+        draw_wifi_bars(
+            draw,
+            98,
+            27,
+            level
+        )
+
+        draw.text(
+            (0, 48),
+            f"BAT {soc_text}  {voltage_text}",
+            fill="white"
+        )
+
+
+def page_battery(device, remaining):
+    soc, voltage = battery()
+    charging = battery_charging()
+
+    if soc is None:
+        soc = 0
+        soc_text = "--.- %"
+        voltage_text = "--.--- V"
+    else:
+        soc_text = f"{soc:.1f} %"
+        voltage_text = f"{voltage:.3f} V"
+
+    with canvas(device) as draw:
+        if charging:
+            title = "Charging"
+        elif soc >= 100:
+            title = "Full"
+        else:
+            title = "Battery"
+
+        draw.text((0, 0), title, fill="white")
+        draw.text((108, 0), f"{remaining}s", fill="white")
+
+        draw.text(
+            (0, 17),
+            soc_text,
+            fill="white"
+        )
+
+        draw.text(
+            (69, 17),
+            voltage_text,
+            fill="white"
+        )
+
+        draw_battery_bar(
+            draw,
+            2,
+            39,
+            120,
+            17,
+            soc
+        )
+
+
+def page_system(device, remaining):
+    usb = usb_state()
+    hdmi = hdmi_state()
+    temp = cpu_temp()
+    up = uptime()
+
+    if temp is None:
+        temp_text = "--C"
+    else:
+        temp_text = f"{temp:.0f}C"
+
+    with canvas(device) as draw:
+        draw.text((0, 0), "System", fill="white")
+        draw.text((108, 0), f"{remaining}s", fill="white")
+
+        draw.text(
+            (0, 16),
+            f"USB  {usb}",
+            fill="white"
+        )
+
+        draw.text(
+            (0, 30),
+            f"HDMI {hdmi}",
+            fill="white"
+        )
+
+        draw.text(
+            (0, 46),
+            f"CPU {temp_text}   UP {up}",
+            fill="white"
+        )
+
+
+# ------------------------------------------------------------
+# Main
+# ------------------------------------------------------------
+
+serial = i2c(
+    port=1,
+    address=OLED_ADDR
+)
+
+device = ssd1306(
+    serial,
+    width=128,
+    height=64
+)
+
+pages = [
+    page_main,
+    page_battery,
+    page_system
+]
+
+page = 0
+last_page = time.monotonic()
+
+while True:
+    try:
+        now = time.monotonic()
+
+        if now - last_page >= PAGE_DURATION:
+            page = (page + 1) % len(pages)
+            last_page = now
+
+        elapsed = now - last_page
+        remaining = max(
+            1,
+            int(PAGE_DURATION - elapsed + 0.999)
+        )
+
+        pages[page](device, remaining)
+
+    except Exception as e:
+        with canvas(device) as draw:
+            draw.text((0, 0), "OLED ERROR", fill="white")
+            draw.text((0, 18), str(e)[:20], fill="white")
+
+    time.sleep(REFRESH)

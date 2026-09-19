@@ -1,0 +1,21 @@
+*.tar.gz
+*.bak
+*.bak-*
+*.key
+*.pem
+*.crt
+
+snapshot-private/
+private/
+
+wpa_supplicant*.conf
+override.yaml
+pikvm-hotspot.env
+
+!pikvm-hotspot.env.example
+!pikvm-hotspot-hostapd.conf.example
+
+# Python
+__pycache__/
+*.pyc
+*.pyo

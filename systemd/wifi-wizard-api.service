@@ -1,0 +1,14 @@
+[Unit]
+Description=PiKVM - Wi-Fi Wizard API
+After=network.target
+
+[Service]
+Type=simple
+User=root
+Group=root
+Restart=always
+RestartSec=2
+ExecStart=/usr/local/bin/wifi-wizard-api
+
+[Install]
+WantedBy=multi-user.target

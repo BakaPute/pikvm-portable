@@ -1,0 +1,115 @@
+#!/usr/bin/env python3
+
+import json
+import os
+import subprocess
+import time
+
+
+TIMEOUT = 3600
+CHECK_INTERVAL = 5
+
+HID_FILE = "/run/kvmd/pikvm-hid-last-activity"
+STATE_FILE = "/run/pikvm-auto-shutdown-state.json"
+POWEROFF_MARKER = "/run/pikvm-poweroff-requested"
+
+VIDEO_DEVICE = "/dev/kvmd-video"
+
+
+def hdmi_present():
+    try:
+        result = subprocess.run(
+            [
+                "v4l2-ctl",
+                "-d", VIDEO_DEVICE,
+                "--query-dv-timings",
+            ],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            timeout=3,
+        )
+
+        return result.returncode == 0
+
+    except Exception:
+        return False
+
+
+def hid_last_activity():
+    try:
+        with open(HID_FILE, "r") as file:
+            return float(file.read().strip())
+    except Exception:
+        return time.time()
+
+
+def write_state(data):
+    try:
+        with open(STATE_FILE, "w") as file:
+            json.dump(data, file)
+    except Exception:
+        pass
+
+
+def main():
+
+    print(
+        f"PiKVM auto shutdown started - timeout={TIMEOUT}s",
+        flush=True,
+    )
+
+    now = time.time()
+
+    # Empêche un arrêt immédiat au démarrage du service.
+    last_active = now
+
+    while True:
+
+        now = time.time()
+
+        hdmi = hdmi_present()
+        hid_time = hid_last_activity()
+
+        if hdmi:
+            # Tant qu'un signal HDMI existe, le compteur
+            # reste continuellement remis à zéro.
+            last_active = now
+
+        elif hid_time > last_active:
+            # Activité clavier/souris pendant l'absence HDMI.
+            last_active = hid_time
+
+        idle = max(0, now - last_active)
+        remaining = max(0, TIMEOUT - idle)
+
+        state = {
+            "hdmi": hdmi,
+            "idle_seconds": round(idle, 1),
+            "remaining_seconds": round(remaining, 1),
+            "timeout_seconds": TIMEOUT,
+        }
+
+        write_state(state)
+
+        if not hdmi and idle >= TIMEOUT:
+
+            print(
+                "No HDMI and no HID activity: powering off",
+                flush=True,
+            )
+
+            with open(POWEROFF_MARKER, "w") as file:
+                file.write("auto-shutdown\n")
+
+            subprocess.run(
+                ["systemctl", "poweroff"],
+                check=False,
+            )
+
+            return
+
+        time.sleep(CHECK_INTERVAL)
+
+
+if __name__ == "__main__":
+    main()

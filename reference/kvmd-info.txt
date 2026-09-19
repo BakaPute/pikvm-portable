@@ -1,0 +1,114 @@
+=== KVMD PACKAGE ===
+kvmd 4.66-1
+
+=== KVMD CONFIG ===
+ipmi:
+    auth:
+        file: /etc/kvmd/ipmipasswd
+
+    kvmd:
+        timeout: 5.0
+        unix: /run/kvmd/kvmd.sock
+
+    server:
+        host: ''
+        port: 623
+        timeout: 10.0
+
+    sol:
+        device: ''
+        proxy_port: 0
+        select_timeout: 0.1
+        speed: 115200
+
+
+janus:
+    check:
+        interval: 10.0
+        retries: 5
+        retries_delay: 5.0
+
+    cmd:
+        - /usr/bin/janus
+        - --disable-colors
+        - --plugins-folder=/usr/lib/ustreamer/janus
+        - --configs-folder=/etc/kvmd/janus
+        - --interface={src_ip}
+        - '{o_stun_server}'
+    cmd_append: []
+    cmd_remove: []
+    stun:
+        host: stun.l.google.com
+        port: 19302
+        retries: 5
+        retries_delay: 5.0
+        timeout: 5.0
+
+
+kvmd:
+    atx:
+        click_delay: 0.1
+        device: /dev/gpiochip0
+        hdd_led_debounce: 0.1
+        hdd_led_inverted: false
+        hdd_led_pin: 22
+        long_click_delay: 5.5
+        power_led_debounce: 0.1
+        power_led_inverted: false
+        power_led_pin: 24
+        power_switch_pin: 23
+        reset_switch_pin: 27
+        # type: ''
+        type: gpio
+
+    auth:
+        enabled: true
+        expire: 0
+        external:
+            type: ''
+
+        internal:
+            file: /etc/kvmd/htpasswd
+            force_users: []
+            type: htpasswd
+
+        totp:
+            secret:
+                file: /etc/kvmd/totp.secret
+
+
+
+    gpio:
+        drivers:
+            __gpio__:
+                device: /dev/gpiochip0
+                type: gpio
+
+
+        scheme:
+
+        state_poll: 0.1
+        view:
+            header:
+                title: GPIO
+
+            table: []
+
+
+    hid:
+        ignore_keys: []
+        jiggler:
+            active: false
+            enabled: true
+            interval: 60
+
+
+=== USB CONFIG ===
+max_speed: super-speed-plus
+bmAttributes: 0xa0
+
+=== USB FUNCTIONS ===
+hid.usb0
+hid.usb1
+hid.usb2
+mass_storage.usb0
