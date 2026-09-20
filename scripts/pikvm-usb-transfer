@@ -1,0 +1,919 @@
+#!/usr/bin/env python3
+
+import fcntl
+import json
+import lzma
+import os
+import shutil
+import subprocess
+import sys
+import time
+from pathlib import Path
+
+
+IMAGE = Path("/var/lib/kvmd/msd/.USB-TRANSFER.img")
+MOUNT = Path("/run/pikvm-usb-transfer")
+STATE = Path("/run/pikvm-usb-transfer-state.json")
+LOCK = Path("/run/pikvm-usb-transfer.lock")
+
+UDC_FILE = Path(
+    "/sys/kernel/config/usb_gadget/kvmd/UDC"
+)
+
+LUN = Path(
+    "/sys/kernel/config/usb_gadget/kvmd/"
+    "functions/mass_storage.usb0/lun.0"
+)
+
+SIZE = 64 * 1024**3
+LABEL = "PIKVM-XFER"
+
+SUPPORTED = (
+    ".iso",
+    ".img",
+    ".raw",
+    ".iso.xz",
+    ".img.xz",
+    ".raw.xz",
+)
+
+
+def run(args, input_text=None, check=True, capture=False):
+    return subprocess.run(
+        args,
+        input=input_text,
+        text=True,
+        check=check,
+        stdout=subprocess.PIPE if capture else None,
+        stderr=subprocess.STDOUT if capture else None,
+    )
+
+
+def write_state(state, message="", **extra):
+    data = {
+        "state": state,
+        "message": message,
+        "timestamp": time.time(),
+        **extra,
+    }
+
+    tmp = STATE.with_suffix(".tmp")
+    tmp.write_text(
+        json.dumps(
+            data,
+            ensure_ascii=False,
+        )
+    )
+    tmp.replace(STATE)
+
+
+def read_state():
+    try:
+        return json.loads(
+            STATE.read_text()
+        )
+    except Exception:
+        return {
+            "state": "idle",
+            "message": "",
+        }
+
+
+def read_text(path):
+    try:
+        return path.read_text().strip()
+    except Exception:
+        return ""
+
+
+def drive_info():
+    image = read_text(
+        LUN / "file"
+    )
+
+    cdrom = read_text(
+        LUN / "cdrom"
+    ) == "1"
+
+    rw = read_text(
+        LUN / "ro"
+    ) == "0"
+
+    usb_connected = bool(
+        read_text(UDC_FILE)
+    )
+
+    return {
+        "image": image,
+        "cdrom": cdrom,
+        "rw": rw,
+        "usb_connected": usb_connected,
+        "transfer_active": (
+            os.path.normpath(image)
+            == os.path.normpath(str(IMAGE))
+        ) if image else False,
+    }
+
+
+def image_stats():
+    if not IMAGE.exists():
+        return {
+            "exists": False,
+            "virtual_bytes": 0,
+            "used_bytes": 0,
+        }
+
+    stat = IMAGE.stat()
+
+    return {
+        "exists": True,
+        "virtual_bytes": stat.st_size,
+        "used_bytes": stat.st_blocks * 512,
+    }
+
+
+def remount(mode):
+    run([
+        "kvmd-helper-otgmsd-remount",
+        mode,
+    ])
+
+
+def get_udc():
+    current = read_text(
+        UDC_FILE
+    )
+
+    if current:
+        return current
+
+    udcs = sorted(
+        Path("/sys/class/udc").iterdir()
+    )
+
+    if len(udcs) != 1:
+        raise RuntimeError(
+            "Impossible de déterminer le contrôleur USB"
+        )
+
+    return udcs[0].name
+
+
+def usb_disconnect():
+    udc = get_udc()
+
+    with UDC_FILE.open("w") as file:
+        file.write("\n")
+
+    time.sleep(1)
+
+    return udc
+
+
+def usb_reconnect(udc):
+    with UDC_FILE.open("w") as file:
+        file.write(
+            udc + "\n"
+        )
+
+    time.sleep(1)
+
+
+def drive_normal():
+    run([
+        "kvmd-otgmsd",
+        "--eject",
+    ])
+
+    run([
+        "kvmd-otgmsd",
+        "--set-cdrom", "1",
+        "--set-rw", "0",
+    ])
+
+
+def drive_transfer():
+    run([
+        "kvmd-otgmsd",
+        "--set-cdrom", "0",
+        "--set-rw", "1",
+        "--set-image", str(IMAGE),
+    ])
+
+
+def attach_image(read_only=False):
+    args = [
+        "losetup",
+        "--find",
+        "--show",
+    ]
+
+    if read_only:
+        args.append(
+            "--read-only"
+        )
+
+    args.append(
+        str(IMAGE)
+    )
+
+    result = run(
+        args,
+        capture=True,
+    )
+
+    return result.stdout.strip()
+
+
+def detach_image(loop):
+    if loop:
+        run(
+            [
+                "losetup",
+                "-d",
+                loop,
+            ],
+            check=False,
+        )
+
+
+def create_image():
+    IMAGE.unlink(
+        missing_ok=True
+    )
+
+    # Image sparse de 64 Gio.
+    with IMAGE.open("wb") as file:
+        file.truncate(SIZE)
+
+    loop = None
+
+    try:
+        loop = attach_image()
+
+        # Format spécial compatible Windows.
+        # Pas de partition p1 :
+        # l'exFAT est créé sur le disque entier.
+        run([
+            "mkfs.exfat",
+            "-P", "mbr",
+            "-L", LABEL,
+            loop,
+        ])
+
+        os.chmod(
+            IMAGE,
+            0o666,
+        )
+
+        run(["sync"])
+
+    finally:
+        detach_image(loop)
+
+
+def ensure_image():
+    if not IMAGE.exists():
+        create_image()
+
+
+def unique_target(name):
+    target = IMAGE.parent / name
+
+    if not target.exists():
+        return target
+
+    suffixes = "".join(
+        target.suffixes
+    )
+
+    if suffixes:
+        base = target.name[
+            :-len(suffixes)
+        ]
+    else:
+        base = target.name
+
+    index = 1
+
+    while True:
+        candidate = target.with_name(
+            f"{base}-{index}{suffixes}"
+        )
+
+        if not candidate.exists():
+            return candidate
+
+        index += 1
+
+
+def write_import_progress(
+    source_name,
+    index,
+    total,
+    bytes_done,
+    bytes_total,
+):
+    if bytes_total > 0:
+        percent = min(
+            100.0,
+            bytes_done * 100.0 / bytes_total,
+        )
+    else:
+        percent = 100.0
+
+    write_state(
+        "importing",
+        f"Import de {source_name}",
+        current=source_name,
+        done=index - 1,
+        total=total,
+        percent=round(percent, 1),
+        bytes_done=bytes_done,
+        bytes_total=bytes_total,
+    )
+
+
+def copy_plain(
+    source,
+    target,
+    source_name,
+    index,
+    total,
+):
+    temp = target.with_name(
+        f".__usbimport-{target.name}.part"
+    )
+
+    size = source.stat().st_size
+    copied = 0
+    last_update = 0.0
+
+    try:
+        with (
+            source.open("rb") as src,
+            temp.open("wb") as dst
+        ):
+            while True:
+                chunk = src.read(
+                    4 * 1024 * 1024
+                )
+
+                if not chunk:
+                    break
+
+                dst.write(chunk)
+                copied += len(chunk)
+
+                now = time.monotonic()
+
+                if (
+                    now - last_update >= 0.25
+                    or copied >= size
+                ):
+                    write_import_progress(
+                        source_name,
+                        index,
+                        total,
+                        copied,
+                        size,
+                    )
+                    last_update = now
+
+            dst.flush()
+            os.fsync(
+                dst.fileno()
+            )
+
+        temp.replace(
+            target
+        )
+
+    finally:
+        temp.unlink(
+            missing_ok=True
+        )
+
+
+def copy_xz(
+    source,
+    target,
+    source_name,
+    index,
+    total,
+):
+    temp = target.with_name(
+        f".__usbimport-{target.name}.part"
+    )
+
+    compressed_size = source.stat().st_size
+    last_update = 0.0
+
+    try:
+        with (
+            source.open("rb") as raw,
+            lzma.LZMAFile(raw, "rb") as src,
+            temp.open("wb") as dst
+        ):
+            while True:
+                chunk = src.read(
+                    4 * 1024 * 1024
+                )
+
+                if not chunk:
+                    break
+
+                dst.write(chunk)
+
+                compressed_done = min(
+                    raw.tell(),
+                    compressed_size,
+                )
+
+                now = time.monotonic()
+
+                if (
+                    now - last_update >= 0.25
+                    or compressed_done >= compressed_size
+                ):
+                    write_import_progress(
+                        source_name,
+                        index,
+                        total,
+                        compressed_done,
+                        compressed_size,
+                    )
+                    last_update = now
+
+            dst.flush()
+            os.fsync(
+                dst.fileno()
+            )
+
+        temp.replace(
+            target
+        )
+
+    finally:
+        temp.unlink(
+            missing_ok=True
+        )
+
+
+def command_prepare():
+    remount("rw")
+
+    try:
+        ensure_image()
+
+        write_state(
+            "ready",
+            "Disque USB prêt",
+            **image_stats(),
+        )
+
+    finally:
+        remount("ro")
+
+
+def command_start():
+    info = drive_info()
+
+    if info["transfer_active"]:
+        write_state(
+            "connected",
+            "PIKVM-XFER déjà connecté",
+            **image_stats(),
+        )
+        return
+
+    write_state(
+        "starting",
+        "Activation du transfert USB...",
+    )
+
+    udc = None
+
+    try:
+        # Windows ne doit pas voir
+        # les changements intermédiaires.
+        udc = usb_disconnect()
+
+        remount("rw")
+
+        ensure_image()
+
+        drive_transfer()
+
+        time.sleep(1)
+
+        usb_reconnect(udc)
+        udc = None
+
+        write_state(
+            "connected",
+            "PIKVM-XFER connecté au PC",
+            **image_stats(),
+        )
+
+    except Exception as error:
+        try:
+            drive_normal()
+        except Exception:
+            pass
+
+        try:
+            remount("ro")
+        except Exception:
+            pass
+
+        if udc:
+            try:
+                usb_reconnect(udc)
+            except Exception:
+                pass
+
+        write_state(
+            "error",
+            str(error),
+        )
+
+        raise
+
+
+def command_stop():
+    write_state(
+        "stopping",
+        "Arrêt du transfert USB...",
+    )
+
+    udc = None
+
+    try:
+        udc = usb_disconnect()
+
+        run(
+            ["sync"],
+            check=False,
+        )
+
+        drive_normal()
+
+        remount("ro")
+
+        usb_reconnect(udc)
+        udc = None
+
+        write_state(
+            "ready",
+            "Transfert USB arrêté",
+            **image_stats(),
+        )
+
+    except Exception as error:
+        if udc:
+            try:
+                usb_reconnect(udc)
+            except Exception:
+                pass
+
+        write_state(
+            "error",
+            str(error),
+        )
+
+        raise
+
+
+def command_reset():
+    info = drive_info()
+
+    if info["transfer_active"]:
+        raise RuntimeError(
+            "Impossible de réinitialiser "
+            "pendant un transfert USB"
+        )
+
+    remount("rw")
+
+    try:
+        write_state(
+            "preparing",
+            "Réinitialisation du disque USB...",
+        )
+
+        create_image()
+
+        write_state(
+            "ready",
+            "Disque USB réinitialisé",
+            **image_stats(),
+        )
+
+    finally:
+        remount("ro")
+
+
+def command_import():
+    udc = None
+    loop = None
+    mounted = False
+
+    try:
+        # ----------------------------------------------------
+        # 1. Sort du mode transfert.
+        # ----------------------------------------------------
+
+        write_state(
+            "stopping",
+            "Déconnexion de PIKVM-XFER...",
+        )
+
+        udc = usb_disconnect()
+
+        run(
+            ["sync"],
+            check=False,
+        )
+
+        drive_normal()
+
+        remount("ro")
+
+        # Clavier / souris reviennent immédiatement.
+        usb_reconnect(udc)
+        udc = None
+
+
+        # ----------------------------------------------------
+        # 2. Import local des fichiers.
+        # ----------------------------------------------------
+
+        write_state(
+            "importing",
+            "Lecture du disque USB...",
+        )
+
+        remount("rw")
+
+        MOUNT.mkdir(
+            parents=True,
+            exist_ok=True,
+        )
+
+        run(
+            [
+                "umount",
+                str(MOUNT),
+            ],
+            check=False,
+        )
+
+        loop = attach_image(
+            read_only=True
+        )
+
+        # Avec -P mbr, le filesystem exFAT
+        # se monte directement sur le disque entier.
+        run([
+            "mount",
+            "-t", "exfat",
+            "-o", "ro,nosuid,nodev,noexec",
+            loop,
+            str(MOUNT),
+        ])
+
+        mounted = True
+
+        files = [
+            path
+            for path in MOUNT.iterdir()
+            if path.is_file()
+        ]
+
+        supported = [
+            path
+            for path in files
+            if path.name.lower().endswith(
+                SUPPORTED
+            )
+        ]
+
+        ignored = [
+            path.name
+            for path in files
+            if path not in supported
+        ]
+
+        if not supported:
+            raise RuntimeError(
+                "Aucune image ISO/IMG/RAW trouvée"
+            )
+
+        imported = []
+        total = len(supported)
+
+        for index, source in enumerate(
+            supported,
+            start=1,
+        ):
+            source_name = source.name
+
+            if source_name.lower().endswith(
+                ".xz"
+            ):
+                output_name = source_name[:-3]
+            else:
+                output_name = source_name
+
+            target = unique_target(
+                output_name
+            )
+
+            write_state(
+                "importing",
+                f"Import de {source_name}",
+                current=source_name,
+                done=index - 1,
+                total=total,
+            )
+
+            if source_name.lower().endswith(
+                ".xz"
+            ):
+                copy_xz(
+                    source,
+                    target,
+                    source_name,
+                    index,
+                    total,
+                )
+            else:
+                copy_plain(
+                    source,
+                    target,
+                    source_name,
+                    index,
+                    total,
+                )
+
+            imported.append(
+                target.name
+            )
+
+        run(["sync"])
+
+        run([
+            "umount",
+            str(MOUNT),
+        ])
+
+        mounted = False
+
+        detach_image(loop)
+        loop = None
+
+
+        # ----------------------------------------------------
+        # 3. Recrée un disque USB vide.
+        # ----------------------------------------------------
+
+        write_state(
+            "preparing",
+            "Nettoyage du disque de transfert...",
+        )
+
+        create_image()
+
+        write_state(
+            "done",
+            f"{len(imported)} image(s) importée(s)",
+            imported=imported,
+            ignored=ignored,
+            done=len(imported),
+            total=len(imported),
+            percent=100.0,
+            **image_stats(),
+        )
+
+    except Exception as error:
+        write_state(
+            "error",
+            str(error),
+        )
+
+        raise
+
+    finally:
+        if mounted:
+            run(
+                [
+                    "umount",
+                    str(MOUNT),
+                ],
+                check=False,
+            )
+
+        detach_image(loop)
+
+        try:
+            remount("ro")
+        except Exception:
+            pass
+
+        if udc:
+            try:
+                usb_reconnect(udc)
+            except Exception:
+                pass
+
+
+def command_status():
+    data = read_state()
+
+    info = drive_info()
+
+    # L'état physique du lecteur prévaut
+    # sur un ancien fichier d'état.
+    if info["transfer_active"]:
+        if data.get("state") not in (
+            "starting",
+            "importing",
+            "stopping",
+        ):
+            data["state"] = "connected"
+            data["message"] = (
+                "PIKVM-XFER connecté au PC"
+            )
+
+    data.update(
+        image_stats()
+    )
+
+    data["drive"] = info
+
+    print(
+        json.dumps(
+            data,
+            ensure_ascii=False,
+        )
+    )
+
+
+def main():
+    if len(sys.argv) != 2:
+        print(
+            "Usage: pikvm-usb-transfer "
+            "status|prepare|start|stop|import|reset",
+            file=sys.stderr,
+        )
+        raise SystemExit(2)
+
+    command = sys.argv[1]
+
+    # La lecture de l'état doit rester disponible
+    # même pendant un import long.
+    if command == "status":
+        command_status()
+        return
+
+    LOCK.parent.mkdir(
+        parents=True,
+        exist_ok=True,
+    )
+
+    with LOCK.open("w") as lock:
+        try:
+            fcntl.flock(
+                lock,
+                fcntl.LOCK_EX
+                | fcntl.LOCK_NB,
+            )
+        except BlockingIOError:
+            raise SystemExit(
+                "Une opération USB est déjà en cours"
+            )
+
+        commands = {
+            "status": command_status,
+            "prepare": command_prepare,
+            "start": command_start,
+            "stop": command_stop,
+            "import": command_import,
+            "reset": command_reset,
+        }
+
+        action = commands.get(
+            command
+        )
+
+        if action is None:
+            raise SystemExit(
+                f"Commande inconnue : {command}"
+            )
+
+        action()
+
+
+if __name__ == "__main__":
+    main()

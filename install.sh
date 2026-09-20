@@ -109,6 +109,7 @@ PAQUETS=(
     qrencode
     i2c-tools
     v4l-utils
+    exfatprogs
     patch
 )
 
@@ -164,6 +165,7 @@ sauvegarder() {
 sauvegarder /usr/share/kvmd/web/index.html
 sauvegarder /usr/share/kvmd/web/kvm/index.html
 sauvegarder /usr/share/kvmd/web/share/js/power-control.js
+sauvegarder /usr/share/kvmd/web/share/js/usb-transfer.js
 
 echo "[OK] Sauvegardes : $BACKUP"
 
@@ -193,6 +195,10 @@ install -m 755 \
 install -m 755 \
     "$REPO/scripts/pikvm-auto-shutdown" \
     /usr/local/bin/pikvm-auto-shutdown
+
+install -m 755 \
+    "$REPO/scripts/pikvm-usb-transfer" \
+    /usr/local/bin/pikvm-usb-transfer
 
 echo "[OK] Scripts installés"
 
@@ -320,6 +326,10 @@ cp \
     "$REPO/web/share/js/power-control.js" \
     /usr/share/kvmd/web/share/js/power-control.js
 
+cp \
+    "$REPO/web/share/js/usb-transfer.js" \
+    /usr/share/kvmd/web/share/js/usb-transfer.js
+
 mkdir -p /usr/share/kvmd/extras/wifi-wizard
 
 cp -a \
@@ -364,6 +374,45 @@ for page in pages:
 
     print(f"[OK] power-control.js ajouté : {page}")
 PY
+
+python3 - <<'PYUSB'
+from pathlib import Path
+
+page = Path("/usr/share/kvmd/web/kvm/index.html")
+
+script = (
+    '<script src="/share/js/'
+    'usb-transfer.js"></script>'
+)
+
+if not page.exists():
+    raise SystemExit(
+        "ERREUR : page KVM introuvable"
+    )
+
+text = page.read_text()
+
+if script not in text:
+
+    if "</body>" not in text:
+        raise SystemExit(
+            "ERREUR : balise </body> introuvable"
+        )
+
+    text = text.replace(
+        "</body>",
+        script + "\n</body>",
+        1,
+    )
+
+    page.write_text(text)
+
+    print("[OK] usb-transfer.js ajouté")
+
+else:
+
+    print("[OK] usb-transfer.js déjà présent")
+PYUSB
 
 echo "[OK] Interface web installée"
 
@@ -447,6 +496,9 @@ python3 -m py_compile \
 
 python3 -m py_compile \
     /usr/local/bin/wifi-wizard-api
+
+python3 -m py_compile \
+    /usr/local/bin/pikvm-usb-transfer
 
 python3 -m py_compile \
     /usr/local/bin/pikvm-auto-shutdown

@@ -469,6 +469,116 @@ def restart_wifi_action():
 
 
 
+
+# ============================================================
+# TRANSFERT D'IMAGES PAR USB
+# ============================================================
+
+USB_TRANSFER_BIN = "/usr/local/bin/pikvm-usb-transfer"
+USB_TRANSFER_STATE = Path(
+    "/run/pikvm-usb-transfer-state.json"
+)
+USB_TRANSFER_LOG = Path(
+    "/run/pikvm-usb-transfer-import.log"
+)
+
+
+def usb_transfer_status():
+    result = subprocess.run(
+        [
+            USB_TRANSFER_BIN,
+            "status",
+        ],
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        timeout=10,
+    )
+
+    if result.returncode != 0:
+        raise RuntimeError(
+            result.stdout.strip()
+            or "Impossible de lire l'état USB"
+        )
+
+    lines = [
+        line
+        for line in result.stdout.splitlines()
+        if line.strip()
+    ]
+
+    if not lines:
+        raise RuntimeError(
+            "Réponse USB vide"
+        )
+
+    return json.loads(lines[-1])
+
+
+def usb_transfer_run(action):
+    result = subprocess.run(
+        [
+            USB_TRANSFER_BIN,
+            action,
+        ],
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        timeout=120,
+    )
+
+    if result.returncode != 0:
+        raise RuntimeError(
+            result.stdout.strip()
+            or f"Erreur USB : {action}"
+        )
+
+    return usb_transfer_status()
+
+
+def usb_transfer_import_start():
+    status = usb_transfer_status()
+
+    if status.get("state") in (
+        "starting",
+        "importing",
+        "preparing",
+    ):
+        raise RuntimeError(
+            "Une opération USB est déjà en cours."
+        )
+
+    USB_TRANSFER_STATE.write_text(
+        json.dumps({
+            "state": "starting",
+            "message": "Démarrage de l'import USB..."
+        })
+    )
+
+    log = USB_TRANSFER_LOG.open(
+        "ab",
+        buffering=0,
+    )
+
+    try:
+        process = subprocess.Popen(
+            [
+                USB_TRANSFER_BIN,
+                "import",
+            ],
+            stdout=log,
+            stderr=subprocess.STDOUT,
+            start_new_session=True,
+        )
+    finally:
+        log.close()
+
+    return {
+        "message": "Import USB lancé",
+        "pid": process.pid,
+    }
+
+
 def get_battery_status():
     def read_word(reg):
         hi = int(subprocess.check_output(
@@ -538,7 +648,13 @@ class Handler(BaseHTTPRequestHandler):
         path = urlparse(self.path).path
 
         try:
-            if path == "/api/battery":
+            if path == "/api/usb-transfer/status":
+                self.send_json(200, {
+                    "ok": True,
+                    "transfer": usb_transfer_status()
+                })
+
+            elif path == "/api/battery":
                 try:
                     self.send_json(200, {
                         "ok": True,
@@ -567,7 +683,37 @@ class Handler(BaseHTTPRequestHandler):
         try:
             data = self.read_body()
 
-            if path == "/api/add":
+            if path == "/api/usb-transfer/start":
+                self.send_json(200, {
+                    "ok": True,
+                    "transfer": usb_transfer_run("start")
+                })
+
+            elif path == "/api/usb-transfer/stop":
+                self.send_json(200, {
+                    "ok": True,
+                    "transfer": usb_transfer_run("stop")
+                })
+
+            elif path == "/api/usb-transfer/prepare":
+                self.send_json(200, {
+                    "ok": True,
+                    "transfer": usb_transfer_run("prepare")
+                })
+
+            elif path == "/api/usb-transfer/import":
+                self.send_json(200, {
+                    "ok": True,
+                    **usb_transfer_import_start()
+                })
+
+            elif path == "/api/usb-transfer/reset":
+                self.send_json(200, {
+                    "ok": True,
+                    "transfer": usb_transfer_run("reset")
+                })
+
+            elif path == "/api/add":
                 self.send_json(200, {"ok": True, **add_wifi(data)})
             elif path == "/api/update":
                 self.send_json(200, {"ok": True, **update_wifi(data)})

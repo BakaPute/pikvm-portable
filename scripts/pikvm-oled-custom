@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 
 import glob
+import json
 import os
 import re
+import shutil
 import subprocess
 import time
 
@@ -237,6 +239,166 @@ def cpu_temp():
 
 
 # ------------------------------------------------------------
+# Utilisation CPU
+# ------------------------------------------------------------
+
+_cpu_previous = None
+
+
+def cpu_usage():
+    global _cpu_previous
+
+    try:
+        with open("/proc/stat") as f:
+            values = [
+                int(value)
+                for value in f.readline().split()[1:9]
+            ]
+
+        (
+            user,
+            nice,
+            system,
+            idle,
+            iowait,
+            irq,
+            softirq,
+            steal,
+        ) = values
+
+        idle_all = idle + iowait
+
+        non_idle = (
+            user
+            + nice
+            + system
+            + irq
+            + softirq
+            + steal
+        )
+
+        total = idle_all + non_idle
+
+        current = (
+            total,
+            idle_all,
+        )
+
+        if _cpu_previous is None:
+            _cpu_previous = current
+            return None
+
+        total_delta = (
+            current[0]
+            - _cpu_previous[0]
+        )
+
+        idle_delta = (
+            current[1]
+            - _cpu_previous[1]
+        )
+
+        _cpu_previous = current
+
+        if total_delta <= 0:
+            return 0.0
+
+        usage = (
+            100.0
+            * (total_delta - idle_delta)
+            / total_delta
+        )
+
+        return max(
+            0.0,
+            min(100.0, usage)
+        )
+
+    except Exception:
+        return None
+
+
+# ------------------------------------------------------------
+# Transfert USB
+# ------------------------------------------------------------
+
+TRANSFER_STATE = (
+    "/run/pikvm-usb-transfer-state.json"
+)
+
+TRANSFER_IMAGE = (
+    "/var/lib/kvmd/msd/.USB-TRANSFER.img"
+)
+
+TRANSFER_LUN = (
+    "/sys/kernel/config/usb_gadget/kvmd/"
+    "functions/mass_storage.usb0/lun.0/file"
+)
+
+MSD_PATH = "/var/lib/kvmd/msd"
+
+
+def transfer_info():
+    data = {}
+
+    try:
+        with open(TRANSFER_STATE) as f:
+            data = json.load(f)
+    except Exception:
+        pass
+
+    image = ""
+
+    try:
+        with open(TRANSFER_LUN) as f:
+            image = f.read().strip()
+    except Exception:
+        pass
+
+    connected = (
+        os.path.normpath(image)
+        == os.path.normpath(TRANSFER_IMAGE)
+    ) if image else False
+
+    state = data.get(
+        "state",
+        "idle"
+    )
+
+    active_states = {
+        "starting",
+        "connected",
+        "stopping",
+        "importing",
+        "preparing",
+    }
+
+    active = (
+        connected
+        or state in active_states
+    )
+
+    data["connected"] = connected
+    data["active"] = active
+
+    return data
+
+
+def msd_free_space():
+    try:
+        free = shutil.disk_usage(
+            MSD_PATH
+        ).free
+
+        return (
+            free / (1024 ** 3)
+        )
+
+    except Exception:
+        return None
+
+
+# ------------------------------------------------------------
 # Uptime
 # ------------------------------------------------------------
 
@@ -402,6 +564,7 @@ def page_system(device, remaining):
     usb = usb_state()
     hdmi = hdmi_state()
     temp = cpu_temp()
+    usage = cpu_usage()
     up = uptime()
 
     if temp is None:
@@ -409,25 +572,157 @@ def page_system(device, remaining):
     else:
         temp_text = f"{temp:.0f}C"
 
+    if usage is None:
+        usage_text = "--%"
+    else:
+        usage_text = f"{usage:.0f}%"
+
     with canvas(device) as draw:
-        draw.text((0, 0), "System", fill="white")
-        draw.text((108, 0), f"{remaining}s", fill="white")
+        draw.text(
+            (0, 0),
+            "System",
+            fill="white"
+        )
 
         draw.text(
-            (0, 16),
+            (108, 0),
+            f"{remaining}s",
+            fill="white"
+        )
+
+        draw.text(
+            (0, 13),
             f"USB  {usb}",
             fill="white"
         )
 
         draw.text(
-            (0, 30),
+            (0, 26),
             f"HDMI {hdmi}",
             fill="white"
         )
 
         draw.text(
-            (0, 46),
-            f"CPU {temp_text}   UP {up}",
+            (0, 39),
+            f"CPU  {usage_text}  {temp_text}",
+            fill="white"
+        )
+
+        draw.text(
+            (0, 52),
+            f"UP   {up}",
+            fill="white"
+        )
+
+
+def page_usb_transfer(device, remaining):
+    info = transfer_info()
+
+    state = info.get(
+        "state",
+        "idle"
+    )
+
+    free = msd_free_space()
+
+    if free is None:
+        free_text = "Libre --.-G"
+    else:
+        free_text = (
+            f"Libre {free:.1f}G"
+        )
+
+    line1 = ""
+    line2 = ""
+
+    if info.get("connected"):
+        line1 = "Connecte au PC"
+        line2 = "Copie des fichiers"
+
+    elif state == "importing":
+        percent = info.get(
+            "percent"
+        )
+
+        done = info.get(
+            "done",
+            0
+        )
+
+        total = info.get(
+            "total",
+            0
+        )
+
+        if percent is None:
+            percent_text = "--%"
+        else:
+            percent_text = (
+                f"{percent:.0f}%"
+            )
+
+        line1 = (
+            f"Import {percent_text}"
+        )
+
+        if total:
+            line1 += (
+                f" {done}/{total}"
+            )
+
+        line2 = info.get(
+            "current",
+            ""
+        )
+
+    elif state == "starting":
+        line1 = "Activation..."
+        line2 = "Transfert USB"
+
+    elif state == "stopping":
+        line1 = "Deconnexion..."
+        line2 = "Transfert USB"
+
+    elif state == "preparing":
+        line1 = "Preparation..."
+        line2 = "Disque transfert"
+
+    else:
+        line1 = "Transfert USB"
+        line2 = state[:20]
+
+
+    if len(line2) > 20:
+        line2 = line2[:20]
+
+    with canvas(device) as draw:
+        draw.text(
+            (0, 0),
+            "Transfert USB",
+            fill="white"
+        )
+
+        draw.text(
+            (108, 0),
+            f"{remaining}s",
+            fill="white"
+        )
+
+        draw.text(
+            (0, 17),
+            line1,
+            fill="white"
+        )
+
+        draw.text(
+            (0, 32),
+            line2,
+            fill="white"
+        )
+
+        draw.text(
+            (0, 49),
+            free_text,
             fill="white"
         )
 
@@ -447,7 +742,7 @@ device = ssd1306(
     height=64
 )
 
-pages = [
+base_pages = [
     page_main,
     page_battery,
     page_system
@@ -455,26 +750,97 @@ pages = [
 
 page = 0
 last_page = time.monotonic()
+last_transfer_phase = None
 
 while True:
     try:
         now = time.monotonic()
 
-        if now - last_page >= PAGE_DURATION:
-            page = (page + 1) % len(pages)
-            last_page = now
+        transfer = transfer_info()
 
-        elapsed = now - last_page
-        remaining = max(
-            1,
-            int(PAGE_DURATION - elapsed + 0.999)
+        transfer_active = bool(
+            transfer.get("active")
         )
 
-        pages[page](device, remaining)
+        transfer_phase = (
+            transfer.get("state")
+            if transfer_active
+            else None
+        )
+
+        pages = list(
+            base_pages
+        )
+
+        if transfer_active:
+            pages.append(
+                page_usb_transfer
+            )
+
+        # Affiche immédiatement la page USB
+        # lorsqu'un transfert ou un import commence.
+        if (
+            transfer_active
+            and transfer_phase
+            != last_transfer_phase
+        ):
+            page = len(base_pages)
+            last_page = now
+
+        # Dès que le transfert/import est terminé,
+        # la quatrième page disparaît.
+        elif (
+            not transfer_active
+            and page >= len(base_pages)
+        ):
+            page = 0
+            last_page = now
+
+        if now - last_page >= PAGE_DURATION:
+            page = (
+                page + 1
+            ) % len(pages)
+
+            last_page = now
+
+        if page >= len(pages):
+            page = 0
+            last_page = now
+
+        elapsed = (
+            now - last_page
+        )
+
+        remaining = max(
+            1,
+            int(
+                PAGE_DURATION
+                - elapsed
+                + 0.999
+            )
+        )
+
+        pages[page](
+            device,
+            remaining
+        )
+
+        last_transfer_phase = (
+            transfer_phase
+        )
 
     except Exception as e:
         with canvas(device) as draw:
-            draw.text((0, 0), "OLED ERROR", fill="white")
-            draw.text((0, 18), str(e)[:20], fill="white")
+            draw.text(
+                (0, 0),
+                "OLED ERROR",
+                fill="white"
+            )
+
+            draw.text(
+                (0, 18),
+                str(e)[:20],
+                fill="white"
+            )
 
     time.sleep(REFRESH)
