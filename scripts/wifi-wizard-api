@@ -579,6 +579,258 @@ def usb_transfer_import_start():
     }
 
 
+
+# ============================================================
+# IMAGE MANAGER
+# ============================================================
+
+IMAGE_MANAGER_STORAGE = Path(
+    "/var/lib/kvmd/msd"
+)
+
+IMAGE_MANAGER_LUN = Path(
+    "/sys/kernel/config/usb_gadget/kvmd/"
+    "functions/mass_storage.usb0/lun.0/file"
+)
+
+IMAGE_MANAGER_EXTENSIONS = {
+    ".iso",
+    ".img",
+    ".raw",
+}
+
+
+def image_manager_check_name(name):
+
+    name = str(name).strip()
+
+    if not name:
+        raise ValueError(
+            "Nom d'image vide."
+        )
+
+    if len(name) > 240:
+        raise ValueError(
+            "Nom d'image trop long."
+        )
+
+    if (
+        "/" in name
+        or "\\" in name
+        or "\x00" in name
+        or name.startswith(".")
+    ):
+        raise ValueError(
+            "Nom d'image invalide."
+        )
+
+    suffix = Path(name).suffix.lower()
+
+    if suffix not in IMAGE_MANAGER_EXTENSIONS:
+        raise ValueError(
+            "Extension autorisée : ISO, IMG ou RAW."
+        )
+
+    return name
+
+
+def image_manager_rename(data):
+
+    old_name = image_manager_check_name(
+        data.get(
+            "old_name",
+            ""
+        )
+    )
+
+    new_name = image_manager_check_name(
+        data.get(
+            "new_name",
+            ""
+        )
+    )
+
+
+    # --------------------------------------------------------
+    # On conserve le type d'image.
+    # --------------------------------------------------------
+
+    if (
+        Path(old_name).suffix.lower()
+        != Path(new_name).suffix.lower()
+    ):
+        raise ValueError(
+            "L'extension de l'image ne doit pas changer."
+        )
+
+
+    # --------------------------------------------------------
+    # Aucun renommage pendant un transfert USB.
+    # --------------------------------------------------------
+
+    try:
+
+        transfer = usb_transfer_status()
+
+        state = transfer.get(
+            "state",
+            "idle"
+        )
+
+        drive = transfer.get(
+            "drive",
+            {}
+        )
+
+        if (
+            drive.get(
+                "transfer_active",
+                False
+            )
+            or state in {
+                "starting",
+                "connected",
+                "stopping",
+                "importing",
+                "preparing",
+            }
+        ):
+            raise RuntimeError(
+                "Transfert USB en cours."
+            )
+
+    except RuntimeError:
+        raise
+
+    except Exception:
+        pass
+
+
+    source = (
+        IMAGE_MANAGER_STORAGE
+        / old_name
+    )
+
+    target = (
+        IMAGE_MANAGER_STORAGE
+        / new_name
+    )
+
+
+    # --------------------------------------------------------
+    # Sécurité chemin.
+    # --------------------------------------------------------
+
+    root = (
+        IMAGE_MANAGER_STORAGE
+        .resolve()
+    )
+
+    if (
+        source.resolve().parent != root
+        or target.resolve().parent != root
+    ):
+        raise ValueError(
+            "Chemin d'image invalide."
+        )
+
+
+    if not source.is_file():
+
+        raise FileNotFoundError(
+            f"Image introuvable : {old_name}"
+        )
+
+
+    if target.exists():
+
+        raise FileExistsError(
+            f"Une image nommée {new_name} existe déjà."
+        )
+
+
+    # --------------------------------------------------------
+    # On refuse tout renommage quand le Drive est connecté.
+    # --------------------------------------------------------
+
+    try:
+
+        connected = (
+            IMAGE_MANAGER_LUN
+            .read_text()
+            .strip()
+        )
+
+    except Exception:
+
+        connected = ""
+
+
+    if connected:
+
+        raise RuntimeError(
+            "Déconnecte d'abord le Drive du serveur."
+        )
+
+
+    # --------------------------------------------------------
+    # Renommage.
+    # --------------------------------------------------------
+
+    result = run([
+        "kvmd-helper-otgmsd-remount",
+        "rw",
+    ])
+
+    if result.returncode != 0:
+
+        raise RuntimeError(
+            result.stdout
+            or "Impossible de passer le stockage en écriture."
+        )
+
+
+    try:
+
+        source.rename(
+            target
+        )
+
+        os.sync()
+
+    finally:
+
+        run([
+            "kvmd-helper-otgmsd-remount",
+            "ro",
+        ])
+
+
+    return {
+        "message":
+            f"{old_name} renommé en {new_name}",
+        "old_name": old_name,
+        "new_name": new_name,
+    }
+
+
+# ========== IMAGE MANAGER : DOSSIERS ==========
+def image_folders_run(action, payload):
+    result = subprocess.run(
+        ["/usr/local/bin/pikvm-image-folders", action],
+        input=json.dumps(payload),
+        capture_output=True,
+        text=True,
+        timeout=50,
+    )
+    if result.returncode != 0:
+        raise RuntimeError(
+            result.stderr.strip() or result.stdout.strip()
+            or "Erreur du gestionnaire de dossiers"
+        )
+    return json.loads(result.stdout)
+
+
 def get_battery_status():
     def read_word(reg):
         hi = int(subprocess.check_output(
@@ -648,7 +900,13 @@ class Handler(BaseHTTPRequestHandler):
         path = urlparse(self.path).path
 
         try:
-            if path == "/api/usb-transfer/status":
+            if path == "/api/image-manager/folders":
+                self.send_json(200, {
+                    "ok": True,
+                    "result": image_folders_run("list", {})
+                })
+
+            elif path == "/api/usb-transfer/status":
                 self.send_json(200, {
                     "ok": True,
                     "transfer": usb_transfer_status()
@@ -683,7 +941,17 @@ class Handler(BaseHTTPRequestHandler):
         try:
             data = self.read_body()
 
-            if path == "/api/usb-transfer/start":
+            if path == "/api/image-manager/folders/action":
+                action = data.get("action", "")
+                allowed = {"mkdir", "rmdir", "rename_dir", "move_file", "rename_file"}
+                if action not in allowed:
+                    raise ValueError("Action de dossier non autorisée")
+                self.send_json(200, {
+                    "ok": True,
+                    "result": image_folders_run(action, data)
+                })
+
+            elif path == "/api/usb-transfer/start":
                 self.send_json(200, {
                     "ok": True,
                     "transfer": usb_transfer_run("start")
@@ -711,6 +979,12 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_json(200, {
                     "ok": True,
                     "transfer": usb_transfer_run("reset")
+                })
+
+            elif path == "/api/image-manager/rename":
+                self.send_json(200, {
+                    "ok": True,
+                    **image_manager_rename(data)
                 })
 
             elif path == "/api/add":

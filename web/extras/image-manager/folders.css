@@ -1,0 +1,11 @@
+#im-folders {padding:12px 12px 0;background:#2f343c}
+.im-crumbs,.im-toolbar,.im-folder-actions {display:flex;flex-wrap:wrap;align-items:center;gap:7px;margin-bottom:10px}
+.im-crumbs button {background:#252a31;max-width:240px;overflow:hidden;text-overflow:ellipsis}
+.im-folder-grid {display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:9px;margin-bottom:8px}
+.im-folder-card {border:1px solid #171b20;background:#252a31;padding:10px;min-width:0}
+.im-folder-title {font-weight:bold;color:#e7e7e7;word-break:break-word;margin-bottom:12px}
+.im-folder-card .im-folder-actions {margin-bottom:0}
+.im-overlay {position:fixed;inset:0;background:#0009;z-index:30000;display:grid;place-items:center;padding:18px}
+.im-modal {background:#30343b;border:1px solid #5f9fcf;padding:20px;width:min(480px,100%);box-shadow:0 10px 32px #0009}
+.im-modal h3 {margin:0 0 15px}
+.im-modal select {width:100%;padding:9px;color:#ddd;background:#171b20;border:1px solid #59616b;margin-bottom:18px}

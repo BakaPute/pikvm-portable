@@ -141,3 +141,21 @@ Si `/dev/i2c-1` n'existe pas, l'installateur ajoute automatiquement :
 dans `/boot/config.txt`.
 
 Un redémarrage est alors nécessaire pour l'OLED et le MAX17048.
+
+## Image Manager et dossiers
+
+Le PiKVM dispose d'un gestionnaire d'images accessible
+depuis sa page d'accueil.
+
+- Importation ISO, IMG et RAW depuis le navigateur.
+- Progression et annulation des uploads.
+- Transfert USB via PIKVM-XFER.
+- Création et navigation dans les dossiers.
+- Renommage, déplacement et suppression sécurisés.
+- Espace disque utilisé et disponible.
+- Sélection des images dans Drive.
+- Navigateur de dossiers indépendant dans Drive.
+
+Le disque technique .USB-TRANSFER.img reste masqué.
+Les transferts USB et les dossiers sont installés
+automatiquement par install.sh.

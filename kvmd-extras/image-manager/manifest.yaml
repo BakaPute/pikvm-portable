@@ -1,0 +1,6 @@
+name: Image Manager
+description: Gestion des images ISO, IMG et RAW
+icon: extras/image-manager/image-manager.svg
+path: extras/image-manager/
+daemon: wifi-wizard-api
+place: 30

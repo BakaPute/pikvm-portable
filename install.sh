@@ -164,8 +164,10 @@ sauvegarder() {
 
 sauvegarder /usr/share/kvmd/web/index.html
 sauvegarder /usr/share/kvmd/web/kvm/index.html
+sauvegarder /usr/share/kvmd/web/extras/image-manager/index.html
 sauvegarder /usr/share/kvmd/web/share/js/power-control.js
 sauvegarder /usr/share/kvmd/web/share/js/usb-transfer.js
+sauvegarder /usr/share/kvmd/web/share/js/drive-folders.js
 
 echo "[OK] Sauvegardes : $BACKUP"
 
@@ -199,6 +201,10 @@ install -m 755 \
 install -m 755 \
     "$REPO/scripts/pikvm-usb-transfer" \
     /usr/local/bin/pikvm-usb-transfer
+
+install -m 755 \
+    "$REPO/scripts/pikvm-image-folders" \
+    /usr/local/bin/pikvm-image-folders
 
 echo "[OK] Scripts installés"
 
@@ -311,12 +317,17 @@ echo
 echo "[6/8] Installation de l'interface web..."
 
 mkdir -p /usr/share/kvmd/web/extras/wifi-wizard
+mkdir -p /usr/share/kvmd/web/extras/image-manager
 mkdir -p /usr/share/kvmd/web/power-terminal
 mkdir -p /usr/share/kvmd/web/share/js
 
 cp -a \
     "$REPO/web/extras/wifi-wizard/." \
     /usr/share/kvmd/web/extras/wifi-wizard/
+
+cp -a \
+    "$REPO/web/extras/image-manager/." \
+    /usr/share/kvmd/web/extras/image-manager/
 
 cp -a \
     "$REPO/web/power-terminal/." \
@@ -330,11 +341,20 @@ cp \
     "$REPO/web/share/js/usb-transfer.js" \
     /usr/share/kvmd/web/share/js/usb-transfer.js
 
+cp \
+    "$REPO/web/share/js/drive-folders.js" \
+    /usr/share/kvmd/web/share/js/drive-folders.js
+
 mkdir -p /usr/share/kvmd/extras/wifi-wizard
+mkdir -p /usr/share/kvmd/extras/image-manager
 
 cp -a \
     "$REPO/kvmd-extras/wifi-wizard/." \
     /usr/share/kvmd/extras/wifi-wizard/
+
+cp -a \
+    "$REPO/kvmd-extras/image-manager/." \
+    /usr/share/kvmd/extras/image-manager/
 
 echo "[OK] Extension nginx Wi-Fi Wizard installée"
 
@@ -413,6 +433,18 @@ else:
 
     print("[OK] usb-transfer.js déjà présent")
 PYUSB
+
+python3 - <<'PYDRIVE'
+from pathlib import Path
+page = Path('/usr/share/kvmd/web/kvm/index.html')
+tag = '<script src="/share/js/drive-folders.js"></script>'
+text = page.read_text()
+if tag not in text:
+    if '</body>' not in text:
+        raise SystemExit('ERREUR : balise </body> introuvable (Drive dossiers)')
+    page.write_text(text.replace('</body>', tag + '\n</body>', 1))
+print('[OK] Navigateur de dossiers Drive installé')
+PYDRIVE
 
 echo "[OK] Interface web installée"
 
@@ -499,6 +531,9 @@ python3 -m py_compile \
 
 python3 -m py_compile \
     /usr/local/bin/pikvm-usb-transfer
+
+python3 -m py_compile \
+    /usr/local/bin/pikvm-image-folders
 
 python3 -m py_compile \
     /usr/local/bin/pikvm-auto-shutdown

@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="fr">
+
+<head>
+    <meta charset="utf-8">
+
+    <title>PiKVM Image Manager</title>
+
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1"
+    >
+
+    <link
+        rel="stylesheet"
+        href="style.css"
+    >
+    <link rel="stylesheet" href="folders.css">
+</head>
+
+<body>
+
+<div class="top">
+
+    <div class="top-left">
+
+        <a
+            class="back"
+            href="/"
+        >
+            ←
+        </a>
+
+        <a
+            class="brand"
+            href="/"
+        >
+            <strong>PiKVM</strong>
+            <span>Image Manager</span>
+        </a>
+
+    </div>
+
+
+    <nav>
+
+        <a href="/kvm/">
+            KVM
+        </a>
+
+        <a href="/power-terminal/">
+            Terminal
+        </a>
+
+        <a href="/extras/wifi-wizard/">
+            Wi-Fi
+        </a>
+
+        <a
+            class="active"
+            href="/extras/image-manager/"
+        >
+            Images
+        </a>
+
+        <button
+            onclick="logoutPikvm()"
+        >
+            Logout
+        </button>
+
+    </nav>
+
+</div>
+
+
+<main>
+
+    <section class="panel">
+
+        <div class="panel-title">
+
+            <span>Stockage PiKVM</span>
+
+            <button
+                class="button small"
+                id="refreshButton"
+            >
+                ↻ Actualiser
+            </button>
+
+        </div>
+
+        <div class="panel-body">
+
+            <div class="storage-line">
+
+                <strong id="storageText">
+                    Chargement...
+                </strong>
+
+                <span id="storageFree">
+                    -
+                </span>
+
+            </div>
+
+            <div class="storage-bar">
+
+                <div
+                    id="storageFill"
+                    class="storage-fill"
+                ></div>
+
+            </div>
+
+        </div>
+
+    </section>
+
+
+    <section class="panel">
+
+        <div class="panel-title">
+            Actions
+        </div>
+
+        <div class="panel-body">
+
+            <div class="actions">
+
+                <button
+                    class="button primary"
+                    id="uploadButton"
+                >
+                    ↑ Importer une image
+                </button>
+
+                <input
+                    id="fileInput"
+                    type="file"
+                    accept=".iso,.img,.raw"
+                    multiple
+                    hidden
+                >
+
+
+                <button
+                    class="button"
+                    id="usbStart"
+                >
+                    Transfert USB
+                </button>
+
+
+                <button
+                    class="button"
+                    id="usbFinish"
+                    disabled
+                >
+                    Terminer transfert
+                </button>
+
+            </div>
+
+
+            <div
+                id="operationBox"
+                class="operation"
+                hidden
+            >
+
+                <div id="operationText">
+                    -
+                </div>
+
+                <div class="progress">
+
+                    <div
+                        id="operationFill"
+                        class="progress-fill"
+                    ></div>
+
+                </div>
+
+            </div>
+
+        </div>
+
+    </section>
+
+
+    <section class="panel">
+
+        <div class="panel-title">
+
+            <span>
+                Images disponibles
+            </span>
+
+            <span
+                id="imageCount"
+                class="badge"
+            >
+                0
+            </span>
+
+        </div>
+
+        <div
+            id="imageList"
+            class="image-list"
+        >
+
+            <div class="empty">
+                Chargement...
+            </div>
+
+        </div>
+
+    </section>
+
+</main>
+
+
+<div
+    id="toast"
+    class="toast"
+></div>
+
+
+<script src="app.js"></script>
+<script src="folders.js"></script>
+
+<script src="/share/js/power-control.js"></script>
+
+</body>
+</html>
