@@ -19,3 +19,4 @@ pikvm-hotspot.env
 __pycache__/
 *.pyc
 *.pyo
+*.before-cancel
