@@ -72,3 +72,15 @@ Résultat attendu :
 ## 11. Lancer le contrôle complet
 
     ./check-install.sh
+
+## 12. Restaurer PIKVM-SHARE
+
+Restaurer la configuration existante du Drive 1 et la sauvegarde de
+`.PIKVM-SHARE.img`, puis utiliser l'installateur ciblé :
+
+    bash install.sh --share-only
+
+L'installateur SHARE ne configure ni les GPIO ni le Drive 0 et ne recrée aucune
+image manquante. Consulter [la procédure SHARE](pikvm-share.md) pour l'ordre des
+étapes, les sauvegardes, les précontrôles et le retour arrière. Ne pas utiliser
+PIKVM-XFER pour initialiser ou restaurer l'image SHARE.

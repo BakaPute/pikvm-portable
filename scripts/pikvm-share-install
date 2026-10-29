@@ -1,0 +1,400 @@
+#!/usr/bin/env python3
+"""Targeted installer/rollback/data backup. Run on PiKVM only after authorization."""
+import argparse
+import contextlib
+import datetime
+import hashlib
+import importlib.machinery
+import importlib.util
+import json
+import os
+from pathlib import Path
+import shutil
+import stat
+import subprocess
+import sys
+import uuid
+
+REPO = Path(__file__).resolve().parent.parent
+LIB = Path('/usr/local/lib/pikvm-share')
+BACKUPS = Path('/root/pikvm-share-backups')
+SERVICE = 'pikvm-share-api.service'
+WRAPPER_MARKER = b'Compatibility guard: defer native MSD remount-ro'
+
+
+def api_module():
+    source = REPO / 'scripts/pikvm-share-api'
+    if not source.exists():
+        source = Path('/usr/local/bin/pikvm-share-api')
+    loader = importlib.machinery.SourceFileLoader('share_api', str(source))
+    spec = importlib.util.spec_from_loader(loader.name, loader)
+    module = importlib.util.module_from_spec(spec)
+    loader.exec_module(module)
+    return module
+
+
+def run(args):
+    proc = subprocess.run(args, capture_output=True, text=True, timeout=180)
+    if proc.returncode:
+        raise RuntimeError('Commande échouée : ' + Path(args[0]).name + ' (sortie masquée)')
+    return proc.stdout.strip()
+
+
+def service_state():
+    def query(action):
+        return subprocess.run(['systemctl', action, '--quiet', SERVICE],
+                              stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode == 0
+    return {'active': query('is-active'), 'enabled': query('is-enabled')}
+
+
+def write_file(path, content, mode=0o644):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_name(path.name + '.share-new-' + uuid.uuid4().hex)
+    try:
+        with temporary.open('xb') as handle:
+            handle.write(content)
+            handle.flush()
+            os.fsync(handle.fileno())
+        temporary.chmod(mode)
+        temporary.replace(path)
+    finally:
+        temporary.unlink(missing_ok=True)
+
+
+def helper_path():
+    found = shutil.which('kvmd-helper-otgmsd-remount')
+    if not found:
+        raise RuntimeError('Helper MSD manquant.')
+    path = Path(found).absolute()
+    if path.is_symlink() or not path.is_file():
+        raise RuntimeError('Helper MSD non ordinaire ; aucun exécutable partagé ne sera remplacé.')
+    return path
+
+
+def file_map(helper):
+    mapping = {}
+    for name in ('pikvm-share-api', 'pikvm-share-install'):
+        mapping[Path('/usr/local/bin') / name] = (REPO / 'scripts' / name, 0o755)
+    mapping[helper] = (REPO / 'scripts/pikvm-share-remount', 0o755)
+    mapping[Path('/etc/systemd/system') / SERVICE] = (REPO / 'systemd' / SERVICE, 0o644)
+    for source_dir, dest_dir in (
+            ('web/extras/pikvm-share', '/usr/share/kvmd/web/extras/pikvm-share'),
+            ('kvmd-extras/pikvm-share', '/usr/share/kvmd/extras/pikvm-share')):
+        for source in (REPO / source_dir).iterdir():
+            if source.is_file():
+                mapping[Path(dest_dir) / source.name] = (source, 0o644)
+    return mapping
+
+
+def snapshot(paths):
+    folder = BACKUPS / (datetime.datetime.now().strftime('%Y%m%d-%H%M%S-') + uuid.uuid4().hex[:8])
+    folder.mkdir(parents=True, mode=0o700)
+    entries = []
+    for number, path in enumerate(paths):
+        if path.is_symlink():
+            raise RuntimeError('Cible symbolique interdite : ' + str(path))
+        entry = {'path': str(path), 'exists': path.exists()}
+        if path.exists():
+            info = path.stat()
+            if not stat.S_ISREG(info.st_mode):
+                raise RuntimeError('Cible non ordinaire.')
+            filename = str(number)
+            shutil.copy2(path, folder / filename)
+            (folder / filename).chmod(0o600)
+            entry.update(file=filename, mode=stat.S_IMODE(info.st_mode), uid=info.st_uid, gid=info.st_gid,
+                         sha256=digest(folder / filename))
+        entries.append(entry)
+    manifest = {'version': 1, 'files': entries, 'service': service_state()}
+    write_file(folder / 'manifest.json', json.dumps(manifest, indent=2).encode(), 0o600)
+    return folder
+
+
+def digest(path):
+    result = hashlib.sha256()
+    with path.open('rb') as handle:
+        for block in iter(lambda: handle.read(1024**2), b''):
+            result.update(block)
+    return result.hexdigest()
+
+
+def assert_idle(module, allow_missing=False):
+    backend = module.LinuxBackend()
+    if allow_missing and not backend.image.exists():
+        if backend.image.is_symlink():
+            raise RuntimeError('Image symbolique interdite.')
+        values = backend.luns()
+        if values[str(module.LUN / 'file')]:
+            raise RuntimeError('Drive 1 doit être éjecté.')
+    else:
+        backend.validate_image()
+        if backend.drive():
+            raise RuntimeError('Éjecte d’abord proprement SHARE dans le système du PC.')
+        backend.ensure_unmounted()
+    if backend.lease_read():
+        raise RuntimeError('Réservation SHARE active. Démonte/récupère depuis l’interface avant maintenance.')
+    return backend
+
+
+@contextlib.contextmanager
+def offline(module):
+    # A stopped service prevents operations while copying/restoring the backing file.
+    if service_state()['active']:
+        raise RuntimeError('Arrête pikvm-share-api.service avant cette opération hors ligne.')
+    module.RUNTIME.mkdir(mode=0o700, exist_ok=True)
+    with (module.RUNTIME / 'process.lock').open('a') as handle:
+        module.fcntl.flock(handle, module.fcntl.LOCK_EX | module.fcntl.LOCK_NB)
+        yield
+
+
+def check(module):
+    assert_idle(module)
+    for executable in ('systemctl', 'nginx', 'kvmd-nginx-mkconf', 'kvmd-otgmsd',
+                       'mount', 'umount', 'losetup', 'lsblk', 'blkid', 'fsck.exfat', 'sync'):
+        if not shutil.which(executable):
+            raise RuntimeError('Dépendance manquante : ' + executable)
+    # Native auth must reject an unauthenticated request. Never dump KVMD config.
+    if module.kvmd_check() not in (401, 403):
+        raise RuntimeError('PiKVM doit exiger une authentification active.')
+    help_text = run(['kvmd-otgmsd', '--help'])
+    if '--instance' not in help_text:
+        raise RuntimeError('kvmd-otgmsd ne propose pas la sélection explicite du lecteur.')
+    helper_path()
+    print('Précontrôles réussis : Drive 1 éjecté, image 4 Gio, aucun montage, auth active.')
+
+
+def nginx_config():
+    candidate = Path('/run/kvmd/pikvm-share-nginx.candidate')
+    try:
+        run(['kvmd-nginx-mkconf', '/etc/kvmd/nginx/nginx.conf.mako', str(candidate)])
+        text = candidate.read_text()
+        # Check that the native renderer actually included our extension.
+        if Path('/usr/share/kvmd/extras/pikvm-share/manifest.yaml').exists():
+            if '/extras/pikvm-share/api/' not in text or 'auth_request /auth_check;' not in text:
+                raise RuntimeError('Extension SHARE absente de la configuration nginx générée.')
+        run(['nginx', '-t', '-p', '/etc/kvmd/nginx', '-c', str(candidate),
+             '-g', 'pid /run/kvmd/nginx.pid; user kvmd-nginx; error_log stderr;'])
+        write_file(Path('/run/kvmd/nginx.conf'), candidate.read_bytes())
+        reload_nginx()
+    finally:
+        candidate.unlink(missing_ok=True)
+
+
+def reload_nginx():
+    run(['nginx', '-t', '-p', '/etc/kvmd/nginx', '-c', '/run/kvmd/nginx.conf',
+         '-g', 'pid /run/kvmd/nginx.pid; user kvmd-nginx; error_log stderr;'])
+    run(['systemctl', 'reload', 'kvmd-nginx.service'])
+
+
+def restore_files(folder):
+    manifest = json.loads((folder / 'manifest.json').read_text())
+    # Manifests are root-only trusted local backups, never uploaded from the web.
+    for entry in manifest['files']:
+        if entry['exists'] and digest(folder / entry['file']) != entry['sha256']:
+            raise RuntimeError('Sauvegarde applicative altérée ; restauration refusée.')
+    for entry in manifest['files']:
+        path = Path(entry['path'])
+        if entry['exists']:
+            write_file(path, (folder / entry['file']).read_bytes(), entry['mode'])
+            os.chown(path, entry['uid'], entry['gid'])
+        else:
+            path.unlink(missing_ok=True)
+    run(['systemctl', 'daemon-reload'])
+    if Path('/etc/systemd/system/' + SERVICE).exists():
+        run(['systemctl', 'enable' if manifest['service']['enabled'] else 'disable', SERVICE])
+    else:
+        # Unit removed by restoring the initial state: remove only its own enable link.
+        Path('/etc/systemd/system/multi-user.target.wants/' + SERVICE).unlink(missing_ok=True)
+    return manifest['service']['active']
+
+
+def install(module):
+    check(module)
+    helper = helper_path()
+    mapping = file_map(helper)
+    original = Path(module.ORIGINAL_HELPER)
+    # Resolve backup contents before changing anything; repeated installs preserve original.
+    guarded = WRAPPER_MARKER in helper.read_bytes()
+    if guarded and not original.is_file():
+        raise RuntimeError('Garde installée mais helper original absent.')
+    paths = list(mapping) + [original, Path('/run/kvmd/nginx.conf')]
+    folder = snapshot(paths)
+    print('Sauvegarde applicative : ' + str(folder), flush=True)
+    previous = service_state()
+    try:
+        run(['systemctl', 'stop', SERVICE]) if previous['active'] else None
+        with offline(module):
+            assert_idle(module)
+            if not guarded:
+                write_file(original, helper.read_bytes(), stat.S_IMODE(helper.stat().st_mode))
+            for destination, (source, mode) in mapping.items():
+                write_file(destination, source.read_bytes(), mode)
+            run(['systemctl', 'daemon-reload'])
+            # Validate generated nginx config before exposing/start of the API.
+            nginx_config()
+        run(['systemctl', 'enable', '--now', SERVICE])
+        if not service_state()['active']:
+            raise RuntimeError('Le service SHARE ne démarre pas.')
+    except Exception:
+        subprocess.run(['systemctl', 'stop', SERVICE], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        # If stop/cleanup failed, keep the guard and recovery tools installed.
+        assert_idle(module)
+        restart = restore_files(folder)
+        # Saved /run nginx config is reinstated before reload; no KVMD restart.
+        reload_nginx()
+        if restart:
+            run(['systemctl', 'start', SERVICE])
+        raise
+    print('PIKVM-SHARE installé : /extras/pikvm-share/ — aucun redémarrage KVMD/USB.')
+
+
+def copy_image(module, source, destination):
+    if destination.exists() or destination.is_symlink():
+        raise RuntimeError('La destination existe déjà ; aucun écrasement.')
+    if destination.resolve().is_relative_to(module.IMAGE.parent.resolve()):
+        raise RuntimeError('Choisis une destination hors du stockage MSD.')
+    if shutil.disk_usage(destination.parent).free < module.SIZE + 1024**2:
+        raise RuntimeError('Espace insuffisant pour une copie complète de 4 Gio.')
+    checksum = hashlib.sha256()
+    try:
+        with source.open('rb') as src, destination.open('xb') as dst:
+            os.chmod(destination, 0o600)
+            for block in iter(lambda: src.read(1024**2), b''):
+                checksum.update(block)
+                dst.write(block)
+            dst.flush()
+            os.fsync(dst.fileno())
+        if destination.stat().st_size != module.SIZE or digest(destination) != checksum.hexdigest():
+            raise RuntimeError('La vérification de la copie a échoué ; copie conservée pour inspection.')
+    except Exception:
+        # Keep partial data for inspection; never delete a user-specified destination.
+        raise
+    return checksum.hexdigest()
+
+
+def backup_image(module, destination):
+    with offline(module):
+        backend = assert_idle(module)
+        with module.storage_lock():
+            # Read-only lease stops native remounts during backup as well.
+            active = subprocess.run(['systemctl', 'is-active', '--quiet', module.AUTO_SERVICE]).returncode == 0
+            backend.lease_write({'auto_active': active, 'loop': None, 'device': None})
+            try:
+                if active:
+                    run(['systemctl', 'stop', module.AUTO_SERVICE])
+                value = copy_image(module, module.IMAGE, destination)
+                write_file(destination.with_name(destination.name + '.sha256'),
+                           (value + '\n').encode(), 0o600)
+            finally:
+                if active:
+                    run(['systemctl', 'start', module.AUTO_SERVICE])
+                backend.lease.unlink(missing_ok=True)
+    print('Copie vérifiée SHA-256 : ' + str(destination))
+
+
+def restore_image(module, source, checksum):
+    if not re_checksum(checksum) or source.is_symlink() or source.stat().st_size != module.SIZE:
+        raise RuntimeError('Source de 4 Gio et empreinte SHA-256 de confiance requises.')
+    if digest(source) != checksum.lower():
+        raise RuntimeError('Empreinte source incorrecte.')
+    native = Path(module.ORIGINAL_HELPER)
+    if not native.exists():
+        native = helper_path()
+        if WRAPPER_MARKER in native.read_bytes():
+            raise RuntimeError('Helper natif absent ; réparer la sauvegarde avant restauration.')
+    with offline(module):
+        backend = assert_idle(module, allow_missing=True)
+        parent = module.IMAGE.parent
+        stage = parent / ('.PIKVM-SHARE.restore-' + uuid.uuid4().hex)
+        with module.storage_lock():
+            active = subprocess.run(['systemctl', 'is-active', '--quiet', module.AUTO_SERVICE]).returncode == 0
+            backend.lease_write({'auto_active': active, 'loop': None, 'device': None})
+            try:
+                if active:
+                    run(['systemctl', 'stop', module.AUTO_SERVICE])
+                run([str(native), 'rw'])
+                if shutil.disk_usage(parent).free < module.SIZE + 1024**2:
+                    raise RuntimeError('4 Gio libres requis pour conserver l’original.')
+                with source.open('rb') as src, stage.open('xb') as dst:
+                    os.chmod(stage, 0o600)
+                    shutil.copyfileobj(src, dst, 1024**2)
+                    dst.flush()
+                    os.fsync(dst.fileno())
+                if digest(stage) != checksum.lower():
+                    raise RuntimeError('Copie restaurée non conforme ; original intact.')
+                # Offline verification; -n never repairs or formats.
+                loop = run(['losetup', '--find', '--show', '--read-only', '--partscan', str(stage)])
+                try:
+                    data = json.loads(run(['lsblk', '--json', '--paths', '--output', 'NAME,TYPE', loop]))
+                    devices = [loop] + [p['name'] for p in data['blockdevices'][0].get('children', [])]
+                    matches = []
+                    for device in devices:
+                        proc = subprocess.run(['blkid', '-p', '-s', 'TYPE', '-o', 'value', device],
+                                              capture_output=True, text=True, timeout=10)
+                        if proc.returncode == 0 and proc.stdout.strip() == 'exfat':
+                            matches.append(device)
+                    if len(matches) != 1:
+                        raise RuntimeError('Volume exFAT unique requis.')
+                    run(['fsck.exfat', '-n', matches[0]])
+                finally:
+                    run(['losetup', '--detach', loop])
+                if module.IMAGE.exists():
+                    preserved = parent / ('.PIKVM-SHARE.pre-restore-' + uuid.uuid4().hex + '.img')
+                    module.IMAGE.rename(preserved)
+                    print('Original conservé : ' + str(preserved))
+                stage.rename(module.IMAGE)
+                run(['sync', '-f', str(parent)])
+            finally:
+                # Staging leftovers are intentionally retained if validation failed.
+                if active:
+                    run(['systemctl', 'start', module.AUTO_SERVICE])
+                backend.lease.unlink(missing_ok=True)
+    print('Image restaurée et contrôlée, laissée détachée. Aucun formatage.')
+
+
+def re_checksum(value):
+    return len(value) == 64 and all(c in '0123456789abcdefABCDEF' for c in value)
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    actions = parser.add_subparsers(dest='action', required=True)
+    actions.add_parser('check')
+    actions.add_parser('install')
+    restore = actions.add_parser('restore-app')
+    restore.add_argument('backup', type=Path)
+    backup = actions.add_parser('backup-image')
+    backup.add_argument('destination', type=Path)
+    image = actions.add_parser('restore-image')
+    image.add_argument('source', type=Path)
+    image.add_argument('--sha256', required=True)
+    image.add_argument('--confirm-restore', action='store_true', required=True)
+    options = parser.parse_args()
+    if not hasattr(os, 'geteuid') or os.geteuid() != 0:
+        raise SystemExit('Exécuter en root sur PiKVM ; aucun accès SSH automatisé.')
+    module = api_module()
+    if options.action == 'check':
+        check(module)
+    elif options.action == 'install':
+        install(module)
+    elif options.action == 'restore-app':
+        assert_idle(module)
+        run(['systemctl', 'stop', SERVICE]) if service_state()['active'] else None
+        with offline(module):
+            assert_idle(module)
+            restart = restore_files(options.backup.resolve(strict=True))
+            reload_nginx()
+        if restart:
+            run(['systemctl', 'start', SERVICE])
+        print('Application restaurée ; aucune donnée de l’image remplacée.')
+    elif options.action == 'backup-image':
+        backup_image(module, options.destination.resolve())
+    elif options.action == 'restore-image':
+        restore_image(module, options.source.resolve(strict=True), options.sha256)
+
+
+if __name__ == '__main__':
+    try:
+        main()
+    except Exception as exc:
+        print('ERREUR : ' + str(exc), file=sys.stderr)
+        raise SystemExit(1)

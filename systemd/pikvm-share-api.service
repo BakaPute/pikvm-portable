@@ -1,0 +1,25 @@
+[Unit]
+Description=PIKVM-SHARE authenticated file manager (Drive 1 only)
+After=kvmd.service local-fs.target pikvm-auto-shutdown.service
+RequiresMountsFor=/var/lib/kvmd/msd
+
+[Service]
+Type=simple
+User=root
+Group=root
+UMask=0077
+RuntimeDirectory=pikvm-share
+RuntimeDirectoryMode=0700
+# Keep recovery/lease metadata across service restarts, including failed stops.
+RuntimeDirectoryPreserve=yes
+ExecStart=/usr/local/bin/pikvm-share-api
+Restart=on-failure
+RestartSec=3
+TimeoutStopSec=180
+KillMode=mixed
+NoNewPrivileges=yes
+# Mounts must be visible in the host namespace for safe recovery.
+# Do not add PrivateMounts, PrivateDevices, ProtectSystem or PrivateTmp here.
+
+[Install]
+WantedBy=multi-user.target

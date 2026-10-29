@@ -159,3 +159,15 @@ depuis sa page d'accueil.
 Le disque technique .USB-TRANSFER.img reste masqué.
 Les transferts USB et les dossiers sont installés
 automatiquement par install.sh.
+
+## PIKVM-SHARE — clé USB indépendante
+
+Gestion Web de l'image exFAT existante `.PIKVM-SHARE.img` sur le **Drive 1** :
+fichiers/dossiers, import et téléchargement, espace disponible et bascule USB/Web
+avec éjection propre obligatoire côté PC. Authentification par la session PiKVM.
+
+Installation ciblée : `bash install.sh --share-only`, après sauvegarde et
+autorisation de déploiement. Ce chemin ne configure aucun GPIO et ne redémarre
+pas KVMD. Il exige une image existante et un Drive 1 déjà configuré.
+
+Voir [la procédure complète, les sauvegardes et la restauration](docs/pikvm-share.md).

@@ -20,3 +20,8 @@ __pycache__/
 *.pyc
 *.pyo
 *.before-cancel
+
+# Local SHARE data/backups must never be committed.
+PIKVM-SHARE*.img
+PIKVM-SHARE*.sha256
+.PIKVM-SHARE*.img

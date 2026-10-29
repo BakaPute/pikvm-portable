@@ -2,6 +2,12 @@
 
 set -e
 
+# Installation SHARE independante : avant toute configuration materielle.
+if [ "${1:-}" = "--share-only" ]; then
+    shift
+    exec bash "$(dirname "$0")/install-share.sh" "$@"
+fi
+
 # ------------------------------------------------------------
 # PiKVM Portable - Installation automatique
 # ------------------------------------------------------------

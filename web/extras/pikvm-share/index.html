@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="fr">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <title>PIKVM-SHARE</title>
+    <link rel="icon" href="pikvm-share.svg" type="image/svg+xml">
+    <link rel="stylesheet" href="style.css">
+    <script src="app.js" defer></script>
+</head>
+<body>
+<main>
+    <header><div><a href="/">← PiKVM</a><h1>PIKVM-SHARE</h1>
+        <p>La clé USB virtuelle de ton PiKVM · Drive 1</p></div>
+        <button id="refresh" type="button">Actualiser</button></header>
+    <section class="card" aria-labelledby="mode-title">
+        <h2 id="mode-title">Connexion</h2>
+        <div class="state"><span id="badge">Vérification…</span><span id="state-text" role="status"></span></div>
+        <p id="mode-help">Le PC et le gestionnaire Web accèdent aux fichiers chacun à leur tour.</p>
+        <div class="buttons">
+            <button id="usb" type="button">Connecter au PC par USB</button>
+            <button id="web" type="button">Passer en gestion Web</button>
+            <button id="recover" type="button">Démonter / récupérer</button>
+        </div>
+        <label class="confirmation"><input id="ejected" type="checkbox">
+            J’ai éjecté proprement PIKVM-SHARE dans le système du PC.</label>
+        <p class="hint">Débrancher le câble ne remplace pas l’éjection. Aucun bouton ne force le détachement USB.</p>
+    </section>
+    <div id="error" role="alert" hidden></div>
+    <section class="card" aria-labelledby="files-title">
+        <div class="files-heading"><h2 id="files-title">Fichiers</h2><span id="space">Espace disponible en mode Web</span></div>
+        <meter id="usage" min="0" max="1" value="0" aria-label="Espace utilisé" hidden></meter>
+        <nav id="breadcrumbs" aria-label="Dossier actuel"></nav>
+        <div class="buttons tools">
+            <button id="mkdir" type="button" disabled>Nouveau dossier</button>
+            <button id="create-file" type="button" disabled>Nouveau fichier</button>
+            <button id="upload" type="button" disabled>Importer des fichiers</button>
+            <input id="file-input" type="file" multiple hidden>
+        </div>
+        <div id="transfer" hidden><label for="progress" id="transfer-text">Import</label>
+            <progress id="progress" max="100" value="0"></progress>
+            <button id="cancel" type="button">Annuler l’import</button></div>
+        <div class="table-wrap"><table><thead><tr><th>Nom</th><th>Taille</th><th>Modifié</th><th>Actions</th></tr></thead>
+            <tbody id="entries"><tr><td colspan="4">Passe en mode Web pour consulter les fichiers.</td></tr></tbody></table></div>
+    </section>
+    <footer>Les données restent dans l’image PIKVM-SHARE existante. Les dossiers doivent être vides pour être supprimés.</footer>
+</main>
+</body>
+</html>

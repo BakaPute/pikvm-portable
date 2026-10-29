@@ -1,0 +1,6 @@
+name: PIKVM-SHARE
+description: Fichiers de la clé USB virtuelle — Drive 1
+icon: extras/pikvm-share/pikvm-share.svg
+path: extras/pikvm-share/
+daemon: pikvm-share-api
+place: 40

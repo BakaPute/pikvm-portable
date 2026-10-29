@@ -1,0 +1,770 @@
+#!/usr/bin/env python3
+"""PIKVM-SHARE. Linux, Python 3.14; stdlib only. Never ejects an USB LUN."""
+import argparse
+import contextlib
+import errno
+import hashlib
+import http.client
+import json
+import os
+from pathlib import Path
+import re
+import signal
+import socket
+import socketserver
+import stat
+import subprocess
+import threading
+import time
+import unicodedata
+import uuid
+from http.cookies import SimpleCookie
+from http.server import BaseHTTPRequestHandler
+from urllib.parse import parse_qs, quote, urlsplit
+
+try:
+    import fcntl
+except ImportError:  # permits controller tests on Windows; production requires Linux
+    fcntl = None
+
+IMAGE = Path('/var/lib/kvmd/msd/.PIKVM-SHARE.img')
+LUN = Path('/sys/kernel/config/usb_gadget/kvmd/functions/mass_storage.usb1/lun.0')
+RUNTIME = Path('/run/pikvm-share')
+STORAGE_LOCK = Path('/run/pikvm-share-storage.lock')
+ORIGINAL_HELPER = '/usr/local/lib/pikvm-share/native/kvmd-helper-otgmsd-remount'
+AUTO_SERVICE = 'pikvm-auto-shutdown.service'
+SIZE = 4 * 1024**3
+TEMP_PREFIX = '.pikvm-share-upload-'
+
+
+class ShareError(Exception):
+    def __init__(self, message, status=409):
+        super().__init__(message)
+        self.status = status
+
+
+def command(args, timeout=30):
+    result = subprocess.run(args, capture_output=True, text=True, timeout=timeout)
+    if result.returncode:
+        # Never include command output: it can contain paths or configuration secrets.
+        raise ShareError('Échec de la commande système : ' + Path(args[0]).name, 503)
+    return result.stdout.strip()
+
+
+@contextlib.contextmanager
+def storage_lock():
+    if fcntl is None:
+        raise RuntimeError('Linux requis')
+    fd = os.open(STORAGE_LOCK, os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
+    with os.fdopen(fd, 'r+') as handle:
+        fcntl.flock(handle, fcntl.LOCK_EX)
+        yield
+
+
+def atomic_json(path, value):
+    temp = path.with_suffix('.new')
+    with temp.open('w', encoding='utf-8') as handle:
+        os.chmod(temp, 0o600)
+        json.dump(value, handle)
+        handle.flush()
+        os.fsync(handle.fileno())
+    temp.replace(path)
+
+
+class LinuxBackend:
+    """The only class allowed to run privileged commands; paths are not API inputs."""
+    def __init__(self):
+        self.image = IMAGE
+        self.mount = RUNTIME / 'mnt'
+        self.lease = RUNTIME / 'lease.json'
+
+    def validate_image(self):
+        info = self.image.lstat()
+        if not stat.S_ISREG(info.st_mode) or info.st_size != SIZE or info.st_nlink != 1:
+            raise ShareError('Image attendue : fichier ordinaire de 4 Gio, sans lien.')
+        # Parent directory must not redirect to a different storage location.
+        if self.image.resolve() != self.image:
+            raise ShareError('Chemin de l’image inattendu.')
+
+    def luns(self):
+        root = Path('/sys/kernel/config/usb_gadget')
+        paths = list(root.glob('*/functions/mass_storage.*/lun.*/file'))
+        if LUN / 'file' not in paths:
+            raise ShareError('Drive 1 indisponible.', 503)
+        result = {}
+        for path in paths:
+            value = path.read_text().strip()  # read failure is a blocking error
+            result[str(path)] = value
+            if value and value.endswith(' (deleted)'):
+                raise ShareError('Un lecteur utilise un fichier supprimé.')
+        return result
+
+    def drive(self):
+        values = self.luns()
+        own = values[str(LUN / 'file')]
+        for path, value in values.items():
+            if value and os.path.samefile(value, self.image):
+                if path != str(LUN / 'file'):
+                    raise ShareError('Image SHARE attachée à un autre lecteur ; accès bloqué.')
+        if own and not os.path.samefile(own, self.image):
+            raise ShareError('Drive 1 contient une autre image ; accès bloqué.')
+        if (LUN / 'removable').read_text().strip() != '1':
+            raise ShareError('Drive 1 non amovible ; éjection PC non garantie.')
+        return own
+
+    def loops(self):
+        data = json.loads(command(['losetup', '--json', '--list', '--output', 'NAME,BACK-FILE']))
+        found = []
+        for row in data.get('loopdevices', []):
+            backing = row.get('back-file')
+            if backing and backing.endswith(' (deleted)'):
+                raise ShareError('Association loop supprimée ; contrôle manuel requis.')
+            if backing and os.path.samefile(backing, self.image):
+                found.append(row['name'])
+        return found
+
+    def mounts(self):
+        # /proc/self is the host namespace: service must NOT use PrivateMounts.
+        return json.loads(command(['findmnt', '--json', '--list', '--output', 'TARGET,SOURCE']))['filesystems']
+
+    def is_mounted(self):
+        return any(row['target'] == str(self.mount) for row in self.mounts())
+
+    def ensure_unmounted(self):
+        if self.loops() or self.is_mounted():
+            raise ShareError('L’image possède déjà un montage ou une association loop.')
+        # Reject direct mounts as well, including a loop source not reported by losetup.
+        for row in self.mounts():
+            source = row['source'].split('[', 1)[0]
+            if source == str(self.image):
+                raise ShareError('Image déjà montée.')
+
+    def mounted_owned(self, lease):
+        loops = self.loops()
+        if loops != [lease.get('loop')]:
+            raise ShareError('Association loop inattendue ; accès bloqué.')
+        rows = [r for r in self.mounts() if r['target'] == str(self.mount)]
+        if len(rows) != 1 or rows[0]['source'] != lease.get('device'):
+            raise ShareError('Montage SHARE inattendu ; accès bloqué.')
+        if command(['blkid', '-p', '-s', 'TYPE', '-o', 'value', lease['device']]) != 'exfat':
+            raise ShareError('Le montage n’est pas un volume exFAT.')
+
+    def lease_read(self):
+        return json.loads(self.lease.read_text()) if self.lease.exists() else None
+
+    def lease_write(self, data):
+        atomic_json(self.lease, data)
+
+    def reserve(self):
+        with storage_lock():
+            if self.lease.exists():
+                raise ShareError('Une réservation SHARE existe déjà.')
+            active = subprocess.run(['systemctl', 'is-active', '--quiet', AUTO_SERVICE]).returncode == 0
+            data = {'auto_active': active, 'loop': None, 'device': None}
+            self.lease_write(data)  # guard RO before opening the backing file
+            if active:
+                command(['systemctl', 'stop', AUTO_SERVICE])
+            command([ORIGINAL_HELPER, 'rw'])
+            return data
+
+    def release(self):
+        with storage_lock():
+            data = self.lease_read()
+            if data and data['auto_active']:
+                # Start while the lease is still held; failure retains recovery information.
+                command(['systemctl', 'start', AUTO_SERVICE])
+            self.lease.unlink(missing_ok=True)
+            # Do not remount RO here: a native Drive 0 upload might still be writing.
+
+    def mount_image(self):
+        data = self.lease_read()
+        self.validate_image()
+        if self.drive():
+            raise ShareError('Éjecte proprement le lecteur dans le système du PC.')
+        self.ensure_unmounted()
+        loop = command(['losetup', '--find', '--show', '--partscan', str(self.image)])
+        if not re.fullmatch(r'/dev/loop[0-9]+', loop):
+            raise ShareError('Périphérique loop inattendu.')
+        data['loop'] = loop
+        self.lease_write(data)  # recovery owns this loop from this point onwards
+        tree = json.loads(command(['lsblk', '--json', '--paths', '--output', 'NAME,TYPE', loop]))
+        devices = [loop]
+        devices += [p['name'] for p in tree['blockdevices'][0].get('children', [])]
+        exfat = []
+        for device in devices:
+            probe = subprocess.run(['blkid', '-p', '-s', 'TYPE', '-o', 'value', device],
+                                   capture_output=True, text=True, timeout=10)
+            if probe.returncode == 0 and probe.stdout.strip() == 'exfat':
+                exfat.append(device)
+        if len(exfat) != 1:
+            raise ShareError('Un seul volume exFAT est requis ; aucun formatage effectué.')
+        data['device'] = exfat[0]
+        self.lease_write(data)
+        command(['fsck.exfat', '-n', data['device']], timeout=120)
+        if self.drive():
+            raise ShareError('L’image a été reconnectée ; montage refusé.')
+        self.mount.mkdir(mode=0o700, exist_ok=True)
+        command(['mount', '-t', 'exfat', '-o', 'rw,nosuid,nodev,noexec,uid=0,gid=0,umask=0077',
+                 data['device'], str(self.mount)])
+        self.mounted_owned(data)
+
+    def unmount_image(self):
+        data = self.lease_read()
+        if self.drive():
+            raise ShareError('Drive 1 encore attaché ; récupération manuelle requise.')
+        loops = self.loops()
+        owned = data and data.get('loop')
+        if any(loop != owned for loop in loops):
+            raise ShareError('Association loop étrangère ; aucune action effectuée.')
+        if self.is_mounted():
+            self.mounted_owned(data or {})
+            # Remove only our reserved, unpublished upload names after a crash.
+            for base, dirs, files in os.walk(self.mount, followlinks=False):
+                dirs[:] = [name for name in dirs if not (Path(base) / name).is_symlink()]
+                for name in files:
+                    if re.fullmatch(re.escape(TEMP_PREFIX) + r'[0-9a-f]{32}', name):
+                        path = Path(base) / name
+                        if path.is_file() and not path.is_symlink():
+                            path.unlink()
+            command(['sync', '-f', str(self.mount)])
+            command(['umount', str(self.mount)])  # no lazy/force fallback
+        if self.is_mounted():
+            raise ShareError('Démontage incomplet ; USB interdit.')
+        if owned and owned in loops:
+            # Reject mounts elsewhere of the loop or its partitions.
+            if any(r['source'].split('[', 1)[0] == owned or
+                   r['source'].split('[', 1)[0].startswith(owned + 'p') for r in self.mounts()):
+                raise ShareError('Loop SHARE monté ailleurs ; USB interdit.')
+            command(['losetup', '--detach', owned])
+        self.ensure_unmounted()
+        if data:
+            data.update(loop=None, device=None)
+            self.lease_write(data)
+
+    def attach(self):
+        self.validate_image()
+        if self.drive():
+            raise ShareError('Drive 1 déjà connecté.')
+        self.ensure_unmounted()
+        # Write only Drive 1 attributes. Never --eject, UDC or a native MSD API.
+        command(['kvmd-otgmsd', '-i', '1', '--set-cdrom=0', '--set-rw=1',
+                 '--set-image=' + str(self.image)])
+        if not self.drive():
+            raise ShareError('Connexion USB non confirmée.')
+
+
+def safe_name(name):
+    if not isinstance(name, str) or not name or len(name.encode('utf-16-le')) > 510:
+        raise ShareError('Nom invalide ou trop long.', 400)
+    if (name in ('.', '..') or name[-1] in '. ' or name.startswith(TEMP_PREFIX) or
+            any(ord(c) < 32 or c in '<>:"/\\|?*\x7f' for c in name) or
+            re.fullmatch(r'(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])(\..*)?', name, re.I)):
+        raise ShareError('Nom incompatible avec exFAT/Windows.', 400)
+    return name
+
+
+def safe_path(root, value, allow_root=False):
+    if not isinstance(value, str) or len(value) > 2048:
+        raise ShareError('Chemin invalide.', 400)
+    if value == '' and allow_root:
+        return root
+    parts = value.split('/')
+    current = root
+    for name in parts:
+        safe_name(name)
+        current = current / name
+        if current.is_symlink():
+            raise ShareError('Lien symbolique interdit.', 400)
+    if not current.resolve().is_relative_to(root.resolve()):
+        raise ShareError('Chemin hors du partage.', 400)
+    return current
+
+
+def unique_destination(parent, name, source=None):
+    safe_name(name)
+    folded = unicodedata.normalize('NFC', name).casefold()
+    for child in parent.iterdir():
+        if unicodedata.normalize('NFC', child.name).casefold() == folded and child != source:
+            raise ShareError('Ce nom existe déjà.')
+    return parent / name
+
+
+class Controller:
+    def __init__(self, backend):
+        self.backend = backend
+        self.lock = threading.Lock()  # protects whole streams AND transitions
+        self.mode = 'detached'
+        self.error = ''
+        self.last_space = None
+        self.uploads = {}
+        if backend.lease_read():
+            self.mode = 'error'
+            self.error = 'Réservation antérieure : éjecter côté PC puis utiliser Récupérer.'
+
+    @contextlib.contextmanager
+    def operation(self):
+        if not self.lock.acquire(blocking=False):
+            raise ShareError('Opération en cours ; réessaie après sa fin.', 423)
+        try:
+            yield
+        finally:
+            self.lock.release()
+
+    def check_web(self):
+        if self.mode != 'web':
+            raise ShareError('La gestion des fichiers exige le mode Web.')
+        try:
+            self.backend.validate_image()
+            if self.backend.drive():
+                raise ShareError('Connexion USB inattendue ; accès Web bloqué.')
+            self.backend.mounted_owned(self.backend.lease_read() or {})
+        except Exception:
+            self.mode = 'error'
+            self.error = 'État physique du volume inattendu ; accès Web bloqué. Utilise Récupérer.'
+            raise
+
+    def status(self):
+        self.backend.validate_image()
+        drive = self.backend.drive()
+        if drive and self.mode == 'web':
+            self.mode = 'error'
+            self.error = 'Connexion USB inattendue ; accès bloqué.'
+        if self.mode not in ('web', 'error'):
+            self.mode = 'usb' if drive else 'detached'
+        return {'mode': self.mode, 'message': self.error,
+                'attached': bool(drive), 'space': self.last_space,
+                'space_stale': self.mode != 'web', 'uploads': len(self.uploads)}
+
+    def cleanup_uploads(self):
+        for entry in self.uploads.values():
+            entry['temp'].unlink(missing_ok=True)
+        self.uploads.clear()
+
+    def web(self, confirmed):
+        if confirmed is not True:
+            raise ShareError('Confirme l’éjection propre dans le système du PC.', 400)
+        if self.mode == 'web':
+            self.check_web()
+            return
+        if self.mode == 'error':
+            raise ShareError('Utilise Récupérer avant de changer de mode.')
+        self.backend.validate_image()
+        if self.backend.drive():
+            raise ShareError('Le PC garde le lecteur attaché. Éjecte-le dans son système.')
+        self.backend.ensure_unmounted()
+        try:
+            self.backend.reserve()
+            self.backend.mount_image()
+            self.mode = 'web'
+            self.error = ''
+        except Exception:
+            self.mode = 'error'
+            self.error = 'Échec du montage ; aucune réparation automatique. Utilise Récupérer.'
+            raise
+
+    def detach_web(self):
+        if self.mode == 'web':
+            self.check_web()
+            if self.uploads:
+                raise ShareError('Termine ou annule les imports avant de quitter le mode Web.')
+        self.backend.unmount_image()
+
+    def usb(self):
+        if self.mode == 'error':
+            raise ShareError('Utilise Récupérer avant de reconnecter le lecteur.')
+        if self.backend.drive():
+            return
+        if self.mode == 'web':
+            self.check_web()
+            if self.uploads:
+                raise ShareError('Termine ou annule les imports avant de quitter le mode Web.')
+        try:
+            self.detach_web()
+            if not self.backend.lease_read():
+                self.backend.reserve()
+            self.backend.attach()
+            self.mode = 'usb'
+            self.error = ''
+        except Exception:
+            self.mode = 'error'
+            self.error = 'Connexion non aboutie ; état conservé pour récupération.'
+            raise
+
+    def recover(self):
+        if self.backend.drive():
+            raise ShareError('Éjecte d’abord le lecteur côté PC. Aucune éjection forcée.')
+        if self.mode == 'web':
+            self.check_web()
+            self.cleanup_uploads()
+        self.backend.unmount_image()
+        self.backend.release()
+        self.mode, self.error = 'detached', ''
+
+    def files(self, value):
+        self.check_web()
+        root = self.backend.mount
+        folder = safe_path(root, value, True)
+        items = []
+        for child in folder.iterdir():
+            if child.name.startswith(TEMP_PREFIX) or child.is_symlink():
+                continue
+            info = child.stat()
+            if stat.S_ISREG(info.st_mode) or stat.S_ISDIR(info.st_mode):
+                items.append({'name': child.name, 'directory': child.is_dir(),
+                              'size': info.st_size, 'modified': info.st_mtime})
+        space = os.statvfs(root) if hasattr(os, 'statvfs') else None
+        if space:
+            self.last_space = {'total': space.f_blocks * space.f_frsize,
+                               'free': space.f_bavail * space.f_frsize,
+                               'used': (space.f_blocks - space.f_bfree) * space.f_frsize}
+        return {'items': sorted(items, key=lambda x: (not x['directory'], x['name'].casefold())),
+                'path': value, 'space': self.last_space}
+
+    def mutate(self, action, data):
+        self.check_web()
+        root = self.backend.mount
+        if action in ('mkdir', 'create-file'):
+            parent = safe_path(root, data.get('parent', ''), True)
+            dest = unique_destination(parent, data.get('name'))
+            if action == 'mkdir':
+                dest.mkdir()
+            else:
+                with dest.open('xb') as handle:
+                    handle.flush()
+                    os.fsync(handle.fileno())
+        else:
+            if self.uploads:
+                raise ShareError('Termine ou annule les imports avant de renommer ou supprimer.')
+            source = safe_path(root, data.get('path'))
+            if any(e['dest'] == source for e in self.uploads.values()):
+                raise ShareError('Un import réserve ce fichier.')
+            if action == 'delete':
+                source.rmdir() if source.is_dir() else source.unlink()
+            elif action == 'rename':
+                dest = unique_destination(source.parent, data.get('name'), source)
+                source.rename(dest)
+            else:
+                raise ShareError('Action inconnue.', 404)
+        command(['sync', '-f', str(root)])
+
+    def begin_upload(self, data, owner):
+        self.check_web()
+        size = data.get('size')
+        if type(size) is not int or not 0 <= size <= SIZE:
+            raise ShareError('Taille de fichier invalide.', 400)
+        if len(self.uploads) >= 4:
+            raise ShareError('Trop d’imports ouverts.', 423)
+        parent = safe_path(self.backend.mount, data.get('parent', ''), True)
+        dest = unique_destination(parent, data.get('name'))
+        if any(e['dest'] == dest for e in self.uploads.values()):
+            raise ShareError('Ce fichier est déjà réservé par un import.')
+        if hasattr(os, 'statvfs'):
+            space = os.statvfs(parent)
+            reserved = sum(e['size'] - e['offset'] for e in self.uploads.values())
+            if size + reserved + 1024**2 > space.f_bavail * space.f_frsize:
+                raise ShareError('Espace disponible insuffisant.', 507)
+        ident = uuid.uuid4().hex
+        temp = parent / (TEMP_PREFIX + ident)
+        temp.touch(exist_ok=False)
+        self.uploads[ident] = {'temp': temp, 'dest': dest, 'size': size,
+                               'offset': 0, 'owner': owner, 'updated': time.monotonic()}
+        return {'id': ident, 'offset': 0}
+
+    def upload_entry(self, ident, owner):
+        self.check_web()
+        entry = self.uploads.get(ident)
+        if not entry or entry['owner'] != owner:
+            raise ShareError('Import introuvable pour cette session.', 404)
+        return entry
+
+    def upload_chunk(self, ident, owner, offset, payload):
+        entry = self.upload_entry(ident, owner)
+        if offset != entry['offset'] or not 0 < len(payload) <= 1024**2:
+            raise ShareError('Décalage ou bloc d’import invalide.', 400)
+        if offset + len(payload) > entry['size']:
+            raise ShareError('Import plus long que la taille annoncée.', 400)
+        try:
+            with entry['temp'].open('r+b') as handle:
+                handle.seek(offset)
+                handle.write(payload)
+                handle.flush()
+                os.fsync(handle.fileno())
+        except OSError:
+            self.cancel_upload(ident, owner)
+            raise
+        entry['offset'] += len(payload)
+        entry['updated'] = time.monotonic()
+        return {'offset': entry['offset']}
+
+    def finish_upload(self, ident, owner):
+        entry = self.upload_entry(ident, owner)
+        if entry['offset'] != entry['size']:
+            raise ShareError('Import incomplet.')
+        dest = unique_destination(entry['dest'].parent, entry['dest'].name)
+        entry['temp'].rename(dest)
+        del self.uploads[ident]
+        command(['sync', '-f', str(self.backend.mount)])
+
+    def cancel_upload(self, ident, owner):
+        entry = self.upload_entry(ident, owner)
+        entry['temp'].unlink(missing_ok=True)
+        del self.uploads[ident]
+
+    def expire_uploads(self):
+        self.check_web()
+        for ident, entry in list(self.uploads.items()):
+            if time.monotonic() - entry['updated'] > 15 * 60:
+                entry['temp'].unlink(missing_ok=True)
+                del self.uploads[ident]
+
+
+class UnixHTTPConnection(http.client.HTTPConnection):
+    def connect(self):
+        self.sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        self.sock.settimeout(self.timeout)
+        self.sock.connect('/run/kvmd/kvmd.sock')
+
+
+def session_cookie(headers):
+    cookie = SimpleCookie()
+    try:
+        cookie.load(headers.get('Cookie', ''))
+        token = cookie['auth_token'].value
+    except (KeyError, ValueError):
+        raise ShareError('Connexion PiKVM requise.', 401)
+    if not re.fullmatch(r'[A-Za-z0-9_-]{16,256}', token):
+        raise ShareError('Session PiKVM invalide.', 401)
+    return token
+
+
+def kvmd_check(cookie=None):
+    connection = UnixHTTPConnection('localhost', timeout=5)
+    try:
+        headers = {'Cookie': 'auth_token=' + cookie} if cookie else {}
+        connection.request('GET', '/auth/check', headers=headers)
+        response = connection.getresponse()
+        response.read(8192)
+        return response.status
+    finally:
+        connection.close()
+
+
+def authenticate(headers, checker=kvmd_check):
+    token = session_cookie(headers)
+    # Auth-disabled KVMD must never grant management access. No socket-user bypass.
+    if checker() not in (401, 403):
+        raise ShareError('Authentification PiKVM indisponible ou désactivée.', 503)
+    if checker(token) != 200:
+        raise ShareError('Session PiKVM expirée ; reconnecte-toi.', 401)
+    return hashlib.sha256(token.encode()).hexdigest()
+
+
+def check_csrf(headers):
+    # Browser cannot send this non-simple header cross-origin without preflight.
+    # OPTIONS is never permitted; no Access-Control-Allow-Origin response exists.
+    if headers.get('X-Pikvm-Share') != '1':
+        raise ShareError('Protection CSRF : en-tête requis.', 403)
+    origin = headers.get('Origin')
+    expected = headers.get('X-Share-Origin')  # nginx overwrites this header
+    if origin and (origin == 'null' or origin != expected):
+        raise ShareError('Origine de requête interdite.', 403)
+    if headers.get('Sec-Fetch-Site') == 'cross-site':
+        raise ShareError('Requête intersite interdite.', 403)
+
+
+class Handler(BaseHTTPRequestHandler):
+    server_version = 'PIKVM-SHARE'
+    protocol_version = 'HTTP/1.0'  # close after each response, no unread-body reuse
+
+    def log_message(self, *args):
+        pass  # never log cookies, file paths or credentials
+
+    def setup(self):
+        super().setup()
+        self.connection.settimeout(30)
+
+    def reply(self, status, value):
+        payload = json.dumps(value, ensure_ascii=False).encode()
+        self.send_response(status)
+        self.send_header('Content-Type', 'application/json; charset=utf-8')
+        self.send_header('Cache-Control', 'no-store')
+        self.send_header('X-Content-Type-Options', 'nosniff')
+        self.send_header('Content-Length', str(len(payload)))
+        self.end_headers()
+        self.wfile.write(payload)
+
+    def body(self, binary=False):
+        if self.headers.get('Transfer-Encoding'):
+            raise ShareError('Content-Length requis.', 400)
+        try:
+            size = int(self.headers.get('Content-Length', '-1'))
+        except ValueError:
+            raise ShareError('Taille HTTP invalide.', 400)
+        if not 0 <= size <= (1024**2 if binary else 8192):
+            raise ShareError('Requête trop volumineuse ou sans taille.', 413)
+        expected = 'application/octet-stream' if binary else 'application/json'
+        if self.headers.get_content_type() != expected:
+            raise ShareError('Type de contenu invalide.', 415)
+        payload = self.rfile.read(size)
+        if len(payload) != size:
+            raise ShareError('Requête interrompue.', 400)
+        if binary:
+            return payload
+        data = json.loads(payload)
+        if not isinstance(data, dict):
+            raise ShareError('Objet JSON requis.', 400)
+        return data
+
+    def download(self, controller, path):
+        controller.check_web()
+        file = safe_path(controller.backend.mount, path)
+        with file.open('rb') as handle:
+            info = os.fstat(handle.fileno())
+            if not stat.S_ISREG(info.st_mode):
+                raise ShareError('Fichier ordinaire requis.', 400)
+            self.send_response(200)
+            self.send_header('Content-Type', 'application/octet-stream')
+            self.send_header('Content-Length', str(info.st_size))
+            self.send_header('Content-Disposition', "attachment; filename*=UTF-8''" + quote(file.name, safe=''))
+            self.send_header('Cache-Control', 'no-store')
+            self.send_header('X-Content-Type-Options', 'nosniff')
+            self.send_header('Content-Security-Policy', "sandbox; default-src 'none'")
+            self.end_headers()
+            self.response_started = True
+            remaining = info.st_size
+            while remaining:
+                block = handle.read(min(remaining, 1024**2))
+                if not block:
+                    raise ShareError('Lecture interrompue.', 503)
+                self.wfile.write(block)
+                remaining -= len(block)
+
+    def dispatch(self, post=False):
+        self.response_started = False
+        try:
+            owner = authenticate(self.headers)
+            if post:
+                check_csrf(self.headers)
+            url = urlsplit(self.path)
+            params = parse_qs(url.query, keep_blank_values=True)
+            get = lambda name: params.get(name, [''])[0]
+            action = url.path.removeprefix('/extras/pikvm-share/api/')
+            controller = self.server.controller
+            with controller.operation():
+                if controller.mode == 'web' and action not in ('status', 'recover'):
+                    controller.expire_uploads()
+                result = None
+                if not post:
+                    if action == 'status':
+                        result = controller.status()
+                    elif action == 'files':
+                        result = controller.files(get('path'))
+                    elif action == 'download':
+                        self.download(controller, get('path'))
+                        return
+                    else:
+                        raise ShareError('Route introuvable.', 404)
+                elif action == 'upload/chunk':
+                    try:
+                        offset = int(get('offset'))
+                    except ValueError:
+                        raise ShareError('Décalage invalide.', 400)
+                    result = controller.upload_chunk(get('id'), owner, offset, self.body(True))
+                else:
+                    data = self.body()
+                    if action == 'mode/web':
+                        controller.web(data.get('ejected'))
+                    elif action == 'mode/usb':
+                        controller.usb()
+                    elif action == 'recover':
+                        controller.recover()
+                    elif action == 'upload/begin':
+                        result = controller.begin_upload(data, owner)
+                    elif action == 'upload/finish':
+                        controller.finish_upload(data.get('id'), owner)
+                    elif action == 'upload/cancel':
+                        controller.cancel_upload(data.get('id'), owner)
+                    else:
+                        controller.mutate(action, data)
+                self.reply(200, {'ok': True, 'result': result})
+        except (BrokenPipeError, ConnectionResetError, TimeoutError):
+            return
+        except Exception as exc:
+            if self.response_started:
+                return
+            if isinstance(exc, ShareError):
+                status, message = exc.status, str(exc)
+            elif isinstance(exc, FileNotFoundError):
+                status, message = 404, 'Fichier, dossier ou ressource système introuvable.'
+            elif isinstance(exc, FileExistsError):
+                status, message = 409, 'Ce nom existe déjà.'
+            elif isinstance(exc, (ValueError, UnicodeError)):
+                status, message = 400, 'Requête invalide.'
+            elif isinstance(exc, OSError) and exc.errno == errno.ENOSPC:
+                status, message = 507, 'Espace disponible insuffisant.'
+            elif isinstance(exc, OSError) and exc.errno == errno.ENOTEMPTY:
+                status, message = 409, 'Le dossier doit être vide pour être supprimé.'
+            else:
+                status, message = 503, 'Opération impossible ; vérifier l’état du stockage.'
+            self.reply(status, {'ok': False, 'error': message})
+
+    def do_GET(self):
+        self.dispatch()
+
+    def do_POST(self):
+        self.dispatch(True)
+
+
+class Server(socketserver.ThreadingMixIn, socketserver.TCPServer):
+    allow_reuse_address = True
+    daemon_threads = False
+    block_on_close = True
+    request_queue_size = 8
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--check', action='store_true', help='Read-only preflight')
+    parser.add_argument('--recover', action='store_true', help='Local root recovery after PC eject')
+    options = parser.parse_args()
+    backend = LinuxBackend()
+    backend.validate_image()
+    backend.drive()
+    if options.check:
+        backend.ensure_unmounted()
+        print('Image et Drive 1 conformes ; aucun changement effectué.')
+        return
+    if options.recover:
+        if os.geteuid() != 0:
+            raise SystemExit('root requis')
+        RUNTIME.mkdir(mode=0o700, exist_ok=True)
+        with (RUNTIME / 'process.lock').open('a') as instance:
+            fcntl.flock(instance, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            controller = Controller(backend)
+            with controller.operation():
+                controller.recover()
+        return
+    RUNTIME.mkdir(mode=0o700, exist_ok=True)
+    # Single controller process, including across unexpected restarts.
+    with (RUNTIME / 'process.lock').open('a') as instance:
+        fcntl.flock(instance, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        controller = Controller(backend)
+        with Server(('127.0.0.1', 9877), Handler) as server:
+            server.controller = controller
+            def stop(_signum, _frame):
+                threading.Thread(target=server.shutdown, daemon=True).start()
+            signal.signal(signal.SIGTERM, stop)
+            signal.signal(signal.SIGINT, stop)
+            server.serve_forever(poll_interval=0.5)
+        # Do not forcibly detach USB on stop. Keep lease/guard for host writes.
+        with controller.operation():
+            if not backend.drive():
+                if controller.mode == 'web':
+                    controller.check_web()
+                    controller.cleanup_uploads()
+                backend.unmount_image()
+                backend.release()
+
+
+if __name__ == '__main__':
+    main()
