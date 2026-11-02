@@ -1,0 +1,185 @@
+#!/usr/bin/env python3
+"""Portable OS integration. Authenticated, bounded diagnostics; no GPIO/MSD writes."""
+import importlib.machinery
+import importlib.util
+import json
+from pathlib import Path
+import platform
+import re
+import signal
+import subprocess
+import threading
+import time
+from urllib.parse import parse_qs, urlsplit
+
+
+def load_share():
+    path = Path('/usr/local/bin/pikvm-share-api')
+    if not path.exists():
+        path = Path(__file__).resolve().with_name('pikvm-share-api')
+    loader = importlib.machinery.SourceFileLoader('portable_share_auth', str(path))
+    spec = importlib.util.spec_from_loader(loader.name, loader)
+    module = importlib.util.module_from_spec(spec)
+    loader.exec_module(module)
+    return module
+
+
+share = load_share()
+UNITS = ('kvmd.service', 'kvmd-nginx.service', 'wifi-wizard-api.service',
+         'pikvm-share-api.service', 'pikvm-portable-api.service',
+         'pikvm-power-hold.service', 'pikvm-auto-shutdown.service',
+         'pikvm-hotspot-hostapd.service', 'pikvm-hotspot-dnsmasq.service')
+
+
+def read(path):
+    try:
+        return Path(path).read_text().strip()
+    except OSError:
+        return None
+
+
+def run(args, timeout=10):
+    result = subprocess.run(args, capture_output=True, text=True, timeout=timeout)
+    if result.returncode:
+        raise share.ShareError('Diagnostic système indisponible : ' + Path(args[0]).name, 503)
+    return result.stdout
+
+
+def redact(message):
+    if re.search(r'password|passwd|\bpsk\b|\bpass\s*[:=]|auth_token|authorization|cookie|secret|token\s*[:=]', message, re.I):
+        return '[Ligne masquée : information d’authentification potentielle]'
+    return message[:1000]
+
+
+class SystemBackend:
+    def __init__(self, gadget=Path('/sys/kernel/config/usb_gadget/kvmd'),
+                 controllers=Path('/sys/class/udc')):
+        self.gadget = gadget
+        self.controllers = controllers
+        self.cached = None
+        self.updated = 0
+        self.lock = threading.Lock()
+
+    def services(self):
+        with self.lock:
+            if self.cached is not None and time.monotonic() - self.updated < 5:
+                return self.cached
+            output = run(['systemctl', 'show', '--no-pager',
+                          '--property=Id,ActiveState,SubState,UnitFileState,Result', *UNITS])
+            result = {}
+            for block in output.strip().split('\n\n'):
+                fields = dict(line.split('=', 1) for line in block.splitlines() if '=' in line)
+                if fields.get('Id') in UNITS:
+                    result[fields['Id']] = fields
+            self.cached, self.updated = result, time.monotonic()
+            return result
+
+    def usb(self):
+        udc = read(self.gadget / 'UDC')
+        state = None
+        if udc and re.fullmatch(r'[\w.:-]+', udc):
+            state = read(self.controllers / udc / 'state')
+        drives = {}
+        for index in (0, 1):
+            function = self.gadget / 'functions' / f'mass_storage.usb{index}'
+            linked = []
+            for config in (self.gadget / 'configs').glob('*'):
+                if config.is_dir():
+                    for entry in config.iterdir():
+                        if entry.is_symlink() and entry.resolve() == function.resolve():
+                            linked.append(config.name)
+            attrs = {name: read(function / 'lun.0' / name)
+                     for name in ('file', 'cdrom', 'ro', 'removable', 'nofua')}
+            drives[str(index)] = {'present': function.is_dir(), 'configurations': linked,
+                                  'attached': bool(attrs['file']), 'attributes': attrs}
+        return {'udc': udc, 'state': state, 'host_configured': state == 'configured',
+                'drives': drives, 'windows': {'disk_detected': None, 'mounted': None, 'drive_letter': None},
+                'message': 'L’attachement au LUN et l’état USB ne prouvent pas le montage du volume dans Windows.'}
+
+    def status(self):
+        try:
+            services = {'available': True, 'items': self.services()}
+        except (OSError, share.ShareError, subprocess.TimeoutExpired):
+            services = {'available': False, 'items': {}}
+        uptime = read('/proc/uptime')
+        temp = read('/sys/class/thermal/thermal_zone0/temp')
+        return {'system': {'hostname': platform.node(), 'kernel': platform.release(),
+                           'python': platform.python_version(),
+                           'uptime': float(uptime.split()[0]) if uptime else None,
+                           'temperature': float(temp) / 1000 if temp else None},
+                'services': services, 'hotspot': Path('/run/pikvm-hotspot-active').exists(),
+                'auto_shutdown_policy': 'manual-only', 'observed_at': time.time()}
+
+    def logs(self, unit):
+        if unit not in UNITS:
+            raise share.ShareError('Service non autorisé.', 400)
+        output = run(['journalctl', '--no-pager', '-u', unit, '-n', '60', '-o', 'json'], timeout=10)
+        entries = []
+        for line in output.splitlines():
+            item = json.loads(line)
+            message = item.get('MESSAGE', '')
+            if not isinstance(message, str):
+                message = '[Message binaire]'
+            entries.append({'time': item.get('__REALTIME_TIMESTAMP'), 'message': redact(message)})
+        return {'unit': unit, 'entries': entries}
+
+    def hotspot(self, enabled):
+        if type(enabled) is not bool:
+            raise share.ShareError('État hotspot invalide.', 400)
+        # The existing script may print its password. Capture and discard ALL output.
+        run(['/usr/local/bin/pikvm-hotspot', 'on' if enabled else 'off'], timeout=60)
+        return {'requested': enabled, 'message': 'Demande transmise. La liaison réseau peut être interrompue.'}
+
+
+class Handler(share.Handler):
+    server_version = 'PiKVM-Portable-OS'
+    def dispatch(self, post=False):
+        try:
+            share.authenticate(self.headers)
+            if post:
+                share.check_csrf(self.headers)
+            url = urlsplit(self.path)
+            route = url.path.removeprefix('/extras/portable-os/api/')
+            backend = self.server.backend
+            if not post and route == 'status':
+                result = backend.status()
+            elif not post and route == 'usb':
+                result = backend.usb()
+            elif not post and route == 'logs':
+                result = backend.logs(parse_qs(url.query).get('unit', [''])[0])
+            elif post and route == 'hotspot':
+                data = self.body()
+                if data.get('confirmed') is not True:
+                    raise share.ShareError('Confirmation de coupure réseau requise.', 400)
+                if not self.server.action_lock.acquire(blocking=False):
+                    raise share.ShareError('Opération réseau en cours.', 423)
+                try:
+                    result = backend.hotspot(data.get('enabled'))
+                finally:
+                    self.server.action_lock.release()
+            else:
+                raise share.ShareError('Route introuvable.', 404)
+            self.reply(200, {'ok': True, 'result': result})
+        except (BrokenPipeError, ConnectionResetError, TimeoutError):
+            return
+        except share.ShareError as exc:
+            self.reply(exc.status, {'ok': False, 'error': str(exc)})
+        except (ValueError, UnicodeError):
+            self.reply(400, {'ok': False, 'error': 'Requête invalide.'})
+        except Exception:
+            self.reply(503, {'ok': False, 'error': 'Information système indisponible.'})
+
+
+def main():
+    with share.Server(('127.0.0.1', 9878), Handler) as server:
+        server.backend = SystemBackend()
+        server.action_lock = threading.Lock()
+        def stop(*_args):
+            threading.Thread(target=server.shutdown, daemon=True).start()
+        signal.signal(signal.SIGTERM, stop)
+        signal.signal(signal.SIGINT, stop)
+        server.serve_forever(poll_interval=0.5)
+
+
+if __name__ == '__main__':
+    main()

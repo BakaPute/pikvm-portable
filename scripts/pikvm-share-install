@@ -277,7 +277,12 @@ def restore_files(folder):
         path = Path(entry['path'])
         if entry['exists']:
             write_file(path, (folder / entry['file']).read_bytes(), entry['mode'])
+            # Restore timestamps/extended metadata from the preserved snapshot.
+            # Snapshot files are protected as 0600, so restore the recorded mode
+            # after copystat/chown rather than copying the backup's private mode.
+            shutil.copystat(folder / entry['file'], path, follow_symlinks=False)
             os.chown(path, entry['uid'], entry['gid'])
+            path.chmod(entry['mode'])
         else:
             path.unlink(missing_ok=True)
     run(['systemctl', 'daemon-reload'])
@@ -367,8 +372,7 @@ def backup_image(module, destination):
                 write_file(destination.with_name(destination.name + '.sha256'),
                            (value + '\n').encode(), 0o600)
             finally:
-                if active:
-                    run(['systemctl', 'start', module.AUTO_SERVICE])
+                # Inactivity shutdown is operator-controlled; never auto-start it.
                 backend.lease.unlink(missing_ok=True)
     print('Copie vérifiée SHA-256 : ' + str(destination))
 
@@ -427,8 +431,7 @@ def restore_image(module, source, checksum):
                 run(['sync', '-f', str(parent)])
             finally:
                 # Staging leftovers are intentionally retained if validation failed.
-                if active:
-                    run(['systemctl', 'start', module.AUTO_SERVICE])
+                # Inactivity shutdown is operator-controlled; never auto-start it.
                 backend.lease.unlink(missing_ok=True)
     print('Image restaurée et contrôlée, laissée détachée. Aucun formatage.')
 

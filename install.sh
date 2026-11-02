@@ -519,7 +519,7 @@ systemctl enable pikvm-power-hold.service
 systemctl enable pikvm-oled-custom.service
 systemctl enable pikvm-button-menu.service
 systemctl enable wifi-wizard-api.service
-systemctl enable pikvm-auto-shutdown.service
+# Arrêt d'inactivité : activation exclusivement manuelle, préserver son état.
 
 echo "[OK] Services activés"
 
@@ -564,7 +564,7 @@ else
 fi
 
 systemctl restart wifi-wizard-api.service
-systemctl restart pikvm-auto-shutdown.service
+# Ne jamais redémarrer automatiquement le service d'arrêt d'inactivité.
 
 echo "[OK] Services personnalisés démarrés"
 
@@ -589,6 +589,11 @@ pikvm-auto-shutdown
 
 for SERVICE in $SERVICES
 do
+
+    if [ "$SERVICE" = "pikvm-auto-shutdown" ]; then
+        echo "[INFO] $SERVICE : gestion manuelle, état conservé"
+        continue
+    fi
 
     if [ "$REBOOT_I2C" -eq 1 ] && {
         [ "$SERVICE" = "pikvm-oled-custom" ] ||

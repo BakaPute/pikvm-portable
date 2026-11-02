@@ -13,7 +13,7 @@ L'objectif est de disposer d'un PiKVM autonome sur batterie avec :
 - point d'accès Wi-Fi de dépannage ;
 - assistant Wi-Fi depuis l'interface web ;
 - niveau de batterie dans l'interface PiKVM ;
-- arrêt automatique après inactivité ;
+- arrêt après inactivité disponible sur activation manuelle ;
 - capture HDMI ;
 - clavier et souris KVM par USB-C.
 
@@ -73,12 +73,15 @@ Lors d'un arrêt propre, GPIO17 repasse à LOW et le relais coupe totalement l'a
 
 ## Arrêt automatique
 
-Le PiKVM s'éteint automatiquement lorsque les deux conditions suivantes restent vraies pendant une heure :
+Sur activation manuelle du service d'inactivité, le PiKVM s'éteint lorsque les deux conditions suivantes restent vraies pendant une heure :
 
 - aucun signal HDMI ;
 - aucune activité clavier ou souris via le KVM.
 
 Une activité clavier ou souris remet le compteur à zéro.
+
+Les installateurs et PIKVM-SHARE ne démarrent ni n'activent automatiquement
+`pikvm-auto-shutdown.service`. Son état volontairement désactivé est conservé.
 
 Le retour du signal HDMI remet également le compteur à zéro.
 
@@ -171,3 +174,19 @@ autorisation de déploiement. Ce chemin ne configure aucun GPIO et ne redémarre
 pas KVMD. Il exige une image existante et un Drive 1 déjà configuré.
 
 Voir [la procédure complète, les sauvegardes et la restauration](docs/pikvm-share.md).
+
+## PiKVM Portable OS — interface unifiée
+
+Première version sur la branche `codex/portable-os`, issue de `feature/pikvm-share`.
+Application unique à `/extras/portable-os/` : tableau de bord, moteur KVM natif
+intégré, bibliothèque d'images/Drive 0, SHARE/Drive 1, Wi-Fi, hotspot, terminal,
+journaux, alimentation et paramètres. Navigation sans rechargement, composants
+et dialogues partagés, thèmes sombre/clair, états centralisés.
+
+Sans dépendance serveur supplémentaire ni compilation sur le Pi. L'installation
+additive conserve toutes les interfaces historiques et leurs correctifs.
+Voir [architecture, tests, diagnostic Windows et déploiement](docs/portable-os.md).
+
+La candidate **0.2.0-rc.1** ajoute le précontrôle d'intégrité Python, la réparation
+ciblée préparée de logging, les contrôles d'attachement USB et la migration
+progressive. Voir [la procédure exacte et l'audit des modules](docs/portable-os-rc1.md).

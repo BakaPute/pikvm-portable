@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="fr" data-theme="dark">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <meta name="color-scheme" content="dark light">
+    <title>PiKVM Portable OS</title>
+    <link rel="icon" type="image/svg+xml" href="logo.svg">
+    <link rel="stylesheet" href="style.css">
+    <script src="app.js" type="module"></script>
+</head>
+<body>
+<a class="skip-link" href="#main">Aller au contenu</a>
+<aside class="sidebar" aria-label="Navigation principale">
+    <a class="brand" href="#dashboard"><img src="logo.svg" width="38" height="38" alt=""><span>PiKVM<span class="brand-secondary">PORTABLE OS</span></span><span class="version">RC1</span></a>
+    <div class="device"><span class="device-icon">P</span><div><strong>Pi Zero 2 W</strong><span>Console portable</span></div><span class="device-dot" aria-hidden="true"></span></div>
+    <nav id="navigation"></nav>
+    <div class="sidebar-footer"><a href="/kvm/" target="_blank" rel="noopener">Interface de secours ↗</a><span>Portable OS · première version</span></div>
+</aside>
+<div class="workspace">
+    <header class="topbar">
+        <div class="row"><button id="menu-toggle" class="menu-toggle quiet" type="button" aria-label="Ouvrir la navigation" aria-expanded="false">☰</button><span class="topbar-title">ESPACE DE TRAVAIL</span></div>
+        <div class="topbar-status"><span id="network-label">Réseau —</span><span class="separator"></span><span id="battery-label">Batterie —</span><button id="logout" class="quiet" type="button">Déconnexion</button></div>
+    </header>
+    <main id="main">
+        <div class="page-heading"><div><div class="eyebrow">PIKVM PORTABLE</div><h1 id="page-title">Connexion à votre PiKVM</h1><p id="page-subtitle">Vérification de la session et des services…</p></div><button id="refresh-all" type="button" class="quiet">Actualiser</button></div>
+        <div id="session-alert" class="alert" role="alert" hidden>Session PiKVM requise. <a href="/login/">Se reconnecter</a></div>
+        <div id="test-alert" class="alert warning" hidden>Aperçu local · données simulées · aucun PiKVM connecté.</div>
+        <div id="resource-alert" class="alert warning" role="status" hidden></div>
+        <div id="view" class="view" tabindex="-1"></div>
+        <div id="native-dock" hidden></div>
+        <footer class="workspace-footer"><span id="activity-label">Vérification de la session</span><span>Les états affichés sont ceux observés par PiKVM.</span></footer>
+    </main>
+</div>
+<div id="notifications" class="notifications" aria-live="polite"></div>
+<div id="dialogs"></div>
+</body>
+</html>

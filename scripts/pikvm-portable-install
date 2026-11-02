@@ -1,0 +1,279 @@
+#!/usr/bin/env python3
+"""Additive Portable OS install/restore. Never configures GPIO, gadget or Drive 0."""
+import argparse
+import ast
+import contextlib
+import importlib.machinery
+import importlib.util
+import http.client
+import json
+import os
+from pathlib import Path
+import re
+import subprocess
+import sys
+import time
+
+REPO = Path(__file__).resolve().parent.parent
+PORTABLE_SERVICE = 'pikvm-portable-api.service'
+SHARE_API = Path('/usr/local/bin/pikvm-share-api')
+SHARE_EXTRAS = Path('/usr/share/kvmd/extras/portable-os')
+LIB = Path('/usr/local/lib/pikvm-portable')
+
+
+def load(name, path):
+    loader = importlib.machinery.SourceFileLoader(name, str(path))
+    spec = importlib.util.spec_from_loader(loader.name, loader)
+    module = importlib.util.module_from_spec(spec)
+    loader.exec_module(module)
+    return module
+
+
+def helper():
+    path = REPO / 'scripts/pikvm-share-install'
+    if not path.exists():
+        path = LIB / 'installer.py'
+    if not path.is_file():
+        raise RuntimeError('Helper autonome absent : lancer depuis le dépôt complet.')
+    module = load('portable_installer_helpers', path)
+    module.SERVICE = PORTABLE_SERVICE
+    module.SHARE_UNIT = Path('/etc/systemd/system') / PORTABLE_SERVICE
+    module.SHARE_ENABLE_LINK = Path('/etc/systemd/system/multi-user.target.wants') / PORTABLE_SERVICE
+    module.BACKUPS = Path('/root/pikvm-portable-os-backups')
+    return module
+
+
+def manual_shutdown_policy(source):
+    """Remove only the known auto-shutdown start expression, preserving local fixes.
+
+    No AST unparse: leave all unrelated text, imports and Python 3.14 fixes intact.
+    Unknown ways of starting the service are rejected, never rewritten blindly.
+    """
+    tree = ast.parse(source)
+    lines = source.splitlines(keepends=True)
+    changes = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Expr) or not isinstance(node.value, ast.Call):
+            continue
+        call = node.value
+        if not call.args or not isinstance(call.args[0], (ast.List, ast.Tuple)):
+            continue
+        args = call.args[0].elts
+        if len(args) < 3 or not all(isinstance(arg, ast.Constant) for arg in args[:2]):
+            continue
+        if [arg.value for arg in args[:2]] != ['systemctl', 'start']:
+            continue
+        target = args[2]
+        if ((isinstance(target, ast.Name) and target.id == 'AUTO_SERVICE') or
+                (isinstance(target, ast.Constant) and target.value == 'pikvm-auto-shutdown.service')):
+            if len(args) != 3:
+                raise RuntimeError('Commande de redémarrage inattendue ; patch manuel requis.')
+            changes.append((node.lineno - 1, node.end_lineno))
+    for start, end in sorted(changes, reverse=True):
+        indent = lines[start][:len(lines[start]) - len(lines[start].lstrip())]
+        lines[start:end] = [indent + 'pass  # Portable OS: inactivity shutdown is manual-only.\n']
+    result = ''.join(lines)
+    for node in ast.walk(ast.parse(result)):
+        if isinstance(node, ast.Call):
+            fragment = ast.get_source_segment(result, node) or ''
+            if (re.search(r'systemctl.*\bstart\b', fragment, re.DOTALL) and
+                    ('AUTO_SERVICE' in fragment or 'pikvm-auto-shutdown.service' in fragment)):
+                raise RuntimeError('Redémarrage automatique non reconnu ; patch manuel requis.')
+    compile(result, 'pikvm-share-api', 'exec')
+    return result
+
+
+def policy_preflight():
+    if SHARE_API.is_symlink() or not SHARE_API.is_file():
+        raise RuntimeError('Installer/configurer SHARE avant Portable OS ; API ordinaire requise.')
+    source = SHARE_API.read_text()
+    patched = manual_shutdown_policy(source)
+    auth = load('portable_installed_share', SHARE_API)
+    if auth.kvmd_check() not in (401, 403):
+        raise RuntimeError('Une authentification PiKVM active est obligatoire.')
+    if patched != source:
+        backend = auth.LinuxBackend()
+        backend.validate_image()
+        if backend.drive() or backend.lease_read():
+            raise RuntimeError('Éjecter puis démonter/libérer SHARE avant le patch de politique.')
+        backend.ensure_unmounted()
+    return patched.encode(), patched != source
+
+
+def file_map():
+    result = {}
+    for relative, destination in (('web/extras/portable-os', '/usr/share/kvmd/web/extras/portable-os'),
+                                  ('kvmd-extras/portable-os', '/usr/share/kvmd/extras/portable-os')):
+        for source in (REPO / relative).rglob('*'):
+            parts = source.relative_to(REPO / relative).parts
+            if (source.is_file() and not source.is_symlink() and
+                    source.suffix in {'.js', '.css', '.svg', '.html', '.json', '.conf', '.yaml'} and
+                    not any(part.startswith('.') or part == 'node_modules' for part in parts)):
+                result[Path(destination) / source.relative_to(REPO / relative)] = (source.read_bytes(), 0o644)
+    for name in ('pikvm-portable-api', 'pikvm-portable-install'):
+        result[Path('/usr/local/bin') / name] = ((REPO / 'scripts' / name).read_bytes(), 0o755)
+    result[Path('/etc/systemd/system') / PORTABLE_SERVICE] = ((REPO / 'systemd' / PORTABLE_SERVICE).read_bytes(), 0o644)
+    result[LIB / 'installer.py'] = ((REPO / 'scripts/pikvm-share-install').read_bytes(), 0o644)
+    result[LIB / 'preflight.sh'] = ((REPO / 'scripts/pikvm-portable-preflight.sh').read_bytes(), 0o755)
+    return result
+
+
+def preflight():
+    path = REPO / 'scripts/pikvm-portable-preflight.sh'
+    if not path.exists():
+        path = LIB / 'preflight.sh'
+    if not path.is_file():
+        raise RuntimeError('Précontrôle de compatibilité absent.')
+    subprocess.run(['bash', str(path)], check=True, timeout=60)
+
+
+def verify_backup(h, backup):
+    manifest = json.loads((backup / 'manifest.json').read_text())
+    for entry in manifest['files']:
+        if entry['exists']:
+            source = backup / entry['file']
+            if source.is_symlink() or not source.resolve().is_relative_to(backup.resolve()):
+                raise RuntimeError('Chemin de sauvegarde interdit.')
+            if h.digest(source) != entry['sha256']:
+                raise RuntimeError('Sauvegarde altérée ; aucun service arrêté.')
+    return manifest
+
+
+def wait_ready(h, timeout=20):
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        connection = http.client.HTTPConnection('127.0.0.1', 9878, timeout=1)
+        try:
+            connection.request('GET', '/extras/portable-os/api/status')
+            response = connection.getresponse()
+            payload = json.loads(response.read(4096))
+            if (response.status == 401 and payload.get('ok') is False and
+                    response.getheader('Server', '').startswith('PiKVM-Portable-OS') and h.service_state()['active']):
+                return
+        except (OSError, ValueError, http.client.HTTPException):
+            pass
+        finally:
+            connection.close()
+        time.sleep(0.25)
+    raise RuntimeError('API Portable OS non prête ou authentification absente ; rollback requis.')
+
+
+@contextlib.contextmanager
+def mutation_lock():
+    import fcntl
+    fd = os.open('/run/pikvm-portable-install.lock', os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
+    with os.fdopen(fd, 'r+') as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        yield
+
+
+def nginx_config(h):
+    candidate = h.NGINX_CONFIG.with_name('portable-os-nginx.candidate')
+    try:
+        h.run(['kvmd-nginx-mkconf', str(h.NGINX_PREFIX / 'nginx.conf.mako'), str(candidate)])
+        dump = h.run(h.nginx_args('-T', candidate))
+        files = h.nginx_dump_files(dump)
+        for name in ('nginx.ctx-http.conf', 'nginx.ctx-server.conf'):
+            path = SHARE_EXTRAS / name
+            if files.get(path.resolve()) != path.read_text().strip():
+                raise RuntimeError('Include Portable OS absent ou modifié : ' + name)
+        server = files[(SHARE_EXTRAS / 'nginx.ctx-server.conf').resolve()]
+        api = h.nginx_location(server, '^~', '/extras/portable-os/api/')
+        web = h.nginx_location(server, '^~', '/extras/portable-os/')
+        for body in (api, web):
+            h.require_nginx_directive(body, r'\bauth_request\s+/auth_check\s*;', 'authentification Portable OS')
+        h.require_nginx_directive(api, r'\bproxy_pass\s+http://pikvm_portable_api\s*;', 'URI API conservée')
+        h.require_nginx_directive(api, r'\bproxy_set_header\s+X-Share-Origin\s+\$scheme://\$http_host\s*;', 'origine CSRF')
+        h.write_file(h.NGINX_CONFIG, candidate.read_bytes())
+        h.reload_nginx()
+    finally:
+        candidate.unlink(missing_ok=True)
+
+
+def active(h, service):
+    return subprocess.run(['systemctl', 'is-active', '--quiet', service],
+                          stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode == 0
+
+
+def install(h):
+    policy, changed = policy_preflight()
+    mapping = file_map()
+    if changed:
+        mapping[SHARE_API] = (policy, SHARE_API.stat().st_mode & 0o777)
+    backup = h.snapshot([*mapping, h.NGINX_CONFIG])
+    manifest_path = backup / 'manifest.json'
+    manifest = json.loads(manifest_path.read_text())
+    manifest['share_policy_patch'] = changed
+    manifest['share_was_active'] = active(h, 'pikvm-share-api.service')
+    h.write_file(manifest_path, json.dumps(manifest, indent=2).encode(), 0o600)
+    print('Sauvegarde : ' + str(backup), flush=True)
+    try:
+        if h.service_state()['active']:
+            h.run(['systemctl', 'stop', PORTABLE_SERVICE])
+        if changed:
+            h.run(['systemctl', 'stop', 'pikvm-share-api.service'])
+        for destination, (content, mode) in mapping.items():
+            h.write_file(destination, content, mode)
+        h.run(['systemctl', 'daemon-reload'])
+        if changed and manifest['share_was_active']:
+            h.run(['systemctl', 'start', 'pikvm-share-api.service'])
+        # Stage service/readiness before switching any public nginx routing.
+        h.run(['systemctl', 'start', PORTABLE_SERVICE])
+        wait_ready(h)
+        nginx_config(h)
+        h.run(['systemctl', 'enable', PORTABLE_SERVICE])
+    except Exception:
+        restore(h, backup)
+        raise
+    print('Portable OS prêt : /extras/portable-os/ — interfaces historiques conservées.')
+
+
+def restore(h, backup):
+    manifest = verify_backup(h, backup)
+    if manifest.get('share_policy_patch'):
+        # A live SHARE volume must never be interrupted to restore application files.
+        auth = load('portable_restore_share', SHARE_API)
+        backend = auth.LinuxBackend()
+        if backend.drive() or backend.lease_read():
+            raise RuntimeError('Éjecter et libérer SHARE avant restauration.')
+        backend.ensure_unmounted()
+        h.run(['systemctl', 'stop', 'pikvm-share-api.service'])
+    if h.service_state()['active']:
+        h.run(['systemctl', 'stop', PORTABLE_SERVICE])
+    restart = h.restore_files(backup)
+    h.reload_nginx()
+    if manifest.get('share_policy_patch') and manifest.get('share_was_active'):
+        h.run(['systemctl', 'start', 'pikvm-share-api.service'])
+    if restart:
+        h.run(['systemctl', 'start', PORTABLE_SERVICE])
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('action', choices=('check', 'install', 'restore'))
+    parser.add_argument('backup', nargs='?', type=Path)
+    args = parser.parse_args()
+    if not hasattr(os, 'geteuid') or os.geteuid() != 0:
+        raise SystemExit('root requis sur le PiKVM, après autorisation de déploiement.')
+    sys.dont_write_bytecode = True
+    if args.action != 'restore':
+        preflight()
+    h = helper()
+    if args.action == 'check':
+        _, changed = policy_preflight()
+        print('Précontrôle sans écriture ; patch SHARE nécessaire : ' + str(changed))
+    elif args.action == 'install':
+        with mutation_lock():
+            install(h)
+    elif args.backup:
+        with mutation_lock():
+            restore(h, args.backup.resolve(strict=True))
+    else:
+        parser.error('Chemin de sauvegarde requis pour restore')
+
+
+if __name__ == '__main__':
+    try:
+        main()
+    except Exception as exc:
+        raise SystemExit('ERREUR : ' + str(exc))

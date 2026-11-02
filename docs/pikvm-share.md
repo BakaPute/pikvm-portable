@@ -64,9 +64,9 @@ Le stockage peut rester RW après libération jusqu'à la prochaine demande RO
 native ; SHARE ne le remonte pas arbitrairement en RO au milieu d'un upload ISO.
 
 Pendant la réservation, le service d'arrêt automatique est arrêté s'il était
-actif ; il est redémarré à la libération. Son code et sa configuration restent
-inchangés. Une interruption laisse cette information dans la réservation pour
-la récupération. Après une éjection PC, choisir Web ou « Démonter / récupérer »
+actif ; il n'est jamais redémarré automatiquement à la libération. Son code et
+sa configuration restent inchangés. Même une réservation historique portant
+`auto_active=true` n'autorise aucun redémarrage. Après une éjection PC, choisir Web ou « Démonter / récupérer »
 pour libérer la réservation. Un arrêt manuel ou physique reste sous le contrôle
 de l'utilisateur ; éjecter et démonter avant un arrêt du Pi.
 
@@ -143,8 +143,8 @@ ro
 ```
 
 La destination doit être nouvelle. La copie est complète, contrôlée par SHA-256,
-accompagnée d'un fichier `.sha256`. L'arrêt automatique est suspendu pendant la
-copie. Conserver ensuite la copie et son empreinte hors du Pi, par transfert SSH
+accompagnée d'un fichier `.sha256`. L'arrêt automatique est arrêté s'il était
+actif pendant la copie, sans redémarrage automatique ensuite. Conserver la copie et son empreinte hors du Pi, par transfert SSH
 classique avec mot de passe interactif. Ne pas ajouter ces fichiers à Git.
 Une copie interrompue est conservée pour inspection et n'est pas une sauvegarde
 valide tant que sa vérification n'a pas réussi.

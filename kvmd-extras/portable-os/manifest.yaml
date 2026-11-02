@@ -1,0 +1,6 @@
+name: Portable OS
+description: Console unifiée PiKVM Portable
+icon: extras/portable-os/logo.svg
+path: extras/portable-os/
+daemon: pikvm-portable-api
+place: 5

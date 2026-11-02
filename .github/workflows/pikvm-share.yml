@@ -15,6 +15,9 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
       - name: Install nginx for real configuration validation
         run: sudo apt-get update && sudo apt-get install -y nginx
       - run: python -m unittest discover -s tests -v
@@ -23,3 +26,35 @@ jobs:
       - run: python -m py_compile scripts/pikvm-share-api scripts/pikvm-share-install scripts/pikvm-share-remount
       - run: bash -n install.sh && bash -n install-share.sh && bash -n scripts/pikvm-share-diagnose.sh
       - run: node --check web/extras/pikvm-share/app.js
+      - run: python -m py_compile scripts/pikvm-portable-api scripts/pikvm-portable-install
+      - run: node --test tests/portable-ui.test.mjs
+      - run: bash -n install-portable-os.sh && bash -n scripts/pikvm-portable-diagnose.sh
+      - run: bash -n scripts/pikvm-python-logging-repair.sh && bash -n scripts/pikvm-portable-preflight.sh
+  portable-browser:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.14'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Prepare isolated browser test tools (never installed on PiKVM)
+        run: |
+          npm --prefix "$RUNNER_TEMP/portable-browser-tools" install --no-save --package-lock=false playwright@1.62.1
+          "$RUNNER_TEMP/portable-browser-tools/node_modules/.bin/playwright" install --with-deps chromium
+      - name: Run browser integration against localhost simulation
+        env:
+          NODE_PATH: ${{ runner.temp }}/portable-browser-tools/node_modules
+        run: |
+          python tests/portable_preview.py --port 8765 > "$RUNNER_TEMP/portable-preview.log" 2>&1 &
+          PORTABLE_PREVIEW_PID=$!
+          trap 'kill "$PORTABLE_PREVIEW_PID" 2>/dev/null || true' EXIT
+          python -c "import urllib.request,time; time.sleep(1); assert urllib.request.urlopen('http://127.0.0.1:8765/extras/portable-os/').status == 200"
+          node tests/portable-browser.cjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: portable-os-ui
+          path: private/portable-os-*.png

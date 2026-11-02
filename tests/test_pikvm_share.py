@@ -506,11 +506,22 @@ class NativeSafetyTests(unittest.TestCase):
         backend = api.LinuxBackend()
         with patch.object(backend, 'validate_image'), patch.object(backend, 'ensure_unmounted'), \
              patch.object(backend, 'drive', side_effect=['', str(api.IMAGE)]), \
+             patch.object(Path, 'read_text', return_value='0'), \
              patch.object(api, 'command', return_value='') as run:
             backend.attach()
         args = run.call_args.args[0]
         self.assertEqual(args[:3], ['kvmd-otgmsd', '-i', '1'])
         self.assertNotIn('--eject', args)
+
+    def test_unexpected_attached_flags_never_trigger_eject_or_retry(self):
+        backend = api.LinuxBackend()
+        with patch.object(backend, 'validate_image'), patch.object(backend, 'ensure_unmounted'), \
+             patch.object(backend, 'drive', side_effect=['', str(api.IMAGE)]), \
+             patch.object(Path, 'read_text', return_value='1'), patch.object(api, 'command') as run:
+            with self.assertRaisesRegex(api.ShareError, 'Image attachée'):
+                backend.attach()
+        self.assertEqual(run.call_count, 1)
+        self.assertNotIn('--eject', run.call_args.args[0])
 
     def test_no_loop_created_when_drive_attached(self):
         backend = api.LinuxBackend()

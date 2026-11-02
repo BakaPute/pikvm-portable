@@ -1,0 +1,16 @@
+<!doctype html><html lang="fr"><head><title>KVMD lifecycle fixture</title></head>
+<body><h1>Moteur natif simulé pour les tests locaux</h1>
+<a href="/">Accueil natif</a><a href="/extras/image-manager/" onclick="window.unexpectedNativeNavigation = true">Images natives</a>
+<div id="stream-window" tabindex="0">Vidéo / clavier / souris simulés</div>
+<button id="shortcut">Ctrl Alt Suppr simulé</button><button id="macro">Macro simulée</button>
+<select id="quality" aria-label="Qualité native"><option>80</option><option>60</option></select>
+<script>
+window.lifecycle = {down:0, up:0, mouse:0, releases:0, shortcuts:0, macros:0};
+const stream = document.getElementById('stream-window');
+stream.onkeydown = () => lifecycle.down++;
+stream.onkeyup = () => lifecycle.up++;
+stream.onmousedown = () => lifecycle.mouse++;
+window.addEventListener('blur', () => lifecycle.releases++);
+document.getElementById('shortcut').onclick = () => lifecycle.shortcuts++;
+document.getElementById('macro').onclick = () => lifecycle.macros++;
+</script></body></html>

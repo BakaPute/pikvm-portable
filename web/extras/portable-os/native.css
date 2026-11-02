@@ -1,0 +1,6 @@
+/* Same-origin adapter loaded by Portable OS; never edits native assets or APIs. */
+:root { color-scheme:dark; }
+body { background-color:#101318 !important; color:#edf2f9; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif !important; }
+.navbar,.window,.modal { border-color:#2c3542 !important; }
+.navbar,.window-header { background-color:#181d25 !important; }
+button { border-radius:5px !important; }

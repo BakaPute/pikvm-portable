@@ -169,10 +169,9 @@ class LinuxBackend:
 
     def release(self):
         with storage_lock():
-            data = self.lease_read()
-            if data and data['auto_active']:
-                # Start while the lease is still held; failure retains recovery information.
-                command(['systemctl', 'start', AUTO_SERVICE])
+            # Never restart inactivity shutdown, including for a historical
+            # lease with auto_active=true. It is intentionally disabled by the
+            # Portable OS operator; only an explicit operator action may start it.
             self.lease.unlink(missing_ok=True)
             # Do not remount RO here: a native Drive 0 upload might still be writing.
 
@@ -251,6 +250,9 @@ class LinuxBackend:
                  '--set-image=' + str(self.image)])
         if not self.drive():
             raise ShareError('Connexion USB non confirmée.')
+        if (LUN / 'cdrom').read_text().strip() != '0' or (LUN / 'ro').read_text().strip() != '0':
+            # Keep the lease, never try changing/ejecting a now-attached medium.
+            raise ShareError('Image attachée, mais CD-ROM/RW inattendus. Éjecter côté PC avant récupération.')
 
 
 def safe_name(name):
