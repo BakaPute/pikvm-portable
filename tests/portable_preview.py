@@ -28,6 +28,16 @@ class Preview(SimpleHTTPRequestHandler):
 
     def do_GET(self):
         url = urlsplit(self.path)
+        if url.path in ('/', '/legacy'):
+            self.send_response(302); self.send_header('Location', '/extras/portable-os/' if url.path == '/' else '/legacy/'); self.end_headers(); return
+        if url.path == '/api/info':
+            return self.reply({'ok': True, 'result': {'auth': {'enabled': True}, 'extras': {
+                'webterm': {'name': 'Web Terminal', 'path': 'extras/webterm', 'place': 1, 'enabled': True},
+                'portable': {'name': 'Portable OS', 'path': 'extras/portable-os/', 'place': 5, 'enabled': True},
+                'wifi': {'name': 'Wi-Fi Wizard', 'path': 'extras/wifi-wizard', 'place': 10, 'enabled': True},
+                'images': {'name': 'Image Manager', 'path': 'extras/image-manager', 'place': 20, 'started': True},
+                'share': {'name': 'PIKVM-SHARE', 'path': 'extras/pikvm-share', 'place': 30, 'enabled': True},
+                'future': {'name': 'Future extension', 'path': 'extras/future', 'place': 40, 'enabled': True}}}})
         if url.path == '/api/auth/check':
             return self.reply({'ok': True, 'result': {}})
         if url.path == '/api/msd':

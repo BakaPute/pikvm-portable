@@ -1,5 +1,10 @@
 # PiKVM Portable OS — première version
 
+La navigation principale et l'adaptation KVM de **0.2.0-rc.2** sont décrites dans
+[portable-os-rc2.md](portable-os-rc2.md), avec les routes et procédures actuelles.
+Le document ci-dessous décrit l'architecture initiale ; RC2 remplace ses indications
+concernant l'entrée `/`, le secours et l'habillage du cadre KVM.
+
 La candidate stabilisée est décrite dans [portable-os-rc1.md](portable-os-rc1.md) :
 réparation ciblée préalable de Python, contrôles renforcés et procédure de migration.
 

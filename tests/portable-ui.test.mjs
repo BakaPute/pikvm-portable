@@ -5,6 +5,20 @@ import {Client, ApiError, Poller} from '../web/extras/portable-os/core/api.js';
 import {nativeRoute, releaseNativeInput} from '../web/extras/portable-os/core/native-bridge.js';
 import {getTheme, saveTheme} from '../web/extras/portable-os/core/preferences.js';
 import {createModules} from '../web/extras/portable-os/modules/index.js';
+import {routes, extensionLink} from '../web/legacy/routes.js';
+import {nativeMenus} from '../web/extras/portable-os/core/kvm-adapter.js';
+
+test('navigation contract keeps fallback independent and extension URLs local', () => {
+    assert.equal(routes.legacy, '/legacy/');
+    assert.equal(routes.kvm, '/kvm/');
+    assert.equal(extensionLink('extras/future', 'https://pikvm'), '/extras/future/?legacy=1');
+    assert.equal(extensionLink('//evil.example/tool', 'https://pikvm'), null);
+    assert.equal(extensionLink('https://evil.example/tool', 'https://pikvm'), null);
+    assert.equal(extensionLink(undefined, 'https://pikvm'), null);
+    assert.equal(extensionLink('/extras/future/?x=1', 'https://pikvm'), '/extras/future/?x=1&legacy=1');
+    assert.deepEqual(Object.keys(nativeMenus), ['msd-dropdown','atx-dropdown','shortcuts-dropdown',
+        'macro-dropdown','text-dropdown','system-dropdown']);
+});
 
 test('store preserves last known state and marks an unavailable source stale', () => {
     const store = new Store(); let calls = 0;

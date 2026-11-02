@@ -1,3 +1,4 @@
+import {routes} from '../../legacy/routes.js';
 import {Store} from './core/state.js';
 import {Client, Poller} from './core/api.js';
 import {el, icon, notify, guarded} from './core/ui.js';
@@ -5,6 +6,7 @@ import {Router} from './core/router.js';
 import {createModules} from './modules/index.js';
 import {getTheme} from './core/preferences.js';
 
+document.getElementById('fallback-link').href = routes.legacy;
 const store = new Store(), api = new Client(store), poller = new Poller(api, store);
 document.documentElement.dataset.theme = getTheme();
 const modules = createModules();

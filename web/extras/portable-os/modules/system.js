@@ -1,3 +1,4 @@
+import {routes} from '../../../legacy/routes.js';
 import {el, button, badge, card, row, hint, field, table, dialog, notify} from '../core/ui.js';
 import {powerSafe, usbEvidence} from '../core/state.js';
 import {getTheme, saveTheme} from '../core/preferences.js';
@@ -68,5 +69,5 @@ export const settings = {id: 'settings', title: 'Paramètres', subtitle: 'Préf�
                 hint('KVMD 4.213 n’expose pas de rôles distincts pour cette interface : aucun rôle administrateur artificiel n’est déduit côté navigateur.')),
             card('Compatibilité', hint('Cible : KVMD 4.213 · Python 3.14.7 · Raspberry Pi Zero 2 W.'),
                 hint('L’interface historique et les moteurs vidéo/HID ne sont pas remplacés. Une API absente est signalée ; aucune configuration matérielle n’est migrée silencieusement.'),
-                el('a', {href: '/kvm/', target: '_blank', rel: 'noopener', class: 'button quiet'}, 'Interface PiKVM de secours')));
+                el('a', {href: routes.legacy, target: '_blank', rel: 'noopener', class: 'button quiet'}, 'Interface PiKVM de secours')));
     }};

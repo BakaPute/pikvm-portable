@@ -6,6 +6,7 @@ import contextlib
 import importlib.machinery
 import importlib.util
 import http.client
+from html.parser import HTMLParser
 import json
 import os
 from pathlib import Path
@@ -19,6 +20,7 @@ PORTABLE_SERVICE = 'pikvm-portable-api.service'
 SHARE_API = Path('/usr/local/bin/pikvm-share-api')
 SHARE_EXTRAS = Path('/usr/share/kvmd/extras/portable-os')
 LIB = Path('/usr/local/lib/pikvm-portable')
+WEB_ROOT = Path('/usr/share/kvmd/web')
 
 
 def load(name, path):
@@ -102,7 +104,8 @@ def policy_preflight():
 
 def file_map():
     result = {}
-    for relative, destination in (('web/extras/portable-os', '/usr/share/kvmd/web/extras/portable-os'),
+    for relative, destination in (('web/legacy', '/usr/share/kvmd/web/legacy'),
+                                  ('web/extras/portable-os', '/usr/share/kvmd/web/extras/portable-os'),
                                   ('kvmd-extras/portable-os', '/usr/share/kvmd/extras/portable-os')):
         for source in (REPO / relative).rglob('*'):
             parts = source.relative_to(REPO / relative).parts
@@ -125,6 +128,31 @@ def preflight():
     if not path.is_file():
         raise RuntimeError('Précontrôle de compatibilité absent.')
     subprocess.run(['bash', str(path)], check=True, timeout=60)
+    navigation_preflight()
+
+
+def navigation_preflight():
+    """Read-only native DOM contract: never patch KVMD's own frontend."""
+    class NativeDocument(HTMLParser):
+        ids = None
+        full_tab = False
+
+        def handle_starttag(self, tag, attrs):
+            values = dict(attrs)
+            if values.get('id'):
+                self.ids.add(values['id'])
+            if tag == 'button' and 'data-wm-window-set-full-tab' in values:
+                self.full_tab = True
+    native = WEB_ROOT / 'kvm/index.html'
+    if native.is_symlink() or not native.is_file():
+        raise RuntimeError('Document KVM natif ordinaire absent ; installation interrompue.')
+    parser = NativeDocument()
+    parser.ids = set()
+    parser.feed(native.read_text(encoding='utf-8'))
+    required = {'navbar', 'stream-window', 'hid-mute-switch', 'msd-dropdown', 'atx-dropdown',
+                'shortcuts-dropdown', 'macro-dropdown', 'text-dropdown', 'system-dropdown'}
+    if required - parser.ids or not parser.full_tab:
+        raise RuntimeError('Contrat KVM 4.213 incompatible ; aucun fichier natif modifié.')
 
 
 def verify_backup(h, backup):
@@ -182,6 +210,16 @@ def nginx_config(h):
         web = h.nginx_location(server, '^~', '/extras/portable-os/')
         for body in (api, web):
             h.require_nginx_directive(body, r'\bauth_request\s+/auth_check\s*;', 'authentification Portable OS')
+        entry = h.nginx_location(server, '=', '/')
+        h.require_nginx_directive(entry, r'\breturn\s+302\s+/extras/portable-os/\s*;', 'entrée sans boucle')
+        legacy = h.nginx_location(server, '^~', '/legacy/')
+        h.require_nginx_directive(legacy, r'\bauth_request\s+/auth_check\s*;', 'authentification secours')
+        h.require_nginx_directive(legacy, r'\broot\s+/usr/share/kvmd/web\s*;', 'secours autonome')
+        if re.search(r'location\s+(?:=|\^~)?\s*/(?:kvm|api|share)/?\s*\{', server):
+            raise RuntimeError('Une route native est remplacée par Portable OS.')
+        for name in ('index.html', 'main.js', 'routes.js', 'style.css'):
+            if not (WEB_ROOT / 'legacy' / name).is_file():
+                raise RuntimeError('Secours incomplet : ' + name)
         h.require_nginx_directive(api, r'\bproxy_pass\s+http://pikvm_portable_api\s*;', 'URI API conservée')
         h.require_nginx_directive(api, r'\bproxy_set_header\s+X-Share-Origin\s+\$scheme://\$http_host\s*;', 'origine CSRF')
         h.write_file(h.NGINX_CONFIG, candidate.read_bytes())

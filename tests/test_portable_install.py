@@ -20,6 +20,33 @@ loader.exec_module(portable)
 
 
 class PortableInstallTests(unittest.TestCase):
+    def test_navigation_preflight_accepts_native_contract_and_rejects_missing_control(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / 'kvm').mkdir()
+            native = root / 'kvm/index.html'
+            source = (ROOT / 'tests/fixtures/native-kvm.html').read_text(encoding='utf-8') + '<!-- ℹ -->'
+            # Menu IDs in this instrumented browser fixture are constructed in JS;
+            # a native production document declares them directly in its HTML.
+            source += ''.join(f'<li id="{name}"></li>' for name in
+                              ('msd-dropdown', 'atx-dropdown', 'shortcuts-dropdown',
+                               'macro-dropdown', 'text-dropdown', 'system-dropdown'))
+            source += '<input id="hid-mute-switch">'
+            native.write_text(source, encoding='utf-8')
+            with patch.object(portable, 'WEB_ROOT', root):
+                portable.navigation_preflight()
+                native.write_text(source.replace('data-wm-window-set-full-tab', 'data-unknown'), encoding='utf-8')
+                with self.assertRaisesRegex(RuntimeError, 'incompatible'):
+                    portable.navigation_preflight()
+
+    def test_payload_is_additive_and_contains_independent_fallback(self):
+        mapping = portable.file_map()
+        self.assertIn(Path('/usr/share/kvmd/web/legacy/main.js'), mapping)
+        self.assertIn(Path('/usr/share/kvmd/web/legacy/routes.js'), mapping)
+        self.assertNotIn(Path('/usr/share/kvmd/web/index.html'), mapping)
+        self.assertNotIn(Path('/usr/share/kvmd/web/kvm/index.html'), mapping)
+        self.assertNotIn(Path('/etc/kvmd/nginx/kvmd.ctx-server.conf'), mapping)
+
     def test_repeated_install_restore_and_failed_install_leave_native_files_untouched(self):
         with tempfile.TemporaryDirectory() as directory, contextlib.ExitStack() as stack:
             root = Path(directory)
@@ -32,6 +59,8 @@ class PortableInstallTests(unittest.TestCase):
             native = root / 'native-kvmd.html'
             native.write_bytes(b'native Python 3.14 and web fixes')
             target = root / 'portable.html'
+            fallback = root / 'legacy/main.js'
+            routes = root / 'portable-server.conf'
             state = {'active': False, 'enabled': False}
             def run(args):
                 if args[:2] == ['systemctl', 'start']:
@@ -47,17 +76,21 @@ class PortableInstallTests(unittest.TestCase):
             stack.enter_context(patch.object(portable, 'policy_preflight', return_value=(b'', False)))
             stack.enter_context(patch.object(portable, 'active', return_value=True))
             stack.enter_context(patch.object(portable, 'wait_ready'))
-            stack.enter_context(patch.object(portable, 'file_map', return_value={target: (b'portable app', 0o644)}))
+            stack.enter_context(patch.object(portable, 'file_map', return_value={target: (b'portable app', 0o644),
+                fallback: (b'independent fallback', 0o644), routes: (b'entry and legacy routes', 0o644)}))
             stack.enter_context(patch('sys.stdout', new_callable=io.StringIO))
             with patch.object(portable, 'nginx_config'):
                 portable.install(h)
                 first = next(h.BACKUPS.iterdir())
                 portable.install(h)
             self.assertEqual(target.read_bytes(), b'portable app')
+            self.assertEqual(fallback.read_bytes(), b'independent fallback')
             self.assertEqual(native.read_bytes(), b'native Python 3.14 and web fixes')
             portable.restore(h, first)
             portable.restore(h, first)
             self.assertFalse(target.exists())
+            self.assertFalse(fallback.exists())
+            self.assertFalse(routes.exists())
             self.assertEqual(h.NGINX_CONFIG.read_bytes(), b'original nginx')
             with patch.object(portable, 'nginx_config', side_effect=RuntimeError('invalid nginx')):
                 with self.assertRaisesRegex(RuntimeError, 'invalid nginx'):
@@ -99,6 +132,7 @@ class PortableNginxTests(unittest.TestCase):
                     return result.stdout.strip()
                 raise AssertionError('Unexpected system command')
             stack.enter_context(patch.object(portable, 'SHARE_EXTRAS', extra))
+            stack.enter_context(patch.object(portable, 'WEB_ROOT', ROOT / 'web'))
             stack.enter_context(patch.object(h, 'run', side_effect=run))
             reload = stack.enter_context(patch.object(h, 'reload_nginx'))
             portable.nginx_config(h)
@@ -107,6 +141,21 @@ class PortableNginxTests(unittest.TestCase):
             self.assertIn('127.0.0.1:9878', dump)
             self.assertIn('127.0.0.1:9877', dump)
             self.assertIn('proxy_intercept_errors off;', dump)
+            # Valid nginx syntax is insufficient: reject a loop or unprotected
+            # fallback before replacing the active generated configuration.
+            source = extra / 'nginx.ctx-server.conf'
+            original = source.read_text()
+            active_config = fixture.config.read_bytes()
+            for before, after in [('return 302 /extras/portable-os/;', 'return 302 /;'),
+                                  ('location ^~ /legacy/ {\n    auth_request /auth_check;',
+                                   'location ^~ /legacy/ {\n    auth_request off;')]:
+                with self.subTest(after=after):
+                    source.write_text(original.replace(before, after))
+                    with self.assertRaises(RuntimeError):
+                        portable.nginx_config(h)
+                    self.assertEqual(fixture.config.read_bytes(), active_config)
+                    self.assertEqual(reload.call_count, 1)
+            source.write_text(original)
 
 
 if __name__ == '__main__':

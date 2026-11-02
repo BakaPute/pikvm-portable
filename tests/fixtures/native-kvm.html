@@ -1,13 +1,35 @@
-<!doctype html><html lang="fr"><head><title>KVMD lifecycle fixture</title></head>
-<body><h1>Moteur natif simulé pour les tests locaux</h1>
-<a href="/">Accueil natif</a><a href="/extras/image-manager/" onclick="window.unexpectedNativeNavigation = true">Images natives</a>
-<div id="stream-window" tabindex="0">Vidéo / clavier / souris simulés</div>
-<button id="shortcut">Ctrl Alt Suppr simulé</button><button id="macro">Macro simulée</button>
-<select id="quality" aria-label="Qualité native"><option>80</option><option>60</option></select>
+<!doctype html><html lang="fr"><head><title>KVMD lifecycle fixture</title>
+<style>.hidden{display:none}.menu{background:#222;color:white}#stream-window{background:#111;color:#eee}#stream-box{min-height:300px;padding-top:180px}</style></head>
+<body><ul id="navbar"><li><a href="/">PiKVM</a></li></ul>
+<div id="stream-window" tabindex="0"><div id="stream-window-header" class="window-header"><button data-wm-window-set-full-tab>Full tab</button></div>
+<div id="stream-box">Vidéo / clavier / souris simulés</div></div>
+<div class="hidden window" id="keyboard-window" style="position:fixed;bottom:60px;left:0;z-index:2147483643;background:#222"><button data-wm-window-close aria-label="Fermer le clavier">Fermer</button>Clavier natif simulé</div>
+<div class="hidden window" id="mouse-window" style="position:fixed;bottom:60px;left:0;z-index:2147483643;background:#222"><button data-wm-window-close aria-label="Fermer la souris">Fermer</button>Souris native simulée</div>
+<footer class="footer">Version native simulée</footer>
 <script>
 window.lifecycle = {down:0, up:0, mouse:0, releases:0, shortcuts:0, macros:0};
+document.querySelector('[data-wm-window-set-full-tab]').onclick=()=>document.getElementById('stream-window').classList.add('window-full-tab');
+for (const [id,title,content] of [
+ ['msd-dropdown','Drive','<a href="/extras/image-manager/" onclick="window.unexpectedNativeNavigation = true">Images natives</a>'],
+ ['atx-dropdown','ATX','<button disabled>Power simulé indisponible</button>'],
+ ['shortcuts-dropdown','Shortcuts','<button id="shortcut">Ctrl Alt Suppr simulé</button>'],
+ ['macro-dropdown','Macro','<button id="macro">Macro simulée</button>'],
+ ['text-dropdown','Text','<textarea aria-label="Texte natif"></textarea>'],
+ ['system-dropdown','System','<input id="hid-mute-switch" type="checkbox"><select id="quality" aria-label="Qualité native"><option>80</option><option>60</option></select><button data-wm-window-show="keyboard-window">Clavier natif</button><button data-wm-window-show="mouse-window">Souris native</button>']]) {
+ const li = document.createElement('li'); li.id=id;
+ li.innerHTML='<div class="menu-button"><span>'+title+'</span></div><div class="menu hidden">'+content+'</div>';
+ document.getElementById('navbar').append(li);
+ li.querySelector('.menu-button').onmousedown=li.querySelector('.menu-button').ontouchstart=event=>{
+  event.preventDefault();
+  const menu=li.querySelector('.menu'), hidden=menu.classList.contains('hidden');
+  document.querySelectorAll('.menu').forEach(m=>m.classList.add('hidden'));
+  menu.classList.toggle('hidden',!hidden);
+ };
+}
+document.querySelectorAll('[data-wm-window-show]').forEach(button=>button.onclick=()=>document.getElementById(button.dataset.wmWindowShow).classList.remove('hidden'));
+document.querySelectorAll('[data-wm-window-close]').forEach(button=>button.onclick=()=>button.closest('.window').classList.add('hidden'));
 const stream = document.getElementById('stream-window');
-stream.onkeydown = () => lifecycle.down++;
+stream.onkeydown = () => {if(!document.getElementById('hid-mute-switch').checked) lifecycle.down++};
 stream.onkeyup = () => lifecycle.up++;
 stream.onmousedown = () => lifecycle.mouse++;
 window.addEventListener('blur', () => lifecycle.releases++);

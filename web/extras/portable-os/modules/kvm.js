@@ -1,33 +1,66 @@
 import {el, button, hint, notify} from '../core/ui.js';
 import {releaseNativeInput, bridgeNavigation} from '../core/native-bridge.js';
+import {adaptKvm} from '../core/kvm-adapter.js';
+import {routes} from '../../../legacy/routes.js';
 export function nativeFrameModule({id, title, subtitle, icon, source}) {
-    let wrapper, frame, unbridge;
-    return {id, title, subtitle, icon, group: id === 'kvm' ? 'ESPACE DE TRAVAIL' : 'SYSTÈME', mount(outlet) {
+    let wrapper, frame, unbridge, adapter, mounted = false;
+    return {id, title, subtitle, icon, group: id === 'kvm' ? 'ESPACE DE TRAVAIL' : 'SYSTÈME', mount(outlet, context) {
+        mounted = true;
         const dock = document.getElementById('native-dock');
+        const fullscreen = () => (document.fullscreenElement ? document.exitFullscreen() : wrapper.requestFullscreen())
+            .catch(error => notify(error.message, true));
         if (!wrapper) {
             frame = el('iframe', {title, src: source, allow: 'fullscreen; autoplay; clipboard-read; clipboard-write', allowFullscreen: true,
-                onload: () => {
+                onload: async () => {
+                    adapter?.destroy(); adapter = null; unbridge?.();
+                    wrapper.querySelector('.native-error')?.remove();
                     try {
                         const doc = frame.contentDocument;
                         if (doc.querySelector('input[type=password]') || /\/login\/?/.test(frame.contentWindow.location.pathname)) {
+                            frame.style.display = 'none';
+                            wrapper.append(el('p', {class: 'native-error alert'},
+                                el('a', {href: routes.login}, 'Session expirée : se reconnecter à PiKVM')));
                             notify('La session native nécessite une reconnexion PiKVM.', true); return;
                         }
-                        if (!doc.getElementById('portable-native-style')) doc.head.append(el('link', {id: 'portable-native-style',
-                            rel: 'stylesheet', href: '/extras/portable-os/native.css'}));
-                        unbridge?.();
+                        for (const name of ['native', ...(id === 'kvm' ? ['kvm'] : [])])
+                            if (!doc.getElementById('portable-' + name + '-style')) await new Promise((resolve, reject) => {
+                                const timeout = setTimeout(() => reject(new Error('Style KVM indisponible.')), 5000);
+                                const done = callback => { clearTimeout(timeout); callback(); };
+                                doc.head.append(el('link', {id: 'portable-' + name + '-style', rel: 'stylesheet',
+                                    href: '/extras/portable-os/' + name + '.css', onload: () => done(resolve),
+                                    onerror: () => done(() => reject(new Error('Style KVM indisponible.')))}));
+                            });
+                        if (frame.contentDocument !== doc) return;
+                        if (id === 'kvm') adapter = adaptKvm(frame, fullscreen);
+                        frame.style.visibility = 'visible'; frame.style.display = 'block';
+                        if (!mounted || context?.store.data.session !== 'ready') adapter?.suspend();
                         unbridge = bridgeNavigation(frame, route => { location.hash = '#' + route; });
-                    } catch { notify('Le moteur natif ne peut pas être intégré. Utilise l’interface de secours.', true); }
+                    } catch (error) {
+                        releaseNativeInput(frame); frame.style.display = 'none';
+                        wrapper.append(el('p', {class: 'native-error alert', role: 'alert'}, error.message, ' ',
+                            el('a', {href: source, target: '_blank', rel: 'noopener'}, 'Ouvrir le moteur natif de secours')));
+                        notify(error.message, true);
+                    }
                 }});
+            if (id === 'kvm') frame.style.visibility = 'hidden';
             wrapper = el('section', {class: 'native-panel'}, frame); dock.append(wrapper);
         }
         wrapper.hidden = false; dock.hidden = false;
+        const resize = () => wrapper.style.setProperty('--native-height',
+            Math.max(280, innerHeight - (wrapper.getBoundingClientRect().top + scrollY) - 24) + 'px');
+        const layout = requestAnimationFrame(resize);
+        window.addEventListener('resize', resize);
+        if (context?.store.data.session === 'ready') adapter?.resume();
         outlet.append(el('div', {class: 'native-toolbar'}, hint(id === 'kvm' ?
-            'Vidéo, HID, raccourcis, macros et qualité : moteur PiKVM natif conservé.' : 'Terminal PiKVM natif · session authentifiée'),
+            'Moteur KVMD natif · Ctrl+Maj+Échap libère la capture · commandes en bas à droite.' : 'Terminal PiKVM natif · session authentifiée'),
             button(id === 'kvm' ? 'Activer clavier / souris' : 'Activer le terminal', () => {
-                frame.contentWindow.focus();
-                frame.contentDocument?.getElementById('stream-window')?.focus();
-            }, 'quiet'),
-            button('Plein écran', () => wrapper.requestFullscreen().catch(error => notify(error.message, true)), 'quiet')));
-        return () => { releaseNativeInput(frame); wrapper.hidden = true; dock.hidden = true; };
+                if (context?.store.data.session !== 'ready') return notify('Session PiKVM requise.', true);
+                if (id === 'kvm') adapter?.enable(); else frame.contentWindow.focus();
+            }, 'quiet'), button('Plein écran', fullscreen, 'quiet')));
+        const unsubscribe = context?.store.subscribe(data => {
+            if (data.session === 'expired') { adapter?.suspend(); releaseNativeInput(frame); }
+        });
+        return () => { mounted = false; cancelAnimationFrame(layout); window.removeEventListener('resize', resize);
+            unsubscribe?.(); adapter?.suspend(); releaseNativeInput(frame); wrapper.hidden = true; dock.hidden = true; };
     }};
 }

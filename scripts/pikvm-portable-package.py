@@ -8,13 +8,13 @@ from pathlib import Path
 import tarfile
 
 ROOT = Path(__file__).resolve().parent.parent
-RELEASE = 'pikvm-portable-os-0.2.0-rc.1'
+RELEASE = 'pikvm-portable-os-0.2.0-rc.2'
 FILES = ('install-portable-os.sh', 'systemd/pikvm-portable-api.service',
          'scripts/pikvm-portable-api', 'scripts/pikvm-portable-install',
          'scripts/pikvm-share-install', 'scripts/pikvm-portable-preflight.sh',
          'scripts/pikvm-python-logging-repair.sh', 'scripts/pikvm-portable-diagnose.sh',
          'scripts/pikvm-share-windows-diagnose.ps1', 'scripts/pikvm-portable-package.py',
-         'docs/portable-os-rc1.md', 'docs/portable-os.md')
+         'docs/portable-os-rc1.md', 'docs/portable-os-rc2.md', 'docs/portable-os.md')
 
 
 def payload():
@@ -24,7 +24,7 @@ def payload():
         if path.is_symlink() or not path.is_file():
             raise RuntimeError('Release source missing or symbolic: ' + relative)
         result[relative] = path.read_bytes()
-    for relative in ('web/extras/portable-os', 'kvmd-extras/portable-os'):
+    for relative in ('web/legacy', 'web/extras/portable-os', 'kvmd-extras/portable-os'):
         for path in sorted((ROOT / relative).rglob('*')):
             parts = path.relative_to(ROOT / relative).parts
             if (path.is_file() and not path.is_symlink() and

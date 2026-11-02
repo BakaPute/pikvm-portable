@@ -1,0 +1,11 @@
+<!doctype html>
+<html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>PiKVM · interface de secours</title><link rel="stylesheet" href="/legacy/style.css">
+<script type="module" src="/legacy/main.js"></script></head>
+<body><main><h1>PiKVM</h1><p>Interface de secours</p>
+<!-- Static essential links survive a JavaScript failure; routes.js enhances them. -->
+<nav aria-label="Applications PiKVM"><a data-link="kvm" href="/kvm/">KVM</a><a data-link="terminal" href="/extras/webterm/ttyd/">Terminal</a>
+<button id="logout" type="button">Logout</button><a data-link="portable" href="/extras/portable-os/">Portable OS</a>
+<details><summary>Extras</summary><div id="extras" aria-live="polite">Chargement des applications…</div></details></nav>
+<noscript><p>JavaScript est requis pour Extras et Logout. KVM et Terminal restent accessibles.</p></noscript>
+<p id="status" role="status"></p></main></body></html>

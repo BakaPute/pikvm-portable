@@ -190,3 +190,7 @@ Voir [architecture, tests, diagnostic Windows et déploiement](docs/portable-os.
 La candidate **0.2.0-rc.1** ajoute le précontrôle d'intégrité Python, la réparation
 ciblée préparée de logging, les contrôles d'attachement USB et la migration
 progressive. Voir [la procédure exacte et l'audit des modules](docs/portable-os-rc1.md).
+
+La candidate **0.2.0-rc.2** fait de Portable OS l'entrée `/`, intègre les contrôles
+KVM natifs dans une barre flottante et conserve un menu de secours autonome
+`/legacy/`. Voir [mise à jour, tests et retour arrière](docs/portable-os-rc2.md).

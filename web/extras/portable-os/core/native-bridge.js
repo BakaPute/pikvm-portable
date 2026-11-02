@@ -1,10 +1,8 @@
-const routes = new Map([['/', 'dashboard'], ['/kvm/', 'kvm'],
-    ['/extras/image-manager/', 'images'], ['/extras/pikvm-share/', 'share'],
-    ['/extras/wifi-wizard/', 'network'], ['/power-terminal/', 'terminal']]);
+import {toolRoutes} from '../../../legacy/routes.js';
 export function nativeRoute(url, origin) {
     if (url.origin !== origin || url.searchParams.get('legacy') === '1' || url.hash) return null;
     const path = url.pathname.replace(/index\.html$/, '');
-    return routes.get(path.endsWith('/') ? path : path + '/') || null;
+    return toolRoutes.get(path.endsWith('/') ? path : path + '/') || null;
 }
 export function releaseNativeInput(frame) {
     try {
