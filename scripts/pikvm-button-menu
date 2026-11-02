@@ -12,6 +12,7 @@ from PIL import Image, ImageDraw, ImageFont
 import sys
 sys.path.insert(0, "/usr/local/lib/pikvm-portable")
 from pikvm_oled import MirrorDevice, LogicalButton, AsyncCache, ButtonReader
+from pikvm_gpio import pinctrl_sample, select_reader
 
 
 BUTTON = 18
@@ -91,14 +92,7 @@ def physical_button_down():
 
     try:
 
-        out = cmd(
-            ["pinctrl", "get", str(BUTTON)],
-            .3
-        )
-
-        if "| hi" in out or re.search(r"\bhi\b", out): return True
-        if "| lo" in out or re.search(r"\blo\b", out): return False
-        return None
+        return pinctrl_sample()
 
     except Exception:
 
@@ -2759,18 +2753,24 @@ def configure_async_readers():
     DISPLAY_IMAGES = cache.wrap(image_files, None, interval=1)
     for name, default in [('battery_percent',None),('battery_charging',False),('current_ssid',None),('wifi_password',None),('load_hotspot',{})]:
         globals()[name] = cache.wrap(globals()[name], default, interval=1)
-    reader = ButtonReader(physical_button_down)
+    read, device, diagnostic = select_reader(physical_button_down)
+    reader = ButtonReader(read, resource=device, diagnostic=diagnostic)
     physical_button_down = reader.read
     return cache, reader
 
 
 def main():
-    configure_async_readers()
+    cache, reader = configure_async_readers()
     from pikvm_oled import BUTTON_HEARTBEAT
     INPUT.heartbeat = BUTTON_HEARTBEAT
+    INPUT.input_status = reader.status
     # GPIO18 is configured by the existing power-hold startup, never by web input.
-    with INPUT.listen():
-        button_loop()
+    try:
+        with INPUT.listen():
+            button_loop()
+    finally:
+        reader.close()
+        cache.close()
 
 
 if __name__ == "__main__":

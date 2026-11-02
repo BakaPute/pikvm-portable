@@ -42,14 +42,33 @@ def number(value):
     except (AttributeError,ValueError,IndexError):return None
 
 
-def sample(proc=Path('/proc'), threads=True):
+def cgroup_stats(name, root):
+    path=(root/name.lstrip('/')).resolve()
+    if not path.is_relative_to(root.resolve()):return None
+    try:
+        info=path.stat()
+        values=dict(line.split() for line in text(path/'cpu.stat').splitlines())
+        return {'identity':[info.st_dev,info.st_ino],'usage_usec':number(values.get('usage_usec')),
+                'memory_current_bytes':number(text(path/'memory.current')),
+                'pids_current':number(text(path/'pids.current'))}
+    except (OSError,ValueError):return None
+
+
+def sample(proc=Path('/proc'), threads=True, cgroup_root=Path('/sys/fs/cgroup')):
     processes=[]
+    groups={}
     for path in proc.iterdir():
         if not path.name.isdigit():continue
         cgroup=text(path/'cgroup')
         service=next((part for part in re.split(r'[/\n]',cgroup)
                       if part.endswith('.service') and part.startswith(('pikvm-','kvmd','wifi-wizard'))),None)
         if not service:continue
+        group=next((line[3:] for line in cgroup.splitlines() if line.startswith('0::')),None)
+        if group and service in group.strip('/').split('/'):
+            parts=group.strip('/').split('/')
+            group='/'+'/'.join(parts[:parts.index(service)+1])
+        if group and service not in groups:
+            groups[service]=cgroup_stats(group,cgroup_root)
         info=stat(path/'stat')
         if not info:continue
         status=fields(path/'status');io=fields(path/'io');memory=fields(path/'smaps_rollup')
@@ -67,7 +86,7 @@ def sample(proc=Path('/proc'), threads=True):
             info['tasks']=[item for item in tasks if item]
         processes.append(info)
     cpu=text(proc/'stat').splitlines()
-    return {'monotonic':time.monotonic(),'time':time.time(),'processes':processes,
+    return {'monotonic':time.monotonic(),'time':time.time(),'processes':processes,'cgroups':groups,
         'memory_kib':{key:number(value) for key,value in fields(proc/'meminfo').items()},
         'cpu_ticks':[int(x) for x in cpu[0].split()[1:]] if cpu and cpu[0].startswith('cpu ') else [],
         'net_dev':text(proc/'net/dev'),'diskstats':text(proc/'diskstats'),
@@ -76,6 +95,14 @@ def sample(proc=Path('/proc'), threads=True):
 
 def compare(current, previous, hz):
     elapsed=current['monotonic']-previous['monotonic']
+    for name,group in current.get('cgroups',{}).items():
+        if not group:continue
+        group['cpu_percent_one_core']=None
+        before=previous.get('cgroups',{}).get(name)
+        if (elapsed>0 and before and group['identity']==before['identity'] and
+                group['usage_usec'] is not None and before['usage_usec'] is not None and
+                group['usage_usec']>=before['usage_usec']):
+            group['cpu_percent_one_core']=round((group['usage_usec']-before['usage_usec'])/10000/elapsed,3)
     old={(p['pid'],p['start']):p for p in previous['processes']}
     for process in current['processes']:
         before=old.get((process['pid'],process['start']))
@@ -97,6 +124,7 @@ def summarize(current):
         services.setdefault(process['service'],[]).append(process)
     current['services']={name:{
         'processes':len(items),
+        'cgroup':current.get('cgroups',{}).get(name),
         **{field:sum(item[field] for item in items) if all(item.get(field) is not None for item in items) else None
            for field in ('rss_kib','pss_kib','threads','fds','cpu_percent_one_core')}}
         for name,items in services.items()}

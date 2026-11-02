@@ -177,6 +177,7 @@ sauvegarder /usr/share/kvmd/web/share/js/drive-folders.js
 sauvegarder /usr/local/bin/pikvm-oled-custom
 sauvegarder /usr/local/bin/pikvm-button-menu
 sauvegarder /usr/local/lib/pikvm-portable/pikvm_oled.py
+sauvegarder /usr/local/lib/pikvm-portable/pikvm_gpio.py
 
 echo "[OK] Sauvegardes : $BACKUP"
 
@@ -185,6 +186,7 @@ echo "[3/8] Installation des scripts..."
 
 install -d -m 755 /usr/local/lib/pikvm-portable
 install -m 644 "$REPO/scripts/pikvm_oled.py" /usr/local/lib/pikvm-portable/pikvm_oled.py
+install -m 644 "$REPO/scripts/pikvm_gpio.py" /usr/local/lib/pikvm-portable/pikvm_gpio.py
 
 install -m 755 \
     "$REPO/scripts/pikvm-oled-custom" \

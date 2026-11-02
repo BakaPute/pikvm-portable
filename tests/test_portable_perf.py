@@ -17,6 +17,23 @@ sampler=importlib.util.module_from_spec(spec);loader.exec_module(sampler)
 
 
 class PerfTests(unittest.TestCase):
+    def test_cgroup_cpu_counts_exited_children_and_rejects_counter_reset(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root=Path(directory);unit=root/'system.slice/pikvm-button-menu.service';unit.mkdir(parents=True)
+            (unit/'cpu.stat').write_text('usage_usec 1000000\nuser_usec 800000\nsystem_usec 200000\n')
+            (unit/'memory.current').write_text('4096\n');(unit/'pids.current').write_text('5\n')
+            group=sampler.cgroup_stats('/system.slice/pikvm-button-menu.service',root)
+            previous={'monotonic':10,'processes':[],'cgroups':{'button':group}}
+            (unit/'cpu.stat').write_text('usage_usec 7000000\n')
+            current={'monotonic':40,'processes':[],'cgroups':{'button':sampler.cgroup_stats('/system.slice/pikvm-button-menu.service',root)}}
+            sampler.compare(current,previous,100)
+            self.assertEqual(current['cgroups']['button']['cpu_percent_one_core'],20)
+            self.assertEqual(group['memory_current_bytes'],4096)
+            current['cgroups']['button']['usage_usec']=0
+            sampler.compare(current,previous,100)
+            self.assertIsNone(current['cgroups']['button']['cpu_percent_one_core'])
+            self.assertIsNone(sampler.cgroup_stats('../../outside',root))
+
     def test_status_redraws_on_real_countdown_or_cache_change_and_refreshes_between(self):
         now=[100.0];ticks=[0];draws=[]
         class Finished(Exception):pass

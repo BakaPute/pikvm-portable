@@ -215,3 +215,7 @@ Pour un précontrôle RC6 intermittent : [supervision par commande, journaux et 
 La candidate **0.2.0-rc.7** réduit les dessins OLED et les pixels redondants,
 suspend les rafraîchissements cachés et ajoute un diagnostic Linux passif :
 [audit, mesures locales, validation sur Pi et rollback RC6](docs/portable-os-rc7.md).
+
+La candidate **0.2.0-rc.8** ajoute un lecteur GPIO18 persistant en lecture seule,
+avec sélection matérielle prudente et diagnostic CPU cgroup :
+[audit, vérifications passives, installation et rollback RC7](docs/portable-os-rc8.md).

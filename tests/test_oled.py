@@ -383,6 +383,12 @@ class InstallTests(unittest.TestCase):
             with patch.object(portable, 'BIN', root), patch.object(portable, 'LIB', library), \
                  patch.object(portable, 'preflight_journal', return_value=Mock()):
                 portable.oled_preflight(); portable.oled_preflight()
+                gpio = library / 'pikvm_gpio.py'
+                gpio.write_bytes(b'# local GPIO implementation\n')
+                with self.assertRaisesRegex(RuntimeError, 'GPIO locaux'):
+                    portable.oled_preflight()
+                self.assertEqual(gpio.read_bytes(), b'# local GPIO implementation\n')
+                gpio.unlink()
                 shared.write_bytes(b'# unreviewed local library fix\n')
                 with self.assertRaisesRegex(RuntimeError, 'locaux'):
                     portable.oled_preflight()

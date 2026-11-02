@@ -95,8 +95,12 @@ class AsyncCache:
 
 class ButtonReader:
     """Read-only physical sampler; uncertain input cancels instead of extending."""
-    def __init__(self, reader):
+    def __init__(self, reader, resource=None, diagnostic=None):
         self.reader, self.sample, self.at = reader, None, float('-inf')
+        self.resource, self.diagnostic = resource, diagnostic or {}
+        self.lock = threading.Lock()
+        self.fault_pending = False
+        self.samples = self.errors = 0
         self.stopped = threading.Event()
         self.thread = threading.Thread(target=self._run, daemon=True, name='oled-button-read')
         self.thread.start()
@@ -107,14 +111,40 @@ class ButtonReader:
                 value = self.reader()
             except Exception:
                 value = None
-            self.sample, self.at = value, time.monotonic()
+            self.update(value)
             self.stopped.wait(.04)
 
     def read(self):
-        return self.sample if time.monotonic() - self.at <= .3 else None
+        with self.lock:
+            if self.fault_pending:
+                self.fault_pending = False
+                return None  # Never hide a brief GPIO fault between menu polls.
+            return self.sample if time.monotonic() - self.at <= .3 else None
+
+    def update(self, value):
+        with self.lock:
+            now = time.monotonic()
+            gap = self.samples and now - self.at > .3
+            if value is not True and value is not False:
+                value = None
+            if value is None or gap:
+                self.fault_pending = True
+                self.errors += 1
+            self.samples += 1
+            self.sample, self.at = value, now
+
+    def status(self):
+        with self.lock:
+            age = time.monotonic() - self.at
+            return {**self.diagnostic,'samples':self.samples,'errors':self.errors,
+                    'sample_age_ms':round(age*1000,1) if self.samples else None}
 
     def close(self):
         self.stopped.set()
+        self.thread.join(timeout=.5)
+        # Never unmap memory while its sampling thread could still be reading it.
+        if self.resource is not None and not self.thread.is_alive():
+            self.resource.close()
 
 
 def receive_json(connection, limit):
@@ -370,6 +400,7 @@ class LogicalButton:
         self.early = OrderedDict()
         self.gesture_token = None
         self.last_rpc_ms = 0
+        self.input_status = None
 
     def publish_heartbeat(self):
         if self.heartbeat is None or self.clock() - self.last_heartbeat < .2:
@@ -380,7 +411,8 @@ class LogicalButton:
         with os.fdopen(fd, 'w') as file:
             json.dump({'monotonic': self.clock(), 'pid':os.getpid(),
                        'poll_age_ms':round((self.clock()-self.last_poll)*1000,1) if self.last_poll!=float('-inf') else None,
-                       'rpc_ms':round(self.last_rpc_ms,2)}, file)
+                       'rpc_ms':round(self.last_rpc_ms,2),
+                       **({'input':self.input_status()} if self.input_status else {})}, file)
         os.replace(temporary, self.heartbeat)
         self.last_heartbeat = self.clock()
 

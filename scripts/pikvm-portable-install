@@ -52,6 +52,11 @@ def oled_preflight():
         known = baseline[name] if isinstance(baseline[name], list) else [baseline[name]]
         if source != candidate and hashlib.sha256(source).hexdigest() not in known:
             raise RuntimeError('Correctifs OLED locaux à examiner avant migration : ' + name)
+    gpio = LIB / 'pikvm_gpio.py'
+    if gpio.exists() or gpio.is_symlink():
+        if (gpio.is_symlink() or not gpio.is_file() or
+                gpio.read_bytes().replace(b'\r\n',b'\n') != (REPO / 'scripts/pikvm_gpio.py').read_bytes().replace(b'\r\n',b'\n')):
+            raise RuntimeError('Correctifs GPIO locaux à examiner avant migration : pikvm_gpio.py')
     journal = preflight_journal()
     journal.step('power-hold-active', ['systemctl', 'is-active', '--quiet', 'pikvm-power-hold.service'], 10)
     journal.step('pillow-imports', ['/usr/bin/python3', '-I', '-B', '-c', 'from PIL import Image,ImageDraw,ImageFont'], 15)
@@ -166,6 +171,7 @@ def file_map():
     result[LIB / 'preflight.sh'] = ((REPO / 'scripts/pikvm-portable-preflight.sh').read_bytes(), 0o755)
     result[LIB / 'pikvm_preflight.py'] = ((REPO / 'scripts/pikvm_preflight.py').read_bytes(), 0o644)
     result[LIB / 'pikvm_oled.py'] = ((REPO / 'scripts/pikvm_oled.py').read_bytes(), 0o644)
+    result[LIB / 'pikvm_gpio.py'] = ((REPO / 'scripts/pikvm_gpio.py').read_bytes(), 0o644)
     return result
 
 
