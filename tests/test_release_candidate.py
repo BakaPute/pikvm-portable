@@ -79,8 +79,8 @@ class CandidateTests(unittest.TestCase):
         self.assertNotRegex(source.split('if [[ "$action" == inspect ]]')[0], r'(?m)^\s*(/usr/bin/)?python3\s')
 
     def test_logging_integrity_gate_precedes_python_and_usb_commands(self):
-        source = (ROOT / 'scripts/pikvm-portable-preflight.sh').read_text()
-        self.assertLess(source.index('sha256sum'), source.index('python3 -I'))
+        source = (ROOT / 'scripts/pikvm_preflight.py').read_text()
+        self.assertLess(source.index('sha256sum'), source.index("journal.step('python-kvmd-imports'"))
         self.assertLess(source.index('sha256sum'), source.index('kvmd-otgmsd'))
         self.assertNotIn('--set-', source)
         self.assertNotIn('pinctrl set', source)

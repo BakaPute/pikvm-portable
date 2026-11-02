@@ -27,7 +27,7 @@ jobs:
       - run: python -m py_compile scripts/pikvm-share-api scripts/pikvm-share-install scripts/pikvm-share-remount
       - run: bash -n install.sh && bash -n install-share.sh && bash -n scripts/pikvm-share-diagnose.sh
       - run: node --check web/extras/pikvm-share/app.js
-      - run: python -m py_compile scripts/pikvm-portable-api scripts/pikvm-portable-install scripts/pikvm_oled.py scripts/pikvm-oled-custom scripts/pikvm-button-menu
+      - run: python -m py_compile scripts/pikvm-portable-api scripts/pikvm-portable-install scripts/pikvm_oled.py scripts/pikvm_preflight.py scripts/pikvm-oled-custom scripts/pikvm-button-menu
       - run: node --test tests/portable-ui.test.mjs
       - run: bash -n install-portable-os.sh && bash -n scripts/pikvm-portable-diagnose.sh
       - run: bash -n scripts/pikvm-python-logging-repair.sh && bash -n scripts/pikvm-portable-preflight.sh

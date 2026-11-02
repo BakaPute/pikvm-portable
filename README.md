@@ -209,3 +209,5 @@ logiques avec annulation et gardes sensibles, et sépare la télémétrie du ren
 La candidate **0.2.0-rc.6** sépare les gestes OLED du rafraîchissement et place les
 commandes KVM et leurs panneaux dans Portable OS, en réutilisant les contrôleurs
 natifs : [diagnostic, validations, installation et restauration RC5](docs/portable-os-rc6.md).
+
+Pour un précontrôle RC6 intermittent : [supervision par commande, journaux et procédure de reprise](docs/portable-os-rc6-preflight.md).

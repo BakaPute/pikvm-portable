@@ -1,5 +1,7 @@
 # PiKVM Portable OS 0.2.0-rc.6
 
+Correctif ultérieur : [précontrôle par étape, diagnostics et reprise de RC6](portable-os-rc6-preflight.md).
+
 Candidate locale sur `codex/portable-os`. Aucun déploiement ni diagnostic SSH du Pi
 n'a été effectué pendant ce travail. Les trois captures réelles ont été rapprochées
 des scripts et de l'adaptateur RC5 ; les causes suivantes sont établies dans le code.

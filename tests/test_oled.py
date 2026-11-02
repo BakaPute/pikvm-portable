@@ -381,7 +381,7 @@ class InstallTests(unittest.TestCase):
             shared = library / 'pikvm_oled.py'
             shared.write_bytes((ROOT / 'scripts/pikvm_oled.py').read_bytes())
             with patch.object(portable, 'BIN', root), patch.object(portable, 'LIB', library), \
-                 patch.object(portable.subprocess, 'run', return_value=Mock(returncode=0)):
+                 patch.object(portable, 'preflight_journal', return_value=Mock()):
                 portable.oled_preflight(); portable.oled_preflight()
                 shared.write_bytes(b'# unreviewed local library fix\n')
                 with self.assertRaisesRegex(RuntimeError, 'locaux'):

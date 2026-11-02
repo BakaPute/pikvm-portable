@@ -24,6 +24,17 @@ LIB = Path('/usr/local/lib/pikvm-portable')
 WEB_ROOT = Path('/usr/share/kvmd/web')
 OLED_UNITS = ('pikvm-oled-custom.service', 'pikvm-button-menu.service')
 BIN = Path('/usr/local/bin')
+PREFLIGHT_JOURNAL = None
+
+
+def preflight_journal():
+    global PREFLIGHT_JOURNAL
+    if PREFLIGHT_JOURNAL is None:
+        path = REPO / 'scripts/pikvm_preflight.py'
+        if not path.is_file():
+            path = LIB / 'pikvm_preflight.py'
+        PREFLIGHT_JOURNAL = load('portable_preflight', path).Journal()
+    return PREFLIGHT_JOURNAL
 
 
 def oled_preflight():
@@ -41,11 +52,9 @@ def oled_preflight():
         known = baseline[name] if isinstance(baseline[name], list) else [baseline[name]]
         if source != candidate and hashlib.sha256(source).hexdigest() not in known:
             raise RuntimeError('Correctifs OLED locaux à examiner avant migration : ' + name)
-    result = subprocess.run(['systemctl', 'is-active', '--quiet', 'pikvm-power-hold.service'],
-                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    if result.returncode:
-        raise RuntimeError('Power-hold doit déjà être actif ; il ne sera jamais démarré par cet installateur.')
-    subprocess.run(['/usr/bin/python3', '-I', '-B', '-c', 'from PIL import Image,ImageDraw,ImageFont'], check=True)
+    journal = preflight_journal()
+    journal.step('power-hold-active', ['systemctl', 'is-active', '--quiet', 'pikvm-power-hold.service'], 10)
+    journal.step('pillow-imports', ['/usr/bin/python3', '-I', '-B', '-c', 'from PIL import Image,ImageDraw,ImageFont'], 15)
 
 
 def oled_states(h):
@@ -155,19 +164,19 @@ def file_map():
     result[Path('/etc/systemd/system') / PORTABLE_SERVICE] = ((REPO / 'systemd' / PORTABLE_SERVICE).read_bytes(), 0o644)
     result[LIB / 'installer.py'] = ((REPO / 'scripts/pikvm-share-install').read_bytes(), 0o644)
     result[LIB / 'preflight.sh'] = ((REPO / 'scripts/pikvm-portable-preflight.sh').read_bytes(), 0o755)
+    result[LIB / 'pikvm_preflight.py'] = ((REPO / 'scripts/pikvm_preflight.py').read_bytes(), 0o644)
     result[LIB / 'pikvm_oled.py'] = ((REPO / 'scripts/pikvm_oled.py').read_bytes(), 0o644)
     return result
 
 
 def preflight():
-    path = REPO / 'scripts/pikvm-portable-preflight.sh'
-    if not path.exists():
-        path = LIB / 'preflight.sh'
-    if not path.is_file():
-        raise RuntimeError('Précontrôle de compatibilité absent.')
-    subprocess.run(['bash', str(path)], check=True, timeout=60)
-    navigation_preflight()
-    oled_preflight()
+    journal = preflight_journal()
+    # Shared implementation; no opaque outer process or cumulative 60s timeout.
+    journal.compatibility()
+    with journal.phase('native-navigation'):
+        navigation_preflight()
+    with journal.phase('oled-baselines-and-health'):
+        oled_preflight()
 
 
 def navigation_preflight():
@@ -370,8 +379,9 @@ def main():
         preflight()
     h = helper()
     if args.action == 'check':
-        _, changed = policy_preflight()
-        print('Précontrôle sans écriture ; patch SHARE nécessaire : ' + str(changed))
+        with preflight_journal().phase('share-authentication-and-policy'):
+            _, changed = policy_preflight()
+        print('Précontrôle sans modification système (journal temporaire conservé) ; patch SHARE nécessaire : ' + str(changed))
     elif args.action == 'install':
         with mutation_lock():
             install(h)
