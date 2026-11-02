@@ -205,3 +205,7 @@ La candidate **0.2.0-rc.4** rend l'accès SSD1306 facultatif et non bloquant :
 La candidate **0.2.0-rc.5** intègre l'OLED dans la sidebar, ajoute les maintiens
 logiques avec annulation et gardes sensibles, et sépare la télémétrie du rendu :
 [architecture, tests, mise à jour et rollback](docs/portable-os-rc5.md).
+
+La candidate **0.2.0-rc.6** sépare les gestes OLED du rafraîchissement et place les
+commandes KVM et leurs panneaux dans Portable OS, en réutilisant les contrôleurs
+natifs : [diagnostic, validations, installation et restauration RC5](docs/portable-os-rc6.md).

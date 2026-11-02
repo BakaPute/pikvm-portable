@@ -20,14 +20,19 @@ BUTTON_HEARTBEAT = RUNTIME / 'button.json'
 MAX_AGE = 15
 
 
-def button_ready():
+def button_status():
     try:
-        if BUTTON_HEARTBEAT.is_symlink() or BUTTON_HEARTBEAT.stat().st_size > 256:
-            return False
+        if BUTTON_HEARTBEAT.is_symlink() or BUTTON_HEARTBEAT.stat().st_size > 1024:
+            return {'ready':False}
         value = json.loads(BUTTON_HEARTBEAT.read_text())
-        return SOCKET.is_socket() and 0 <= time.monotonic() - value['monotonic'] <= .5
+        age = time.monotonic() - value['monotonic']
+        return {**value, 'age_ms':round(age*1000,1), 'ready':SOCKET.is_socket() and 0 <= age <= .8}
     except (OSError, ValueError, KeyError, TypeError):
-        return False
+        return {'ready':False}
+
+
+def button_ready():
+    return button_status()['ready']
 
 
 class AsyncCache:
@@ -264,6 +269,8 @@ class MirrorDevice:
         self.context = {}
         self.reported_physical = None
         self.last_id = None
+        self.render_ms = 0
+        self.publish_ms = 0
 
     def set_context(self, **values):
         self.context = values
@@ -286,7 +293,9 @@ class MirrorDevice:
         control_id = hashlib.sha256((self.source + json.dumps(control, sort_keys=True)).encode()).hexdigest()
         data = {'width': 128, 'height': 64, 'format': '1bpp-msb', 'pixels': base64.b64encode(raw).decode(),
                 'id': identity, 'control_id': control_id, 'source': self.source, 'context': self.context, 'physical': physical,
-                'monotonic': now, 'updated_at': time.time()}
+                'monotonic': now, 'updated_at': time.time(),
+                'timing':{'render_ms':round(self.render_ms,2),'previous_publish_ms':round(self.publish_ms,2)}}
+        started = time.perf_counter()
         private_directory(self.path.parent)
         temporary = self.path.with_name(f'.frame-{os.getpid()}.tmp')
         fd = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | getattr(os, 'O_NOFOLLOW', 0), 0o600)
@@ -295,6 +304,7 @@ class MirrorDevice:
         os.replace(temporary, self.path)
         self.published, self.last_id = now, identity
         self.reported_physical = physical
+        self.publish_ms = (time.perf_counter()-started)*1000
 
     def display(self, image):
         if image.size != self.size or image.mode != self.mode:
@@ -307,8 +317,10 @@ class MirrorDevice:
 def canvas(device):
     # Same Pillow drawing path as luma.canvas; no font or layout is recreated.
     from PIL import Image, ImageDraw
+    started = time.perf_counter()
     image = Image.new(device.mode, device.size)
     yield ImageDraw.Draw(image)
+    device.render_ms = (time.perf_counter()-started)*1000
     device.display(image)
 
 
@@ -334,6 +346,7 @@ class LogicalButton:
         self.last_heartbeat = float('-inf')
         self.early = OrderedDict()
         self.gesture_token = None
+        self.last_rpc_ms = 0
 
     def publish_heartbeat(self):
         if self.heartbeat is None or self.clock() - self.last_heartbeat < .2:
@@ -342,7 +355,9 @@ class LogicalButton:
         temporary = self.heartbeat.with_name('.button-' + str(os.getpid()))
         fd = os.open(temporary, os.O_CREAT | os.O_WRONLY | os.O_TRUNC | getattr(os,'O_NOFOLLOW',0), 0o600)
         with os.fdopen(fd, 'w') as file:
-            json.dump({'monotonic': self.clock()}, file)
+            json.dump({'monotonic': self.clock(), 'pid':os.getpid(),
+                       'poll_age_ms':round((self.clock()-self.last_poll)*1000,1) if self.last_poll!=float('-inf') else None,
+                       'rpc_ms':round(self.last_rpc_ms,2)}, file)
         os.replace(temporary, self.heartbeat)
         self.last_heartbeat = self.clock()
 
@@ -413,7 +428,7 @@ class LogicalButton:
                 if now - self.early[key][1] > 2:
                     self.early.pop(key)
             if action == 'start':
-                if (self.physical or now - self.last_poll > .5 or self.pending or self.until or
+                if (self.physical or self.pending or self.until or
                         (hold and (hold['stopped'] is None or not hold['released'] or now - hold['stopped'] < .15))):
                     raise OledError('Le bouton est occupé.', 409)
                 if frame.get('control_id') != data['control_id']:
@@ -481,6 +496,13 @@ class LogicalButton:
 
     def poll(self, physical):
         now = self.clock()
+        target = self.hold
+        control = None
+        if target and not target['consumed']:
+            try:
+                control = self.frame_reader().get('control_id')
+            except OledError:
+                pass
         with self.lock:
             self._expire()
             if physical is None and self.origin == 'physical':
@@ -498,6 +520,13 @@ class LogicalButton:
                     hold['released'] = True
                     return False
                 if not hold['consumed']:
+                    # A gesture queued across a renderer handoff must never be
+                    # applied to a different menu. Keep renewals remain independent.
+                    if target is not hold or control is None:
+                        return False
+                    if control != hold['control_id']:
+                        hold['cancelled'] = True; hold['released'] = True
+                        return False
                     hold['consumed'] = True
                     return True  # Even a fast press/release is observed exactly once.
                 if hold['stopped'] is None:
@@ -551,6 +580,7 @@ class LogicalButton:
         class Handler(socketserver.BaseRequestHandler):
             def handle(self):
                 try:
+                    started = time.perf_counter()
                     self.request.settimeout(2)
                     authorize_local(self.request, allowed_uid)
                     data = receive_json(self.request, 1024)
@@ -562,6 +592,7 @@ class LogicalButton:
                         raise OledError('Seul un appui court logique est autorisé.', 400)
                     else:
                         result = {'ok': True, 'result': button.submit(data['frame_id'])}
+                    button.last_rpc_ms = (time.perf_counter()-started)*1000
                 except OledError as error:
                     result = {'ok': False, 'error': str(error), 'status': error.status}
                 except (OSError, ValueError, TypeError):
@@ -577,9 +608,20 @@ class LogicalButton:
             os.chmod(path, 0o600)
             thread = threading.Thread(target=server.serve_forever, daemon=True)
             thread.start()
+            heartbeat_stop = threading.Event()
+            def heartbeat():
+                while not heartbeat_stop.is_set():
+                    try:
+                        button.publish_heartbeat()
+                    except OSError:
+                        pass  # Temporary publication error must not kill control health.
+                    heartbeat_stop.wait(.1)
+            health = threading.Thread(target=heartbeat, name='oled-control-health', daemon=True)
+            health.start()
             try:
                 yield
             finally:
+                heartbeat_stop.set(); health.join(timeout=1)
                 server.shutdown(); thread.join(timeout=2)
                 path.unlink(missing_ok=True)
 

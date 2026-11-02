@@ -8,6 +8,26 @@ import {createModules} from '../web/extras/portable-os/modules/index.js';
 import {routes, extensionLink} from '../web/legacy/routes.js';
 import {nativeMenus} from '../web/extras/portable-os/core/kvm-adapter.js';
 import {unpackPixels} from '../web/extras/portable-os/modules/oled.js';
+import {OledInput} from '../web/extras/portable-os/core/oled-input.js';
+
+test('OLED release is sent before the delayed start response, without a late keep',async()=>{
+    let resolveStart;const actions=[];
+    const input=new OledInput(data=>{actions.push(data.action);return data.action==='start'?new Promise(resolve=>resolveStart=resolve):Promise.resolve();},()=>{}, {nonce:()=> 'a'.repeat(32)});
+    input.start('b'.repeat(64));input.end();
+    assert.deepEqual(actions,['start','stop']);resolveStart();await new Promise(resolve=>setImmediate(resolve));
+    assert.deepEqual(actions,['start','stop']);assert.equal(input.active,null);
+});
+test('OLED keep cadence does not add request latency and never extends server leases',async()=>{
+    let now=0,scheduled;const input=new OledInput(async data=>{if(data.action==='keep')now+=350;},()=>{},
+        {clock:()=>now,timer:(fn,delay)=>{scheduled=delay;return 1;},clear:()=>{},nonce:()=> 'a'.repeat(32)});
+    input.start('b'.repeat(64));await new Promise(resolve=>setImmediate(resolve));
+    assert.equal(scheduled,0);assert.equal(input.metrics.last_keep_ms,350);input.end(true);
+});
+test('a real control channel failure cancels the held input',async()=>{
+    const actions=[];const input=new OledInput(async data=>{actions.push(data.action);if(data.action==='keep')throw new Error('network lost');},()=>{}, {nonce:()=> 'a'.repeat(32)});
+    input.start('b'.repeat(64));await new Promise(resolve=>setImmediate(resolve));
+    assert.equal(input.active,null);assert.deepEqual(actions,['start','keep','cancel']);
+});
 
 test('OLED decodes the exact 128×64 monochrome MSB framebuffer, without a second renderer', () => {
     const raw = Buffer.alloc(1024); raw[0] = 128; raw[1023] = 1;

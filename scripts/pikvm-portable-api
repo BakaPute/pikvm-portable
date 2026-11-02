@@ -58,20 +58,25 @@ def redact(message):
 
 class SystemBackend:
     def oled(self):
+        started = time.perf_counter()
         frame = oled.read_frame()
         # Only two small tmpfs reads: no systemctl, socket roundtrip or service lock.
-        available = oled.button_ready()
-        return {**frame, 'button_available': available}
+        controller = oled.button_status()
+        available = controller['ready']
+        return {**frame, 'button_available': available,
+                'controller':controller, 'api_frame_ms':round((time.perf_counter()-started)*1000,2)}
 
     def oled_short(self, frame_id):
         return oled.request_short(frame_id)
 
     def oled_event(self, data, owner):
+        started = time.perf_counter()
         if data.get('action') == 'start' and data.get('permit') == 'power':
             drives = self.usb()['drives']
             if any(drives.get(str(index), {}).get('attributes', {}).get('file') != '' for index in (0,1)) or share.LinuxBackend().lease_read():
                 raise oled.OledError('Éjecter et libérer les deux lecteurs avant une action alimentation distante.', 409)
-        return oled.request_event({**data, 'owner': owner})
+        result = oled.request_event({**data, 'owner': owner})
+        return {**result, 'api_relay_ms':round((time.perf_counter()-started)*1000,2)}
 
     def __init__(self, gadget=Path('/sys/kernel/config/usb_gadget/kvmd'),
                  controllers=Path('/sys/class/udc')):
@@ -156,7 +161,9 @@ class Handler(share.Handler):
     server_version = 'PiKVM-Portable-OS'
     def dispatch(self, post=False):
         try:
+            auth_started = time.perf_counter()
             owner = share.authenticate(self.headers)
+            auth_ms = (time.perf_counter()-auth_started)*1000
             if post:
                 share.check_csrf(self.headers)
             url = urlsplit(self.path)
@@ -193,6 +200,8 @@ class Handler(share.Handler):
                     self.server.action_lock.release()
             else:
                 raise share.ShareError('Route introuvable.', 404)
+            if route.startswith('oled'):
+                result = {**result, 'api_auth_ms':round(auth_ms,2)}
             self.reply(200, {'ok': True, 'result': result})
         except (BrokenPipeError, ConnectionResetError, TimeoutError):
             return

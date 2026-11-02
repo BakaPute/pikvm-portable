@@ -368,7 +368,7 @@ class InstallTests(unittest.TestCase):
     def test_dead_button_service_disables_web_input_even_if_socket_remains(self):
         backend = api.SystemBackend()
         with patch.object(oled, 'read_frame', return_value={'id': 'a' * 64}), \
-             patch.object(oled, 'button_ready', return_value=False), \
+             patch.object(oled, 'button_status', return_value={'ready':False}), \
              patch.object(backend, 'services', side_effect=AssertionError('No service command in frame hot path')):
             self.assertFalse(backend.oled()['button_available'])
 

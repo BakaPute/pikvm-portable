@@ -68,6 +68,7 @@ HOTSPOT_STATE = Path(
 QR_FILE = "/run/pikvm-oled-qr.png"
 
 DEVICE = None
+DRAW_STARTED = time.perf_counter()
 DISPLAY_IMAGES = None
 
 SCROLL_START = time.monotonic()
@@ -132,9 +133,7 @@ INPUT = LogicalButton()
 
 
 def button_down():
-    result = INPUT.poll(physical_button_down())
-    INPUT.publish_heartbeat()
-    return result
+    return INPUT.poll(physical_button_down())
 
 
 def get_device():
@@ -177,7 +176,8 @@ BOLD = load_font(True)
 
 
 def frame():
-
+    global DRAW_STARTED
+    DRAW_STARTED = time.perf_counter()
     return Image.new(
         "1",
         (128, 64),
@@ -186,7 +186,7 @@ def frame():
 
 
 def show(image):
-
+    get_device().render_ms = (time.perf_counter()-DRAW_STARTED)*1000
     get_device().display(image)
 
 

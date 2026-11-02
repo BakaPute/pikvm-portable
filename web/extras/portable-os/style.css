@@ -35,6 +35,38 @@ button.primary,.button.primary { background:var(--accent); color:#10281e; border
 .oled-screen canvas { display:block; width:100%; height:auto; image-rendering:pixelated; aspect-ratio:2; }
 .oled-screen:disabled { opacity:.65; }
 .oled-detail { font-size:12px; }
+.oled-freshness { display:block; min-height:1.4em; font-size:10px; color:var(--muted); }
+.oled-diagnostics { font-size:10px; margin-top:6px; color:var(--muted); }
+.oled-diagnostics output { display:block; white-space:pre-wrap; overflow-wrap:anywhere; }
+.kvm-controls { display:flex; flex-wrap:wrap; gap:7px; padding:12px; border-bottom:1px solid var(--line); background:var(--surface); }
+.kvm-subpanel { margin:12px; max-height:45vh; overflow:auto; }
+.kvm-subpanel[hidden] { display:none; }
+.kvm-subpanel>.row { justify-content:space-between; margin-bottom:12px; }
+.kvm-subpanel h2 { margin:0; }
+.native-control-content { color:var(--fg); font:inherit; white-space:normal; }
+.native-control-content .native-group { margin:6px 0; }
+.native-control-content button { margin:3px; white-space:normal; }
+.native-control-content img { max-height:18px; max-width:26px; vertical-align:middle; }
+.native-control-content input:not([type=checkbox]):not([type=radio]),.native-control-content textarea,.native-control-content select { max-width:100%; box-sizing:border-box; }
+.native-control-content textarea { width:100%; min-height:100px; }
+.native-control-content pre { max-height:30vh; overflow:auto; white-space:pre-wrap; }
+.native-control-content .native-fields { width:100%; }
+.native-keys { display:flex; flex-wrap:wrap; gap:3px; }
+.native-pressed { background:var(--accent)!important; color:var(--bg)!important; }
+.kvm-signals { display:inline-flex; align-items:center; gap:7px; padding:6px; }
+[data-native-led] { display:inline-block; width:9px; height:9px; border-radius:50%; background:var(--faint); }
+[data-native-led=green] { background:var(--accent); }
+[data-native-led=red] { background:var(--danger); }
+[data-native-led=yellow] { background:#ddc178; }
+[data-native-led=blue] { background:#83b4e8; }
+.native-control-content .native-field { background:var(--raised);color:var(--fg);border:1px solid var(--line);border-radius:7px;padding:7px;font:inherit; }
+.native-control-content input[type=range] { padding:0; }
+.native-control-content [hidden] { display:none!important; }
+.native-control-content .native-fields td { white-space:normal; padding:6px; }
+.kvm-native-dialog { max-width:min(720px,95vw); max-height:90vh; overflow:auto; }
+.native-panel:fullscreen { display:flex; flex-direction:column; }
+.native-panel:fullscreen iframe { flex:1; min-height:0; height:auto!important; }
+@media(max-width:600px){.kvm-controls{gap:4px;padding:8px}.kvm-controls button{font-size:12px;padding:8px}.native-control-content .native-fields td{padding:3px}.kvm-subpanel{padding:10px;margin:8px}}
 .device-icon { display:grid; place-items:center; width:30px; height:32px; border-radius:5px; background:var(--raised); color:var(--accent); font-weight:600; }
 .device-dot { margin-left:auto; width:5px; height:5px; border-radius:50%; background:var(--faint); }
 .nav-label { color:var(--faint); font-size:9px; letter-spacing:1.4px; font-weight:650; padding:21px 12px 9px; }

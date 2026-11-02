@@ -3,16 +3,17 @@
 <body><ul id="navbar"><li><a href="/">PiKVM</a></li></ul>
 <div id="stream-window" tabindex="0"><div id="stream-window-header" class="window-header"><button data-wm-window-set-full-tab>Full tab</button></div>
 <div id="stream-box">Vidéo / clavier / souris simulés</div></div>
-<div class="hidden window" id="keyboard-window" style="position:fixed;bottom:60px;left:0;z-index:2147483643;background:#222"><button data-wm-window-close aria-label="Fermer le clavier">Fermer</button>Clavier natif simulé</div>
+<div class="hidden window" id="keyboard-window" style="position:fixed;bottom:60px;left:0;z-index:2147483643;background:#222"><button data-wm-window-close aria-label="Fermer le clavier">Fermer</button><div class="keypad-row"><div class="key" data-keypad-code="KeyA">A</div></div></div>
 <div class="hidden window" id="mouse-window" style="position:fixed;bottom:60px;left:0;z-index:2147483643;background:#222"><button data-wm-window-close aria-label="Fermer la souris">Fermer</button>Souris native simulée</div>
+<div id="pkpm-root"><button>Power hérité</button></div><div id="pk-battery">Batterie héritée</div>
 <footer class="footer">Version native simulée</footer>
 <script>
 window.lifecycle = {down:0, up:0, mouse:0, releases:0, shortcuts:0, macros:0};
 document.querySelector('[data-wm-window-set-full-tab]').onclick=()=>document.getElementById('stream-window').classList.add('window-full-tab');
 for (const [id,title,content] of [
- ['msd-dropdown','Drive','<a href="/extras/image-manager/" onclick="window.unexpectedNativeNavigation = true">Images natives</a>'],
- ['atx-dropdown','ATX','<button disabled>Power simulé indisponible</button>'],
- ['shortcuts-dropdown','Shortcuts','<button id="shortcut">Ctrl Alt Suppr simulé</button>'],
+ ['msd-dropdown','Drive','<select id="msd-image-selector" aria-label="Image Drive 0"><option value="rescue.iso">rescue.iso</option></select><button id="msd-connect-button">Connecter Drive 0 simulé</button><input id="msd-new-file" type="file" aria-label="Importer ISO simulé"><a href="/extras/image-manager/" onclick="window.unexpectedNativeNavigation = true">Images natives</a>'],
+ ['atx-dropdown','ATX','<button id="atx-test">Power PC simulé</button>'],
+ ['shortcuts-dropdown','Shortcuts','<button id="shortcut" data-keyboard-shortcut="ControlLeft AltLeft Delete">Ctrl Alt Suppr simulé</button>'],
  ['macro-dropdown','Macro','<button id="macro">Macro simulée</button>'],
  ['text-dropdown','Text','<textarea aria-label="Texte natif"></textarea>'],
  ['system-dropdown','System','<input id="hid-mute-switch" type="checkbox"><select id="quality" aria-label="Qualité native"><option>80</option><option>60</option></select><button data-wm-window-show="keyboard-window">Clavier natif</button><button data-wm-window-show="mouse-window">Souris native</button>']]) {
@@ -33,6 +34,19 @@ stream.onkeydown = () => {if(!document.getElementById('hid-mute-switch').checked
 stream.onkeyup = () => lifecycle.up++;
 stream.onmousedown = () => lifecycle.mouse++;
 window.addEventListener('blur', () => lifecycle.releases++);
+const key=document.querySelector('[data-keypad-code]');
+key.onmousedown=()=>{lifecycle.keyDown=(lifecycle.keyDown||0)+1;key.classList.add('pressed')};
+key.onmouseup=()=>{lifecycle.keyUp=(lifecycle.keyUp||0)+1;key.classList.remove('pressed')};
+document.getElementById('keyboard-window').onkeydown=()=>lifecycle.down++;
+document.getElementById('keyboard-window').onkeyup=()=>lifecycle.up++;
 document.getElementById('shortcut').onclick = () => lifecycle.shortcuts++;
 document.getElementById('macro').onclick = () => lifecycle.macros++;
+document.getElementById('msd-connect-button').onclick=()=>lifecycle.drive=(lifecycle.drive||0)+1;
+document.getElementById('msd-new-file').onchange=event=>lifecycle.files=event.target.files.length;
+document.getElementById('atx-test').onclick=()=>{
+ const modal=document.createElement('div');modal.className='modal';
+ modal.innerHTML='<div class="modal-window"><div class="modal-header">Confirmer ATX simulé</div><button data-x-wm-modal-ok>Confirmer simulé</button><button data-x-wm-modal-cancel>Annuler simulé</button></div>';
+ modal.querySelector('[data-x-wm-modal-ok]').onclick=()=>{lifecycle.atx=(lifecycle.atx||0)+1;modal.remove()};
+ modal.querySelector('[data-x-wm-modal-cancel]').onclick=()=>modal.remove();document.body.append(modal);
+};
 </script></body></html>

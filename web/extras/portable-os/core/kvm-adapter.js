@@ -1,75 +1,67 @@
 import {el, button} from './ui.js';
 import {releaseNativeInput} from './native-bridge.js';
-
-// KVMD 4.213 DOM contract. Move live dropdowns with their listeners intact.
-// No native files, video elements, websocket or HID implementations are replaced.
+import {projectControls} from './native-controls.js';
 export const nativeMenus = Object.freeze({
-    'msd-dropdown': 'Drive 0', 'atx-dropdown': 'ATX', 'shortcuts-dropdown': 'Raccourcis',
-    'macro-dropdown': 'Macros', 'text-dropdown': 'Texte', 'system-dropdown': 'Vidéo & HID',
+    'msd-dropdown':'Drive 0','atx-dropdown':'ATX','shortcuts-dropdown':'Raccourcis',
+    'macro-dropdown':'Macros','text-dropdown':'Texte','system-dropdown':'Vidéo & HID',
 });
 export function adaptKvm(frame, fullscreen) {
-    const doc = frame.contentDocument, win = frame.contentWindow;
-    const stream = doc.getElementById('stream-window');
-    const required = ['navbar', 'stream-window', 'hid-mute-switch', ...Object.keys(nativeMenus)];
-    if (required.some(id => !doc.getElementById(id)) ||
-        !stream.querySelector('[data-wm-window-set-full-tab]') ||
-        Object.keys(nativeMenus).some(id => !doc.getElementById(id)?.querySelector('.menu-button') ||
-            !doc.getElementById(id)?.querySelector('.menu')))
+    const doc=frame.contentDocument,win=frame.contentWindow,stream=doc.getElementById('stream-window');
+    if(['navbar','stream-window','hid-mute-switch',...Object.keys(nativeMenus)].some(id=>!doc.getElementById(id))||
+        !stream.querySelector('[data-wm-window-set-full-tab]')||
+        Object.keys(nativeMenus).some(id=>!doc.getElementById(id).querySelector('.menu')))
         throw new Error('Structure KVM incompatible : adaptation interrompue. Ouvrir le KVM de secours.');
-    let enabled = false, timer, active = true;
-    const listeners = [];
-    const on = (target, type, fn, options) => { target.addEventListener(type, fn, options);
-        listeners.push(() => target.removeEventListener(type, fn, options)); };
-    const toggle = button('Activer clavier / souris', () => setEnabled(!enabled));
-    toggle.setAttribute('aria-pressed', 'false');
-    const controls = el('ul', {id: 'portable-kvm-controls', 'aria-label': 'Commandes KVM'},
-        el('li', {}, toggle), el('li', {}, button('Plein écran', fullscreen)));
-    for (const [id, title] of Object.entries(nativeMenus)) {
-        const menu = doc.getElementById(id), trigger = menu.querySelector('.menu-button');
-        if (!trigger || !menu.querySelector('.menu')) throw new Error('Menu KVM incomplet : ' + id);
-        trigger.setAttribute('role', 'button'); trigger.tabIndex = 0;
-        trigger.setAttribute('aria-label', title);
-        const label = trigger.querySelector('span'); if (label) label.textContent = title;
-        // Native wm binds down, not click. Keyboard activation follows that path.
-        on(trigger, 'keydown', event => {
-            if (['Enter', ' '].includes(event.key)) {
-                event.preventDefault();
-                trigger.dispatchEvent(new win.MouseEvent('mousedown', {bubbles: true, button: 0}));
-                trigger.dispatchEvent(new win.MouseEvent('mouseup', {bubbles: true, button: 0}));
-            }
-        });
-        controls.append(menu);
-    }
-    const reveal = button('Commandes KVM', () => { show(); toggle.focus(); }, 'portable-kvm-reveal');
-    reveal.setAttribute('aria-controls', controls.id);
-    const hud = el('div', {id: 'portable-kvm-hud'}, controls);
-    doc.body.append(hud, reveal);
-    function show() {
-        clearTimeout(timer); hud.classList.remove('portable-idle');
-        if (active) timer = setTimeout(hide, 4000);
-    }
-    function hide() {
-        if (!active) return;
-        const openMenu = [...controls.querySelectorAll('.menu')].some(menu => !menu.classList.contains('hidden'));
-        if (hud.matches(':hover') || hud.contains(doc.activeElement) || openMenu) { timer = setTimeout(hide, 1000); return; }
-        hud.classList.add('portable-idle');
-    }
-    function setEnabled(value) {
-        if (!value) {
-            // Recorder playback sends native HID directly, outside the mute switch.
-            const stop = doc.getElementById('hid-recorder-stop');
-            if (stop && !stop.disabled) stop.click();
+    let enabled=false,active=true,projection,source,modalProjection,nativeModal,parentModal;
+    const listeners=[];
+    const on=(target,type,fn,options)=>{target.addEventListener(type,fn,options);listeners.push(()=>target.removeEventListener(type,fn,options));};
+    const mute=doc.getElementById('hid-mute-switch');
+    const captured=()=>active&&enabled&&!mute.checked;
+    const controls=el('div',{class:'kvm-controls','aria-label':'Commandes KVM'});
+    const toggle=button('Activer clavier / souris',()=>setEnabled(!captured(),true),'quiet',{'aria-pressed':'false'});
+    controls.append(toggle,button('Plein écran',fullscreen,'quiet'));
+    const leds=Array.from(doc.querySelectorAll('#system-dropdown > .menu-button img'),node=>projectControls(node));
+    if(leds.length)controls.append(el('span',{class:'kvm-signals','aria-label':'État KVMD'},leds.map(binding=>binding.root)));
+    const panel=el('section',{class:'card kvm-subpanel',hidden:true});
+    const heading=el('h2');
+    const body=el('div',{class:'kvm-panel-body'});
+    const close=button('Fermer',()=>closePanel(),'quiet');
+    panel.append(el('div',{class:'row'},heading,close),body);
+    const toolbarButtons=[];
+    function activate(node){
+        if(!active)return true;
+        const target=node.getAttribute('data-wm-window-show');
+        if(target==='webterm-window'){location.hash='#terminal';return true;}
+        if(target&&target!=='stream-window'&&doc.getElementById(target)){
+            node.click();const windowNode=doc.getElementById(target);openedWindows.add(windowNode);
+            openPanel(windowNode,windowNode.querySelector('.window-grab')?.textContent||'Contrôles natifs');return true;
         }
+        return false; // All other actions remain native.
+    }
+    function openPanel(node,title){
+        if(!active)return;
         releaseNativeInput(frame);
-        enabled = value && active;
-        // Use native mute to disable keyboard/mouse, including shortcut buttons.
-        const mute = doc.getElementById('hid-mute-switch');
-        mute.checked = !enabled;
-        doc.documentElement.classList.toggle('portable-hid-enabled', enabled);
-        toggle.textContent = enabled ? 'Désactiver clavier / souris' : 'Activer clavier / souris';
-        toggle.setAttribute('aria-pressed', String(enabled));
-        show();
-        if (enabled) { win.focus(); stream.focus(); }
+        source=node;projection=projectControls(node,{activate,enabled:captured,allowed:()=>active});
+        heading.textContent=title;body.replaceChildren(projection.root);panel.hidden=false;
+    }
+    function closePanel(){
+        if(source?.classList.contains('window'))source.querySelector('[data-wm-window-close]')?.click();
+        source=null;projection=null;body.replaceChildren();panel.hidden=true;
+    }
+    for(const [id,title] of Object.entries(nativeMenus)){
+        const native=doc.getElementById(id);
+        const control=button(title,()=>{
+            if(source===native.querySelector('.menu')){closePanel();return;}
+            native.querySelector('.menu-button')?.dispatchEvent(new win.MouseEvent('mousedown',{bubbles:true,cancelable:true,button:0}));
+            openPanel(native.querySelector('.menu'),title);
+        },'quiet',{'data-kvm-menu':id});
+        controls.append(control);toolbarButtons.push([control,native]);
+    }
+    function setEnabled(value,focus=false){
+        if(!value){const stop=doc.getElementById('hid-recorder-stop');if(stop&&!stop.disabled)stop.click();}
+        releaseNativeInput(frame);enabled=!!value&&active;mute.checked=!enabled;
+        doc.documentElement.classList.toggle('portable-hid-enabled',enabled);
+        if(enabled&&focus){win.focus();stream.focus();}
+        sync();
     }
     // Native stream receives events only during an explicit active capture.
     const guard = event => {
@@ -77,34 +69,57 @@ export function adaptKvm(frame, fullscreen) {
         const nativeInput = target.closest?.('#stream-window,#keyboard-window,#mouse-window,[data-keyboard-shortcut],#hid-recorder-play,#hid-recorder-record,#hid-pak-button');
         const windowManagement = target.closest?.('.window-header,[data-wm-window-close]');
         const pasteShortcut = target.closest?.('#hid-pak-text') && event.ctrlKey && event.key === 'Enter';
-        if (!enabled && ((nativeInput && !windowManagement) || pasteShortcut)) {
+        if (!captured() && ((nativeInput && !windowManagement) || pasteShortcut)) {
             event.preventDefault(); event.stopImmediatePropagation();
         }
     };
     for (const type of ['click','keydown','keyup','mousedown','mouseup','mousemove','wheel','touchstart','touchmove','touchend','pointerdown'])
         on(doc, type, guard, {capture: true, passive: false});
-    on(doc.getElementById('hid-mute-switch'), 'change', () => { if (!enabled) doc.getElementById('hid-mute-switch').checked = true; });
-    on(doc, 'pointermove', event => { if (event.clientY < 80) show(); });
-    on(hud, 'focusin', show); on(hud, 'pointerenter', show);
-    on(doc, 'keydown', event => {
-        if (event.code === 'Escape' && event.ctrlKey && event.shiftKey) {
-            event.preventDefault(); event.stopImmediatePropagation(); setEnabled(false); reveal.focus();
+
+    on(mute,'change',()=>setEnabled(!mute.checked));
+    on(window,'blur',()=>releaseNativeInput(frame));
+    on(doc,'keydown',event=>{
+        if(event.code==='Escape'&&event.ctrlKey&&event.shiftKey){event.preventDefault();event.stopImmediatePropagation();setEnabled(false);toggle.focus();}
+    },true);
+    const openedWindows=new WeakSet();
+    function syncModal(){
+        const current=Array.from(doc.querySelectorAll('.modal')).find(node=>!node.classList.contains('hidden'));
+        if(parentModal&&(!current||current!==nativeModal||!current.isConnected)){
+            parentModal.close();parentModal.remove();parentModal=null;modalProjection=null;nativeModal=null;
         }
-    }, true);
+        if(current&&!parentModal&&!document.querySelector('dialog[open]')){
+            nativeModal=current;
+            modalProjection=projectControls(current,{activate,enabled:captured,allowed:()=>active});
+            parentModal=el('dialog',{class:'kvm-native-dialog','aria-label':'Confirmation KVMD',oncancel:event=>{
+                event.preventDefault();current.querySelector('[data-x-wm-modal-cancel]')?.click();
+            }},modalProjection.root);
+            document.getElementById('dialogs').append(parentModal);parentModal.showModal();
+        }
+        modalProjection?.sync();
+    }
+    function sync(){
+        leds.forEach(binding=>binding.sync());
+        toggle.textContent=captured()?'Désactiver clavier / souris':'Activer clavier / souris';
+        toggle.setAttribute('aria-pressed',String(captured()));toggle.disabled=!active;
+        for(const [control,native]of toolbarButtons)control.disabled=!active||native.classList.contains('feature-disabled');
+        for(const node of doc.querySelectorAll('.window:not(#stream-window):not(#stream-ocr-window)')){
+            if(node.classList.contains('hidden')){openedWindows.delete(node);continue;}
+            if(!openedWindows.has(node)&&active){openedWindows.add(node);openPanel(node,node.querySelector('.window-grab')?.textContent||'Contrôles natifs');}
+        }
+        if(source?.classList.contains('window')&&source.classList.contains('hidden')){source=null;projection=null;panel.hidden=true;body.replaceChildren();}
+        projection?.sync();syncModal();
+    }
     stream.querySelector('[data-wm-window-set-full-tab]').click();
-    // KVMD opens its touch mouse window automatically on mobile. Start with the
-    // video; its native Show mouse/keyboard commands remain in Vidéo & HID.
-    for (const id of ['mouse-window', 'keyboard-window']) {
-        const nativeWindow = doc.getElementById(id);
-        if (nativeWindow && !nativeWindow.classList.contains('hidden'))
-            nativeWindow.querySelector('[data-wm-window-close]')?.click();
+    for(const id of ['mouse-window','keyboard-window']){
+        const node=doc.getElementById(id);if(node&&!node.classList.contains('hidden'))node.querySelector('[data-wm-window-close]')?.click();
     }
     doc.documentElement.classList.add('portable-kvm');
     setEnabled(false);
-    return {
-        enable: () => setEnabled(true),
-        suspend() { setEnabled(false); active = false; clearTimeout(timer); },
-        resume() { active = true; show(); },
-        destroy() { setEnabled(false); active = false; clearTimeout(timer); listeners.forEach(fn => fn()); },
+    let interval=setInterval(sync,150);
+    return {controls,panel,enable:()=>setEnabled(true,true),
+        suspend(){setEnabled(false);active=false;clearInterval(interval);interval=null;closePanel();nativeModal?.querySelector('[data-x-wm-modal-cancel]')?.click();sync();},
+        resume(){active=true;if(!interval)interval=setInterval(sync,150);sync();},
+        destroy(){setEnabled(false);active=false;clearInterval(interval);listeners.forEach(fn=>fn());closePanel();
+            nativeModal?.querySelector('[data-x-wm-modal-cancel]')?.click();parentModal?.close();parentModal?.remove();controls.remove();panel.remove();},
     };
 }

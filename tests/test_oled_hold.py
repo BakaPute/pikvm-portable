@@ -187,7 +187,7 @@ module.main()
 
     def test_frame_api_never_waits_on_system_services_or_input_socket(self):
         backend=api.SystemBackend()
-        with patch.object(oled,'read_frame',return_value={'id':'a'*64}),patch.object(oled,'button_ready',return_value=True), \
+        with patch.object(oled,'read_frame',return_value={'id':'a'*64}),patch.object(oled,'button_status',return_value={'ready':True}), \
              patch.object(backend,'services',side_effect=AssertionError('service lock used')), \
              patch.object(oled,'ping',side_effect=AssertionError('socket roundtrip used')):
             self.assertTrue(backend.oled()['button_available'])

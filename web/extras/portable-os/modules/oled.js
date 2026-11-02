@@ -1,4 +1,5 @@
-import {el, button, hint, notify} from '../core/ui.js';
+import {OledInput} from '../core/oled-input.js';
+import {el, button} from '../core/ui.js';
 
 export function unpackPixels(encoded) {
     const bits = atob(encoded);
@@ -23,7 +24,7 @@ export function openOled(context) {
 
 function createPanel(host, context) {
     host.dataset.ready = 'true';
-    let frame, timer, reading = false, controller, active, armedControl = null;
+    let frame, timer, reading = false, controller, armedControl = null;
     const status = el('p', {class:'oled-status',role:'status','aria-live':'polite'}, 'Connexion…');
     const detail = el('p', {class:'oled-detail muted'});
     const canvas = el('canvas', {width:128,height:64,'aria-hidden':'true'});
@@ -32,13 +33,27 @@ function createPanel(host, context) {
     const arm = el('input',{type:'checkbox',onchange:()=>{armedControl=arm.checked?frame?.control_id:null;}});
     const armText = el('span');
     const armLabel = el('label',{class:'oled-arm',hidden:true},arm,armText);
-    host.append(screen,status,detail,armLabel);
+    const freshness=el('span',{class:'oled-freshness',role:'status'});
+    const diagnostics=el('details',{class:'oled-diagnostics'},el('summary',{},'Diagnostic OLED'));
+    const measurement=el('output');diagnostics.append(measurement);
+    host.append(screen,status,detail,freshness,armLabel,diagnostics);
+    const text=(node,value)=>{if(node.textContent!==value)node.textContent=value;};
+    const metrics={};
+    const input=new OledInput(async data=>{
+        const began=performance.now();
+        const response=await context.api.request('/extras/portable-os/api/oled/button',
+            {method:'POST',body:data,timeout:data.action==='keep'?650:1500});
+        metrics['input_'+data.action+'_ms']=performance.now()-began;
+        metrics.api_relay_ms=response.result?.api_relay_ms;
+        return response;
+    },(state,message)=>{
+        screen.setAttribute('aria-pressed',String(!!input.active));
+        text(status,message||({holding:'Maintien en cours…',released:'Appui relâché',cancelled:'Appui annulé'})[state]||'');
+    });
     function visible() {
         return !host.hidden && !document.hidden && (!document.fullscreenElement||document.fullscreenElement.contains(host)) &&
             getComputedStyle(host.closest('.sidebar')).visibility !== 'hidden';
     }
-    const request = (data) => context.api.request('/extras/portable-os/api/oled/button',
-        {method:'POST',body:data,timeout:1500});
     function capability(data) {
         const c=data?.context||{};
         if ((c.screen==='menu'&&c.selection===0)||c.screen==='rescue-power') return 'power';
@@ -50,66 +65,54 @@ function createPanel(host, context) {
         clearTimeout(timer);
         if (!visible() || reading || context.store.data.session!=='ready') return;
         reading=true; controller=new AbortController();
+        const began=performance.now();
         try {
             const {result}=await context.api.request('/extras/portable-os/api/oled',{signal:controller.signal,timeout:1500});
             if (!visible()||context.store.data.session!=='ready') return;
             if(result.width!==128||result.height!==64||result.format!=='1bpp-msb') throw new Error('Format OLED incompatible.');
-            if(frame?.id!==result.id) canvas.getContext('2d').putImageData(new ImageData(unpackPixels(result.pixels),128,64),0,0);
+            if(frame?.pixels!==result.pixels) canvas.getContext('2d').putImageData(new ImageData(unpackPixels(result.pixels),128,64),0,0);
             if(armedControl!==result.control_id) {arm.checked=false;armedControl=null;}
             frame=result;
-            if(!result.button_available||(active?.permit&&active.control!==result.control_id)) finish(true);
-            screen.disabled=!result.button_available;
-            if(!active) status.textContent=result.button_available?'Appuyer ou maintenir · Échap annule':'Gestionnaire indisponible';
-            detail.textContent=(result.physical==='connected'?'OLED physique connecté':'Mode virtuel')+' · miroir natif';
+            screen.disabled=false;
+            if(!input.active) text(status,'Appuyer ou maintenir · Échap annule');
+            // Controller health is diagnostic; a valid image never changes the
+            // interaction state or flashes a warning during renderer handoff.
+            text(freshness,'');
+            text(detail,(result.physical==='connected'?'OLED physique connecté':'Mode virtuel')+' · miroir natif');
             const kind=capability(result); armLabel.hidden=!kind;
             arm.disabled=!!context.store.data.transfer||!!context.store.data.operation;
-            armText.textContent=kind==='power'?'Autoriser arrêt / redémarrage pour cet appui':
+            text(armText,kind==='power'?'Autoriser arrêt / redémarrage pour cet appui':
                 kind==='network'?'Autoriser le changement réseau (connexion interrompue)':
-                'Autoriser la suppression de l’image affichée';
+                'Autoriser la suppression de l’image affichée');
+            Object.assign(metrics,{frame_rtt_ms:performance.now()-began,frame_age_ms:(result.age||0)*1000,
+                api_auth_ms:result.api_auth_ms,api_frame_ms:result.api_frame_ms,...result.timing,
+                controller_poll_age_ms:result.controller?.poll_age_ms});
+            if(diagnostics.open)text(measurement,JSON.stringify({...metrics,...input.metrics},null,2));
         } catch(error) {
             if(visible()&&context.store.data.session!=='expired') {
-                status.textContent='Hors ligne : '+error.message; screen.disabled=true;
-                detail.textContent='Dernière image conservée';
+                text(freshness,'Image conservée · actualisation en attente');
+                metrics.frame_error=error.message;metrics.frame_rtt_ms=performance.now()-began;
+                if(diagnostics.open)text(measurement,JSON.stringify({...metrics,...input.metrics},null,2));
             }
-            // Lost display data also cancels input; it must never keep a blind hold.
-            finish(true);
+            // Frame transport is observational. It never releases pointer capture,
+            // disables a held button, or cancels the independently renewed lease.
         } finally {
             reading=false;controller=null;
             if(visible()&&context.store.data.session==='ready') timer=setTimeout(refresh,200);
         }
     }
     function start(event) {
-        if(active||screen.disabled||!frame||!visible()||context.store.data.session!=='ready') return;
+        if(input.active||screen.disabled||!frame||!visible()||context.store.data.session!=='ready') return;
         if(event?.button!==undefined&&event.button!==0) return;
         event?.preventDefault();
         screen.focus();
         if(event?.pointerId!==undefined) screen.setPointerCapture(event.pointerId);
-        const id=Array.from(crypto.getRandomValues(new Uint8Array(16)),n=>n.toString(16).padStart(2,'0')).join('');
         const mayArm=!context.store.data.transfer&&!context.store.data.operation;
-        const gesture={id,control:frame.control_id,ended:false,beat:null,permit:mayArm&&!arm.disabled&&arm.checked&&armedControl===frame.control_id?capability(frame):''};
-        active=gesture; arm.checked=false;armedControl=null;
-        status.textContent='Maintien en cours…';screen.setAttribute('aria-pressed','true');
-        request({action:'start',gesture_id:id,control_id:frame.control_id,permit:gesture.permit})
-            .then(()=>{if(active===gesture&&!gesture.ended) beat(gesture);})
-            .catch(error=>{if(active===gesture){status.textContent=error.message;finish(true);}});
+        const permit=mayArm&&!arm.disabled&&arm.checked&&armedControl===frame.control_id?capability(frame):'';
+        arm.checked=false;armedControl=null;
+        input.start(frame.control_id,permit);
     }
-    async function beat(gesture) {
-        if(active!==gesture||gesture.ended) return;
-        if(!visible()){finish(true);return;}
-        try { await request({action:'keep',gesture_id:gesture.id}); }
-        catch(error) { if(active===gesture){status.textContent='Maintien annulé : '+error.message;finish(true);} return; }
-        if(active===gesture&&!gesture.ended) gesture.beat=setTimeout(()=>beat(gesture),200);
-    }
-    function finish(cancel=false) {
-        const gesture=active;
-        if(!gesture||gesture.ended) return;
-        gesture.ended=true;clearTimeout(gesture.beat);active=null;
-        screen.setAttribute('aria-pressed','false');
-        // Send release immediately, even if the start response has not arrived.
-        request({action:cancel?'cancel':'stop',gesture_id:gesture.id})
-            .catch(error=>{status.textContent='Relâchement non confirmé : '+error.message;});
-        status.textContent=cancel?'Appui annulé':'Appui relâché';
-    }
+    const finish=cancel=>input.end(cancel);
     screen.addEventListener('pointerdown',start);
     screen.addEventListener('pointerup',()=>finish());
     for(const type of ['pointercancel','lostpointercapture']) screen.addEventListener(type,()=>finish(true));
