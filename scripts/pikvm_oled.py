@@ -42,6 +42,7 @@ class AsyncCache:
         self.items = OrderedDict()
         self.queue = []
         self.closed = False
+        self.revision = 0
         self.threads = [threading.Thread(target=self._work, daemon=True, name='oled-telemetry') for _ in range(workers)]
         for thread in self.threads:
             thread.start()
@@ -80,6 +81,8 @@ class AsyncCache:
             with self.condition:
                 item = self.items[key]
                 if success:
+                    if value != item['value']:
+                        self.revision += 1
                     item['value'] = value
                 item['at'], item['pending'] = time.monotonic(), False
 
@@ -190,6 +193,7 @@ class PhysicalOutput:
         self.condition = threading.Condition()
         self.device = None
         self.latest = None
+        self.raw = None
         self.generation = 0
         self.sent = 0
         self.retry_at = 0
@@ -197,10 +201,14 @@ class PhysicalOutput:
         self.closed = False
         self.thread = None
 
-    def offer(self, image):
+    def offer(self, image, raw=None):
+        raw = image.tobytes() if raw is None else raw
         with self.condition:
             if self.closed:
                 return
+            if raw == self.raw:
+                return  # Keep reconnect worker alive; no duplicate Pillow copy/I2C write.
+            self.raw = raw
             self.latest = image.copy()
             self.generation += 1
             if self.background and self.thread is None:
@@ -271,6 +279,9 @@ class MirrorDevice:
         self.last_id = None
         self.render_ms = 0
         self.publish_ms = 0
+        self.pixel_raw = None
+        self.pixel_id = None
+        self.encoded_pixels = None
 
     def set_context(self, **values):
         self.context = values
@@ -282,16 +293,22 @@ class MirrorDevice:
     def close(self):
         self.output.close()
 
-    def publish(self, image, force=False):
+    def publish(self, image, force=False, raw=None):
         now = self.clock()
         physical = self.physical
         if not force and physical == self.reported_physical and now - self.published < .25:
             return
-        raw = image.tobytes()
+        raw = image.tobytes() if raw is None else raw
         identity = hashlib.sha256(raw + json.dumps(self.context, sort_keys=True).encode() + self.source.encode()).hexdigest()
+        if not force and identity == self.last_id and physical == self.reported_physical and now - self.published < 1:
+            return  # A 1s producer heartbeat keeps stale detection, without 4 identical writes/s.
+        if raw != self.pixel_raw:
+            self.pixel_raw = raw
+            self.pixel_id = hashlib.sha256(raw).hexdigest()
+            self.encoded_pixels = base64.b64encode(raw).decode()
         control = {key: value for key, value in self.context.items() if key != 'remaining'}
         control_id = hashlib.sha256((self.source + json.dumps(control, sort_keys=True)).encode()).hexdigest()
-        data = {'width': 128, 'height': 64, 'format': '1bpp-msb', 'pixels': base64.b64encode(raw).decode(),
+        data = {'width': 128, 'height': 64, 'format': '1bpp-msb', 'pixels': self.encoded_pixels, 'pixel_id': self.pixel_id,
                 'id': identity, 'control_id': control_id, 'source': self.source, 'context': self.context, 'physical': physical,
                 'monotonic': now, 'updated_at': time.time(),
                 'timing':{'render_ms':round(self.render_ms,2),'previous_publish_ms':round(self.publish_ms,2)}}
@@ -309,8 +326,14 @@ class MirrorDevice:
     def display(self, image):
         if image.size != self.size or image.mode != self.mode:
             raise ValueError('Framebuffer OLED attendu : 128×64 monochrome.')
-        self.publish(image)
-        self.output.offer(image)  # Non-blocking, bounded latest-frame slot.
+        raw = image.tobytes()
+        self.publish(image, raw=raw)
+        self.output.offer(image, raw=raw)  # Non-blocking, bounded latest-frame slot.
+
+    def refresh(self):
+        # Status producer heartbeat / physical state without redrawing Pillow.
+        if self.output.latest is not None:
+            self.publish(self.output.latest, raw=self.output.raw)
 
 
 @contextlib.contextmanager

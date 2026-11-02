@@ -57,9 +57,12 @@ def redact(message):
 
 
 class SystemBackend:
-    def oled(self):
+    def oled(self, pixels_id=None):
         started = time.perf_counter()
         frame = oled.read_frame()
+        if pixels_id is not None and oled.valid_id(frame.get('pixel_id')) and pixels_id == frame['pixel_id']:
+            frame = {key:value for key,value in frame.items() if key != 'pixels'}
+            frame['pixels_unchanged'] = True
         # Only two small tmpfs reads: no systemctl, socket roundtrip or service lock.
         controller = oled.button_status()
         available = controller['ready']
@@ -176,7 +179,10 @@ class Handler(share.Handler):
             elif not post and route == 'logs':
                 result = backend.logs(parse_qs(url.query).get('unit', [''])[0])
             elif not post and route == 'oled':
-                result = backend.oled()
+                pixels_id = parse_qs(url.query).get('pixels_id', [None])[0]
+                if pixels_id is not None and not oled.valid_id(pixels_id):
+                    raise share.ShareError('Identifiant pixels invalide.', 400)
+                result = backend.oled(pixels_id=pixels_id)
             elif post and route == 'oled/short':
                 data = self.body()
                 if not isinstance(data, dict) or set(data) != {'action', 'frame_id'} or data['action'] != 'short':

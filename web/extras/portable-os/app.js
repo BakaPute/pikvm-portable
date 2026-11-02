@@ -50,7 +50,11 @@ store.subscribe(data => {
 });
 window.addEventListener('beforeunload', event => { if (store.data.transfer) { event.preventDefault(); event.returnValue = ''; } });
 window.addEventListener('pagehide', () => poller.stop());
-window.addEventListener('pageshow', event => { if (event.persisted && store.data.session === 'ready') poller.start(); });
+document.addEventListener('visibilitychange',()=>{
+    if(document.hidden)poller.stop();
+    else if(store.data.session==='ready')poller.start();
+});
+window.addEventListener('pageshow', event => { if (event.persisted && !document.hidden && store.data.session === 'ready') poller.start(); });
 document.getElementById('logout').onclick = () => context.action(async () => {
     if (store.data.transfer) throw new Error('Termine ou annule le transfert avant la déconnexion.');
     await api.native('auth/logout', undefined, 'POST'); location.assign('/login/');
@@ -59,6 +63,6 @@ async function start() {
     try { await api.native('auth/check'); store.update({session: 'ready'}); }
     catch (error) { store.update({session: 'expired'}); notify(error.message, true); return; }
     const router = new Router(modules, document.getElementById('view'), context);
-    router.start(); poller.start();
+    router.start(); if(!document.hidden)poller.start();
 }
 start();

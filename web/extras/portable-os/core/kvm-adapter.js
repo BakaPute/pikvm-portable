@@ -115,10 +115,19 @@ export function adaptKvm(frame, fullscreen) {
     }
     doc.documentElement.classList.add('portable-kvm');
     setEnabled(false);
-    let interval=setInterval(sync,150);
+    let interval=null;
+    function schedule(){
+        clearInterval(interval);interval=null;
+        if(active&&!document.hidden)interval=setInterval(sync,150);
+    }
+    on(document,'visibilitychange',()=>{
+        if(document.hidden)setEnabled(false);
+        schedule();
+    });
+    schedule();
     return {controls,panel,enable:()=>setEnabled(true,true),
         suspend(){setEnabled(false);active=false;clearInterval(interval);interval=null;closePanel();nativeModal?.querySelector('[data-x-wm-modal-cancel]')?.click();sync();},
-        resume(){active=true;if(!interval)interval=setInterval(sync,150);sync();},
+        resume(){active=true;schedule();sync();},
         destroy(){setEnabled(false);active=false;clearInterval(interval);listeners.forEach(fn=>fn());closePanel();
             nativeModal?.querySelector('[data-x-wm-modal-cancel]')?.click();parentModal?.close();parentModal?.remove();controls.remove();panel.remove();},
     };

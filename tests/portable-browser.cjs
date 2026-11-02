@@ -22,7 +22,7 @@ const path = require('node:path');
         const output = path.resolve('private'); fs.mkdirSync(output, {recursive: true});
         const oledReads=[],oledPresses=[];
         page.on('request',request=>{
-            if(request.url().endsWith('/api/oled'))oledReads.push(request.url());
+            if(new URL(request.url()).pathname.endsWith('/api/oled'))oledReads.push(request.url());
             if(request.url().endsWith('/api/oled/button'))oledPresses.push(request.postDataJSON());
         });
         const card=page.getByRole('button',{name:'Ouvrir l’écran OLED du Pi Zero 2 W'});
@@ -53,8 +53,8 @@ const path = require('node:path');
         });
         for(const duration of [2100,3100,5100]){
             const missing=duration===3100;
-            if(missing)await page.route('**/api/oled',route=>route.fulfill({status:503,contentType:'application/json',body:'{"ok":false,"error":"Frame absente ou périmée"}'}));
-            else await page.route('**/api/oled',async route=>{
+            if(missing)await page.route(/\/api\/oled(?:\?.*)?$/,route=>route.fulfill({status:503,contentType:'application/json',body:'{"ok":false,"error":"Frame absente ou périmée"}'}));
+            else await page.route(/\/api\/oled(?:\?.*)?$/,async route=>{
                 const response=await route.fetch();const data=await response.json();data.result.button_available=false;
                 data.result.source='menu';data.result.controller={ready:true,poll_age_ms:3000};
                 await route.fulfill({response,json:data});
@@ -69,9 +69,10 @@ const path = require('node:path');
             const stopped=page.waitForResponse(response=>response.url().endsWith('/api/oled/button')&&response.request().postDataJSON().action==='stop');
             await page.mouse.up();assert.ok((await(await stopped).json()).result.duration>=duration/1000-.05);
             assert.ok(oledReads.length-readsBeforeHold>=2);
-            await page.unroute('**/api/oled');await page.waitForTimeout(250);
+            await page.unroute(/\/api\/oled(?:\?.*)?$/);await page.waitForTimeout(250);
         }
         assert.deepEqual(await page.evaluate(()=>window.oledAudit),{replacements:0,disabled:0});
+        assert.ok(oledReads.some(url=>url.includes('?pixels_id=')),'RC7 must request conditional pixels');
         await page.route('**/api/oled/button',route=>route.request().postDataJSON().action==='keep'?route.abort():route.continue());
         await oledScreen.hover();await page.mouse.down();
         await page.waitForFunction(()=>document.querySelector('#oled-sidebar .oled-screen').getAttribute('aria-pressed')==='false');
@@ -80,17 +81,17 @@ const path = require('node:path');
         await page.keyboard.press('Escape');await page.keyboard.up('Space');
         await page.waitForFunction(()=>document.querySelector('#oled-sidebar .oled-screen').getAttribute('aria-pressed')==='false');
         assert.ok(oledPresses.some(data=>data.action==='cancel'),'Escape must cancel instead of releasing a long action');
-        await page.route('**/api/oled',async route=>{const response=await route.fetch();const data=await response.json();data.result.physical='connected';await route.fulfill({response,json:data});});
+        await page.route(/\/api\/oled(?:\?.*)?$/,async route=>{const response=await route.fetch();const data=await response.json();data.result.physical='connected';await route.fulfill({response,json:data});});
         await oled.getByText('OLED physique connecté',{exact:false}).waitFor();
         assert.equal(await oled.locator('canvas').evaluate(node=>node.toDataURL()),pixelsAfter);
-        await page.unroute('**/api/oled');await oled.getByText('Mode virtuel',{exact:false}).waitFor();
+        await page.unroute(/\/api\/oled(?:\?.*)?$/);await oled.getByText('Mode virtuel',{exact:false}).waitFor();
         await page.screenshot({path:path.join(output,'portable-os-oled.png'),fullPage:true});
-        await page.route('**/api/oled',route=>route.fulfill({status:503,contentType:'application/json',body:'{"ok":false,"error":"Service OLED indisponible."}'}));
+        await page.route(/\/api\/oled(?:\?.*)?$/,route=>route.fulfill({status:503,contentType:'application/json',body:'{"ok":false,"error":"Service OLED indisponible."}'}));
         await oled.getByText('Image conservée · actualisation en attente',{exact:true}).waitFor();
         assert.equal(await oledScreen.isDisabled(),false);
         await card.click();const readsAtClose=oledReads.length;await page.waitForTimeout(600);
         assert.equal(oledReads.length,readsAtClose,'Collapsing stops polling');
-        await page.unroute('**/api/oled');
+        await page.unroute(/\/api\/oled(?:\?.*)?$/);
         await page.screenshot({path: path.join(output, 'portable-os-desktop.png'), fullPage: true, animations: 'disabled'});
         const idle = () => page.waitForFunction(() => document.body.getAttribute('aria-busy') === 'false');
         const navigate = async id => { await idle(); await page.locator(`[data-route="${id}"]`).click(); await idle(); };

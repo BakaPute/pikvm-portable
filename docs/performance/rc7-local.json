@@ -1,0 +1,128 @@
+{
+  "label": "RC7",
+  "environment": {
+    "platform": "Windows-11-10.0.26200-SP0",
+    "python": "3.12.14"
+  },
+  "note": "Local simulated 30s workload, 600 draws, fake I2C. CPU is Windows process CPU, not Pi CPU.",
+  "scenarios": {
+    "static": {
+      "cpu_ms": 296.875,
+      "wall_ms": 299.461,
+      "frames_offered": 600,
+      "frame_replacements": 31,
+      "physical_driver_calls": 1,
+      "response_bytes": 90394,
+      "responses": 150,
+      "runs": [
+        {
+          "cpu_ms": 312.5,
+          "wall_ms": 299.461,
+          "frames_offered": 600,
+          "frame_replacements": 31,
+          "physical_driver_calls": 1,
+          "response_bytes": 90408,
+          "responses": 150
+        },
+        {
+          "cpu_ms": 281.25,
+          "wall_ms": 294.059,
+          "frames_offered": 600,
+          "frame_replacements": 31,
+          "physical_driver_calls": 1,
+          "response_bytes": 90394,
+          "responses": 150
+        },
+        {
+          "cpu_ms": 296.875,
+          "wall_ms": 302.278,
+          "frames_offered": 600,
+          "frame_replacements": 31,
+          "physical_driver_calls": 1,
+          "response_bytes": 90397,
+          "responses": 150
+        },
+        {
+          "cpu_ms": 312.5,
+          "wall_ms": 311.305,
+          "frames_offered": 600,
+          "frame_replacements": 31,
+          "physical_driver_calls": 1,
+          "response_bytes": 90382,
+          "responses": 150
+        },
+        {
+          "cpu_ms": 296.875,
+          "wall_ms": 295.512,
+          "frames_offered": 600,
+          "frame_replacements": 31,
+          "physical_driver_calls": 1,
+          "response_bytes": 90387,
+          "responses": 150
+        }
+      ]
+    },
+    "countdown-1Hz": {
+      "cpu_ms": 312.5,
+      "wall_ms": 319.406,
+      "frames_offered": 600,
+      "frame_replacements": 31,
+      "physical_driver_calls": 30,
+      "response_bytes": 129379,
+      "responses": 150,
+      "runs": [
+        {
+          "cpu_ms": 312.5,
+          "wall_ms": 319.406,
+          "frames_offered": 600,
+          "frame_replacements": 31,
+          "physical_driver_calls": 30,
+          "response_bytes": 129379,
+          "responses": 150
+        },
+        {
+          "cpu_ms": 312.5,
+          "wall_ms": 303.56,
+          "frames_offered": 600,
+          "frame_replacements": 31,
+          "physical_driver_calls": 30,
+          "response_bytes": 129365,
+          "responses": 150
+        },
+        {
+          "cpu_ms": 312.5,
+          "wall_ms": 302.659,
+          "frames_offered": 600,
+          "frame_replacements": 31,
+          "physical_driver_calls": 30,
+          "response_bytes": 129396,
+          "responses": 150
+        },
+        {
+          "cpu_ms": 328.125,
+          "wall_ms": 325.244,
+          "frames_offered": 600,
+          "frame_replacements": 31,
+          "physical_driver_calls": 30,
+          "response_bytes": 129384,
+          "responses": 150
+        },
+        {
+          "cpu_ms": 359.375,
+          "wall_ms": 352.48,
+          "frames_offered": 600,
+          "frame_replacements": 31,
+          "physical_driver_calls": 30,
+          "response_bytes": 129360,
+          "responses": 150
+        }
+      ]
+    }
+  },
+  "native_status": {
+    "pillow_draws": 60,
+    "virtual_seconds": 60,
+    "cpu_ms": 156.25,
+    "note": "Only status producer source varies; RC7 mirror used in both native-render comparisons."
+  }
+}

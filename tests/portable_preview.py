@@ -18,7 +18,7 @@ OLED_HOLDS = {}
 def oled_frame():
     # Recorded from the real PIL renderers with mocked telemetry, never hardware.
     pixels = json.loads((Path(__file__).parent / 'fixtures/oled-frames.json').read_text())['frames'][OLED_PAGE + 1]
-    return {'width': 128, 'height': 64, 'format': '1bpp-msb', 'pixels': pixels,
+    return {'width': 128, 'height': 64, 'format': '1bpp-msb', 'pixels': pixels, 'pixel_id':hashlib.sha256(pixels.encode()).hexdigest(),
             'id': hashlib.sha256(pixels.encode()).hexdigest(), 'control_id': hashlib.sha256(str(OLED_PAGE).encode()).hexdigest(), 'source': 'status' if OLED_PAGE < 0 else 'menu',
             'physical': 'disconnected', 'button_available': True, 'age': 0, 'context': {'screen':'status' if OLED_PAGE<0 else 'menu','selection': OLED_PAGE}}
 
@@ -53,7 +53,10 @@ class Preview(SimpleHTTPRequestHandler):
         if url.path == '/api/auth/check':
             return self.reply({'ok': True, 'result': {}})
         if url.path == '/extras/portable-os/api/oled':
-            return self.reply({'ok': True, 'result': oled_frame()})
+            frame=oled_frame()
+            if parse_qs(url.query).get('pixels_id',[None])[0]==frame['pixel_id']:
+                frame.pop('pixels');frame['pixels_unchanged']=True
+            return self.reply({'ok': True, 'result': frame})
         if url.path == '/api/msd':
             return self.reply({'ok': True, 'result': {'drive': {'connected': False, 'image': None},
                 'storage': {'images': {'rescue.iso': {'size': 734003200}}, 'parts': {'': {'size': 32000000000, 'free': 21800000000}}}}})

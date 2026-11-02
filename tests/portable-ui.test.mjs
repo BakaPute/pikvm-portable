@@ -142,3 +142,16 @@ test('stopping an in-flight polling batch does not restart its timer', async () 
     await new Promise(resolve => setImmediate(resolve));
     assert.equal(poller.running, false); assert.equal(poller.timer, null);
 });
+
+test('visibility stop/start during a pending batch never creates two polling timers',async()=>{
+    let release;const wait=new Promise(resolve=>release=resolve),timers=[];
+    const store=new Store(),read=async()=>{await wait;return {};};
+    const poller=new Poller({native:read,share:read,wifi:read,system:read},store);
+    const oldTimer=globalThis.setTimeout,oldDocument=globalThis.document;
+    globalThis.document={hidden:false};globalThis.setTimeout=fn=>{timers.push(fn);return 1;};
+    try {
+        poller.start();poller.stop();poller.start();release();
+        await new Promise(resolve=>setImmediate(resolve));
+        assert.equal(timers.length,1);
+    } finally {poller.stop();globalThis.setTimeout=oldTimer;globalThis.document=oldDocument;}
+});

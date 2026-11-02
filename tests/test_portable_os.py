@@ -116,7 +116,7 @@ class IntegrationAuthTests(unittest.TestCase):
         self.server = api.share.Server(('127.0.0.1', 0), api.Handler)
         self.server.backend = type('Backend', (), {'status': lambda self: {'safe': True},
             'usb': lambda self: {}, 'logs': lambda self, unit: {}, 'hotspot': lambda self, enabled: {'requested': enabled},
-            'oled': lambda self: {'source': 'menu'}, 'oled_short': lambda self, frame_id: {'accepted': True},
+            'oled': lambda self, pixels_id=None: {'source': 'menu'}, 'oled_short': lambda self, frame_id: {'accepted': True},
             'oled_event': lambda self, data, owner: {'accepted': True}})()
         self.server.action_lock = threading.Lock()
         self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
@@ -157,9 +157,11 @@ class IntegrationAuthTests(unittest.TestCase):
         return status
 
     def test_all_read_routes_require_native_session(self):
-        for path in ('status', 'usb', 'logs?unit=kvmd.service', 'oled'):
+        for path in ('status', 'usb', 'logs?unit=kvmd.service', 'oled', 'oled?pixels_id='+'a'*64):
             self.assertEqual(self.request(path, auth=False), 401)
         self.assertEqual(self.request('status'), 200)
+        self.assertEqual(self.request('oled?pixels_id='+'a'*64),200)
+        self.assertEqual(self.request('oled?pixels_id=invalid'),400)
 
     def test_oled_short_requires_auth_csrf_and_exact_short_action(self):
         short = {'action': 'short', 'frame_id': 'a' * 64}

@@ -63,7 +63,7 @@ export class Client {
 }
 
 export class Poller {
-    constructor(client, store) { this.client = client; this.store = store; this.pending = false; this.timer = null; this.running = false; }
+    constructor(client, store) { this.client = client; this.store = store; this.pending = false; this.timer = null; this.running = false; this.epoch = 0; }
     async refresh() {
         if (this.pending || this.store.data.session === 'expired') return;
         this.pending = true;
@@ -80,12 +80,13 @@ export class Poller {
     start() {
         if (this.running) return;
         this.running = true;
+        const epoch=++this.epoch;
         const tick = async () => {
             await this.refresh();
-            if (this.running && this.store.data.session !== 'expired')
+            if (this.running && this.epoch===epoch && this.store.data.session !== 'expired')
                 this.timer = setTimeout(tick, document.hidden ? 45000 : 8000);
         };
         tick();
     }
-    stop() { this.running = false; clearTimeout(this.timer); this.timer = null; }
+    stop() { this.running = false; this.epoch++; clearTimeout(this.timer); this.timer = null; }
 }

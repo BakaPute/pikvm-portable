@@ -67,9 +67,14 @@ function createPanel(host, context) {
         reading=true; controller=new AbortController();
         const began=performance.now();
         try {
-            const {result}=await context.api.request('/extras/portable-os/api/oled',{signal:controller.signal,timeout:1500});
+            const query=frame?.pixel_id?'?pixels_id='+encodeURIComponent(frame.pixel_id):'';
+            const {result}=await context.api.request('/extras/portable-os/api/oled'+query,{signal:controller.signal,timeout:1500});
             if (!visible()||context.store.data.session!=='ready') return;
             if(result.width!==128||result.height!==64||result.format!=='1bpp-msb') throw new Error('Format OLED incompatible.');
+            if(result.pixels_unchanged){
+                if(!frame?.pixels||frame.pixel_id!==result.pixel_id) throw new Error('Référence pixels incompatible.');
+                result.pixels=frame.pixels;
+            }
             if(frame?.pixels!==result.pixels) canvas.getContext('2d').putImageData(new ImageData(unpackPixels(result.pixels),128,64),0,0);
             if(armedControl!==result.control_id) {arm.checked=false;armedControl=null;}
             frame=result;

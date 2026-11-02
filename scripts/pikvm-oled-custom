@@ -751,6 +751,7 @@ def main():
     page = 0
     last_page = time.monotonic()
     last_transfer_phase = None
+    last_render = None
 
     while True:
         try:
@@ -821,10 +822,14 @@ def main():
             )
 
             device.set_context(screen="status", page=pages[page].__name__, remaining=remaining)
-            pages[page](
-                device,
-                remaining
-            )
+            # Countdown ticks still run every second. Async results trigger an
+            # extra draw at the next 100ms loop, without polling inactive readers.
+            render_key = (pages[page], remaining, cache.revision)
+            if render_key != last_render:
+                pages[page](device, remaining)
+                last_render = render_key
+            else:
+                device.refresh()
 
             last_transfer_phase = (
                 transfer_phase

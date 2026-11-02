@@ -1,0 +1,134 @@
+#!/usr/bin/env python3
+"""Passive Linux /proc sampler. No commands, GPIO/I2C access, network or writes.
+
+JSON lines to stdout; choose the destination yourself. Missing privileged fields
+remain null. Sampling is not an exhaustive exec/syscall/HTTP trace.
+"""
+import argparse
+import json
+import os
+from pathlib import Path
+import re
+import sys
+import time
+
+
+def text(path):
+    try:
+        return path.read_text()
+    except (OSError, UnicodeError):
+        return ''
+
+
+def fields(path):
+    return {a.strip():b.strip() for line in text(path).splitlines()
+            if ':' in line for a,b in [line.split(':',1)]}
+
+
+def stat(path):
+    data=text(path)
+    try:
+        # comm may contain whitespace or parentheses; do not read cmdline/secrets.
+        start,end=data.index('('),data.rindex(')')
+        rest=data[end+2:].split()
+        return {'pid':int(data[:start]),'name':data[start+1:end], 'state':rest[0],
+                'ticks':int(rest[11])+int(rest[12]),'start':int(rest[19])}
+    except (ValueError,IndexError):
+        return None
+
+
+def number(value):
+    try:return int(value.split()[0])
+    except (AttributeError,ValueError,IndexError):return None
+
+
+def sample(proc=Path('/proc'), threads=True):
+    processes=[]
+    for path in proc.iterdir():
+        if not path.name.isdigit():continue
+        cgroup=text(path/'cgroup')
+        service=next((part for part in re.split(r'[/\n]',cgroup)
+                      if part.endswith('.service') and part.startswith(('pikvm-','kvmd','wifi-wizard'))),None)
+        if not service:continue
+        info=stat(path/'stat')
+        if not info:continue
+        status=fields(path/'status');io=fields(path/'io');memory=fields(path/'smaps_rollup')
+        try:fds=sum(1 for _ in (path/'fd').iterdir())
+        except OSError:fds=None
+        info.update(service=service,rss_kib=number(status.get('VmRSS')),
+            pss_kib=number(memory.get('Pss')),threads=number(status.get('Threads')),fds=fds,
+            io={key:number(io.get(key)) for key in ('rchar','wchar','syscr','syscw','read_bytes','write_bytes')},
+            wchan=text(path/'wchan').strip() or None,
+            voluntary_switches=number(status.get('voluntary_ctxt_switches')),
+            involuntary_switches=number(status.get('nonvoluntary_ctxt_switches')))
+        if threads:
+            try:tasks=[stat(task/'stat') for task in (path/'task').iterdir()]
+            except OSError:tasks=[]
+            info['tasks']=[item for item in tasks if item]
+        processes.append(info)
+    cpu=text(proc/'stat').splitlines()
+    return {'monotonic':time.monotonic(),'time':time.time(),'processes':processes,
+        'memory_kib':{key:number(value) for key,value in fields(proc/'meminfo').items()},
+        'cpu_ticks':[int(x) for x in cpu[0].split()[1:]] if cpu and cpu[0].startswith('cpu ') else [],
+        'net_dev':text(proc/'net/dev'),'diskstats':text(proc/'diskstats'),
+        'pressure':{kind:text(proc/'pressure'/kind).strip() or None for kind in ('cpu','io','memory')}}
+
+
+def compare(current, previous, hz):
+    elapsed=current['monotonic']-previous['monotonic']
+    old={(p['pid'],p['start']):p for p in previous['processes']}
+    for process in current['processes']:
+        before=old.get((process['pid'],process['start']))
+        process['cpu_percent_one_core']=None
+        if not before or elapsed<=0:continue
+        process['cpu_percent_one_core']=round(100*(process['ticks']-before['ticks'])/hz/elapsed,3)
+        process['io_delta']={key:process['io'][key]-value if value is not None and process['io'][key] is not None else None
+                             for key,value in before['io'].items()}
+        tasks={(p['pid'],p['start']):p for p in before.get('tasks',[])}
+        for task in process.get('tasks',[]):
+            prior=tasks.get((task['pid'],task['start']))
+            task['cpu_percent_one_core']=round(100*(task['ticks']-prior['ticks'])/hz/elapsed,3) if prior else None
+    return current
+
+
+def summarize(current):
+    services={}
+    for process in current['processes']:
+        services.setdefault(process['service'],[]).append(process)
+    current['services']={name:{
+        'processes':len(items),
+        **{field:sum(item[field] for item in items) if all(item.get(field) is not None for item in items) else None
+           for field in ('rss_kib','pss_kib','threads','fds','cpu_percent_one_core')}}
+        for name,items in services.items()}
+    return current
+
+
+def main():
+    parser=argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--duration',type=float,default=60)
+    parser.add_argument('--interval',type=float,default=5)
+    parser.add_argument('--label',default='unnamed')
+    parser.add_argument('--no-threads',action='store_true')
+    args=parser.parse_args()
+    if not sys.platform.startswith('linux'):parser.error('Linux /proc required; no Windows measurement substituted.')
+    if not 1<=args.interval<=300 or not args.interval<=args.duration<=86400:parser.error('interval 1..300s, duration interval..86400s')
+    print(json.dumps({'schema':1,'label':args.label,'interval':args.interval,
+        'clock_ticks':os.sysconf('SC_CLK_TCK'),'observer_pid':os.getpid(),
+        'limitations':'Sampled processes; brief subprocesses can be missed. IO counts are not all syscalls. Network/disk are host-wide, not HTTP/I2C/GPIO counters.'}),flush=True)
+    previous=None;began=time.monotonic();deadline=began+args.duration;next_at=began
+    while True:
+        sample_started=time.monotonic()
+        current=sample(threads=not args.no_threads)
+        if previous:compare(current,previous,os.sysconf('SC_CLK_TCK'))
+        summarize(current)
+        current['sample_ms']=round(1000*(time.monotonic()-sample_started),3)
+        current['observer_cpu_seconds']=time.process_time()
+        print(json.dumps(current,separators=(',',':')),flush=True)
+        previous=current;next_at+=args.interval
+        if next_at>deadline:break
+        time.sleep(max(0,next_at-time.monotonic()))
+
+
+if __name__=='__main__':
+    try:main()
+    except (KeyboardInterrupt,BrokenPipeError):pass

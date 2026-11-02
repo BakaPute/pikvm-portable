@@ -159,7 +159,7 @@ def file_map():
                     source.suffix in {'.js', '.css', '.svg', '.html', '.json', '.conf', '.yaml'} and
                     not any(part.startswith('.') or part == 'node_modules' for part in parts)):
                 result[Path(destination) / source.relative_to(REPO / relative)] = (source.read_bytes(), 0o644)
-    for name in ('pikvm-portable-api', 'pikvm-portable-install', 'pikvm-oled-custom', 'pikvm-button-menu'):
+    for name in ('pikvm-portable-api', 'pikvm-portable-install', 'pikvm-portable-perf', 'pikvm-oled-custom', 'pikvm-button-menu'):
         result[Path('/usr/local/bin') / name] = ((REPO / 'scripts' / name).read_bytes(), 0o755)
     result[Path('/etc/systemd/system') / PORTABLE_SERVICE] = ((REPO / 'systemd' / PORTABLE_SERVICE).read_bytes(), 0o644)
     result[LIB / 'installer.py'] = ((REPO / 'scripts/pikvm-share-install').read_bytes(), 0o644)

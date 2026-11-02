@@ -211,3 +211,7 @@ commandes KVM et leurs panneaux dans Portable OS, en réutilisant les contrôleu
 natifs : [diagnostic, validations, installation et restauration RC5](docs/portable-os-rc6.md).
 
 Pour un précontrôle RC6 intermittent : [supervision par commande, journaux et procédure de reprise](docs/portable-os-rc6-preflight.md).
+
+La candidate **0.2.0-rc.7** réduit les dessins OLED et les pixels redondants,
+suspend les rafraîchissements cachés et ajoute un diagnostic Linux passif :
+[audit, mesures locales, validation sur Pi et rollback RC6](docs/portable-os-rc7.md).
