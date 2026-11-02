@@ -11,7 +11,7 @@ from pathlib import Path
 from PIL import Image, ImageDraw, ImageFont
 import sys
 sys.path.insert(0, "/usr/local/lib/pikvm-portable")
-from pikvm_oled import MirrorDevice, LogicalButton
+from pikvm_oled import MirrorDevice, LogicalButton, AsyncCache, ButtonReader
 
 
 BUTTON = 18
@@ -68,6 +68,7 @@ HOTSPOT_STATE = Path(
 QR_FILE = "/run/pikvm-oled-qr.png"
 
 DEVICE = None
+DISPLAY_IMAGES = None
 
 SCROLL_START = time.monotonic()
 
@@ -91,17 +92,16 @@ def physical_button_down():
 
         out = cmd(
             ["pinctrl", "get", str(BUTTON)],
-            2
+            .3
         )
 
-        return (
-            "| hi" in out
-            or re.search(r"\bhi\b", out) is not None
-        )
+        if "| hi" in out or re.search(r"\bhi\b", out): return True
+        if "| lo" in out or re.search(r"\blo\b", out): return False
+        return None
 
     except Exception:
 
-        return False
+        return None
 
 
 def wait_release():
@@ -132,7 +132,9 @@ INPUT = LogicalButton()
 
 
 def button_down():
-    return INPUT.poll(physical_button_down())
+    result = INPUT.poll(physical_button_down())
+    INPUT.publish_heartbeat()
+    return result
 
 
 def get_device():
@@ -1124,7 +1126,9 @@ def delete_image(path):
     # Sécurités
     # --------------------------------------------------------
 
-    INPUT.require_physical()
+    if not INPUT.sensitive("delete"):
+        message("Action verrouillee", "Autoriser sur le Web", 0)
+        return False, "Action distante verrouillee"
     if usb_transfer_busy():
 
         return (
@@ -1245,7 +1249,7 @@ def delete_image(path):
 def draw_iso_page(held=0):
 
     get_device().set_context(screen="menu", selection=3)
-    images = image_files()
+    images = DISPLAY_IMAGES() if DISPLAY_IMAGES else image_files()
 
     im = frame()
     d = ImageDraw.Draw(im)
@@ -1259,7 +1263,7 @@ def draw_iso_page(held=0):
     draw_text(
         d,
         (0, 16),
-        f"Images: {len(images)}",
+        f"Images: {len(images) if images is not None else '--'}",
     )
 
     if usb_transfer_busy():
@@ -1381,7 +1385,7 @@ def draw_iso_confirm(
     held=0,
 ):
 
-    get_device().set_context(screen="iso-confirm")
+    get_device().set_context(screen="iso-confirm", target=image.name)
     im = frame()
     d = ImageDraw.Draw(im)
 
@@ -1477,6 +1481,8 @@ def confirm_delete(image):
         held = (
             INPUT.duration(start)
         )
+        if INPUT.cancelled(start):
+            continue
 
         time.sleep(0.06)
 
@@ -1605,6 +1611,8 @@ def run_iso_manager():
         held = (
             INPUT.duration(start)
         )
+        if INPUT.cancelled(start):
+            continue
 
         time.sleep(0.06)
 
@@ -1939,7 +1947,9 @@ def show_qr(ssid, password):
 
 def restart_pikvm():
 
-    INPUT.require_physical()
+    if not INPUT.sensitive("power"):
+        message("Action verrouillee", "Autoriser sur le Web", 0)
+        return False
     message(
         "RESTART PiKVM",
         "Services...",
@@ -1962,7 +1972,9 @@ def restart_pikvm():
 
 def poweroff():
 
-    INPUT.require_physical()
+    if not INPUT.sensitive("power"):
+        message("Action verrouillee", "Autoriser sur le Web", 0)
+        return False
     try:
 
         Path(
@@ -1991,7 +2003,9 @@ def poweroff():
 
 def hotspot_toggle(enable):
 
-    INPUT.require_physical()
+    if not INPUT.sensitive("network"):
+        message("Action verrouillee", "Autoriser sur le Web", 0)
+        return False
     if enable:
 
         message(
@@ -2181,6 +2195,8 @@ def run_rescue_power():
         held = (
             INPUT.duration(start)
         )
+        if INPUT.cancelled(start):
+            continue
 
 
         # ----------------------------------------------------
@@ -2299,6 +2315,8 @@ def run_rescue_mode():
             held = (
                 INPUT.duration(start)
             )
+            if INPUT.cancelled(start):
+                continue
 
 
             # =================================================
@@ -2545,6 +2563,8 @@ def run_menu():
             held = (
                 INPUT.duration(start)
             )
+            if INPUT.cancelled(start):
+                continue
 
             last_action = time.monotonic()
 
@@ -2732,7 +2752,22 @@ def button_loop():
         time.sleep(0.05)
 
 
+def configure_async_readers():
+    global physical_button_down, DISPLAY_IMAGES
+    cache = AsyncCache()
+    # Display-only cache. Actual ISO actions still reread and validate the disk.
+    DISPLAY_IMAGES = cache.wrap(image_files, None, interval=1)
+    for name, default in [('battery_percent',None),('battery_charging',False),('current_ssid',None),('wifi_password',None),('load_hotspot',{})]:
+        globals()[name] = cache.wrap(globals()[name], default, interval=1)
+    reader = ButtonReader(physical_button_down)
+    physical_button_down = reader.read
+    return cache, reader
+
+
 def main():
+    configure_async_readers()
+    from pikvm_oled import BUTTON_HEARTBEAT
+    INPUT.heartbeat = BUTTON_HEARTBEAT
     # GPIO18 is configured by the existing power-hold startup, never by web input.
     with INPUT.listen():
         button_loop()

@@ -1,5 +1,8 @@
 # Portable OS 0.2.0-rc.4 — SSD1306 facultatif et reconnexion sans blocage
 
+La candidate suivante [RC5](portable-os-rc5.md) remplace la fenêtre par un panneau
+latéral, ajoute les maintiens logiques et retire les autres I/O synchrones du rendu.
+
 ## Correction
 
 Le matériel ciblé est exactement un **SSD1306 I2C, adresse 0x3C, 128×64 monochrome**.

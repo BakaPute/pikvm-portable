@@ -1,4 +1,4 @@
-"""Shared OLED framebuffer and short logical input. No GPIO or shell operations."""
+"""Shared OLED framebuffer, asynchronous telemetry and leased logical input."""
 import base64
 import contextlib
 import hashlib
@@ -11,11 +11,102 @@ import stat
 import struct
 import threading
 import time
+from collections import OrderedDict
 
 RUNTIME = Path('/run/pikvm-oled')
 FRAME = RUNTIME / 'frame.json'
 SOCKET = RUNTIME / 'button.sock'
+BUTTON_HEARTBEAT = RUNTIME / 'button.json'
 MAX_AGE = 15
+
+
+def button_ready():
+    try:
+        if BUTTON_HEARTBEAT.is_symlink() or BUTTON_HEARTBEAT.stat().st_size > 256:
+            return False
+        value = json.loads(BUTTON_HEARTBEAT.read_text())
+        return SOCKET.is_socket() and 0 <= time.monotonic() - value['monotonic'] <= .5
+    except (OSError, ValueError, KeyError, TypeError):
+        return False
+
+
+class AsyncCache:
+    """Bounded telemetry cache. A slow reader never runs in the render thread."""
+    def __init__(self, workers=2):
+        self.condition = threading.Condition()
+        self.items = OrderedDict()
+        self.queue = []
+        self.closed = False
+        self.threads = [threading.Thread(target=self._work, daemon=True, name='oled-telemetry') for _ in range(workers)]
+        for thread in self.threads:
+            thread.start()
+
+    def wrap(self, reader, default=None, interval=1):
+        def cached(*args):
+            key = (reader, args)
+            with self.condition:
+                item = self.items.get(key)
+                if item is None:
+                    if len(self.items) >= 32:
+                        disposable = next((k for k, v in self.items.items() if not v['pending']), None)
+                        if disposable is None:
+                            return default
+                        self.items.pop(disposable)
+                    item = self.items[key] = {'value': default, 'at': float('-inf'), 'pending': False}
+                if not self.closed and not item['pending'] and time.monotonic() - item['at'] >= interval:
+                    item['pending'] = True
+                    self.queue.append((key, reader, args))
+                    self.condition.notify()
+                return item['value']
+        return cached
+
+    def _work(self):
+        while True:
+            with self.condition:
+                while not self.queue and not self.closed:
+                    self.condition.wait()
+                if self.closed:
+                    return
+                key, reader, args = self.queue.pop(0)
+            try:
+                value, success = reader(*args), True
+            except Exception:
+                value, success = None, False
+            with self.condition:
+                item = self.items[key]
+                if success:
+                    item['value'] = value
+                item['at'], item['pending'] = time.monotonic(), False
+
+    def close(self):
+        with self.condition:
+            self.closed = True
+            self.queue.clear()
+            self.condition.notify_all()
+
+
+class ButtonReader:
+    """Read-only physical sampler; uncertain input cancels instead of extending."""
+    def __init__(self, reader):
+        self.reader, self.sample, self.at = reader, None, float('-inf')
+        self.stopped = threading.Event()
+        self.thread = threading.Thread(target=self._run, daemon=True, name='oled-button-read')
+        self.thread.start()
+
+    def _run(self):
+        while not self.stopped.is_set():
+            try:
+                value = self.reader()
+            except Exception:
+                value = None
+            self.sample, self.at = value, time.monotonic()
+            self.stopped.wait(.04)
+
+    def read(self):
+        return self.sample if time.monotonic() - self.at <= .3 else None
+
+    def close(self):
+        self.stopped.set()
 
 
 def receive_json(connection, limit):
@@ -191,8 +282,10 @@ class MirrorDevice:
             return
         raw = image.tobytes()
         identity = hashlib.sha256(raw + json.dumps(self.context, sort_keys=True).encode() + self.source.encode()).hexdigest()
+        control = {key: value for key, value in self.context.items() if key != 'remaining'}
+        control_id = hashlib.sha256((self.source + json.dumps(control, sort_keys=True)).encode()).hexdigest()
         data = {'width': 128, 'height': 64, 'format': '1bpp-msb', 'pixels': base64.b64encode(raw).decode(),
-                'id': identity, 'source': self.source, 'context': self.context, 'physical': physical,
+                'id': identity, 'control_id': control_id, 'source': self.source, 'context': self.context, 'physical': physical,
                 'monotonic': now, 'updated_at': time.time()}
         private_directory(self.path.parent)
         temporary = self.path.with_name(f'.frame-{os.getpid()}.tmp')
@@ -220,7 +313,7 @@ def canvas(device):
 
 
 class LogicalButton:
-    """Single bounded short pulse, consumed by the existing physical menu loops.
+    """Physical input, leased session-owned holds and legacy short pulses.
 
     Gesture tokens retain their origin. A slow draw/scheduler can NEVER turn a
     virtual click into a physical hold, even if the real button is pressed too.
@@ -235,25 +328,145 @@ class LogicalButton:
         self.last_short = float('-inf')
         self.physical = False
         self.release_barrier = False
+        self.hold = None
+        self.physical_cancelled = False
+        self.heartbeat = None
+        self.last_heartbeat = float('-inf')
+        self.early = OrderedDict()
+        self.gesture_token = None
+
+    def publish_heartbeat(self):
+        if self.heartbeat is None or self.clock() - self.last_heartbeat < .2:
+            return
+        private_directory(self.heartbeat.parent)
+        temporary = self.heartbeat.with_name('.button-' + str(os.getpid()))
+        fd = os.open(temporary, os.O_CREAT | os.O_WRONLY | os.O_TRUNC | getattr(os,'O_NOFOLLOW',0), 0o600)
+        with os.fdopen(fd, 'w') as file:
+            json.dump({'monotonic': self.clock()}, file)
+        os.replace(temporary, self.heartbeat)
+        self.last_heartbeat = self.clock()
 
     def start(self):
-        return (self.clock(), self.origin)
+        if self.origin == 'remote' and self.hold:
+            token = (self.hold['started'], 'remote', self.hold['id'])
+        else:
+            token = (self.clock(), self.origin)
+        self.gesture_token = token
+        return token
 
     def duration(self, token):
+        if token[1] == 'remote':
+            with self.lock:
+                self._expire()
+                hold = self.hold
+                if not hold or token[2] != hold['id'] or hold['cancelled']:
+                    return 0
+                return max(.01, (hold['stopped'] if hold['stopped'] is not None else self.clock()) - hold['started'])
+        if token[1] == 'physical' and self.physical_cancelled:
+            return 0
         return .10 if token[1] == 'virtual' else max(0, self.clock() - token[0])
 
+    def cancelled(self, token):
+        if token[1] == 'remote':
+            self.duration(token)
+            return not self.hold or self.hold['id'] != token[2] or self.hold['cancelled']
+        return token[1] == 'physical' and self.physical_cancelled
+
+    def _expire(self):
+        if self.hold and self.hold['stopped'] is None and self.clock() > self.hold['lease']:
+            self.hold['cancelled'] = True
+            self.hold['stopped'] = self.clock()
+
+    def sensitive(self, action):
+        token = self.gesture_token
+        origin = token[1] if token else self.origin
+        if origin == 'remote':
+            try:
+                control_id = self.frame_reader().get('control_id')
+            except OledError:
+                return False
+        else:
+            control_id = None
+        with self.lock:
+            self._expire()
+            if origin == 'physical':
+                return not self.physical_cancelled
+            hold = self.hold
+            return bool(origin == 'remote' and token and hold and token[2] == hold['id'] and not hold['cancelled'] and
+                        hold['control_id'] == control_id and
+                        hold['permit'] == action and self.clock() <= hold['lease'] and
+                        (hold['stopped'] is None or self.clock() - hold['stopped'] <= 1))
+
+    def remote(self, data):
+        action, owner, gesture = data.get('action'), data.get('owner'), data.get('gesture_id')
+        if not valid_id(owner) or not isinstance(gesture, str) or len(gesture) != 32 or any(c not in '0123456789abcdef' for c in gesture):
+            raise OledError('Session ou geste invalide.', 400)
+        expected = {'action', 'owner', 'gesture_id', 'control_id', 'permit'} if action == 'start' else {'action', 'owner', 'gesture_id'}
+        if set(data) != expected or action not in ('start', 'keep', 'stop', 'cancel'):
+            raise OledError('Événement de bouton invalide.', 400)
+        # File reads are outside the input lock, so a slow reader cannot stall polling.
+        frame = self.frame_reader() if action == 'start' else None
+        with self.lock:
+            self._expire()
+            now, hold = self.clock(), self.hold
+            for key in list(self.early):
+                if now - self.early[key][1] > 2:
+                    self.early.pop(key)
+            if action == 'start':
+                if (self.physical or now - self.last_poll > .5 or self.pending or self.until or
+                        (hold and (hold['stopped'] is None or not hold['released'] or now - hold['stopped'] < .15))):
+                    raise OledError('Le bouton est occupé.', 409)
+                if frame.get('control_id') != data['control_id']:
+                    raise OledError('Le menu a changé. Réessayer sur le nouvel écran.', 409)
+                permit = data['permit']
+                context = frame.get('context', {})
+                allowed = ('power' if (context.get('screen') == 'menu' and context.get('selection') == 0) or context.get('screen') == 'rescue-power' else
+                           'network' if context.get('screen') == 'rescue' else
+                           'delete' if context.get('screen') == 'iso-confirm' else '')
+                if permit not in ('', allowed):
+                    raise OledError('Autorisation incompatible avec cet écran.', 403)
+                self.hold = {'id': gesture, 'owner': owner, 'started': now, 'stopped': None,
+                             'lease': now + .8, 'cancelled': False, 'consumed': False, 'released': False,
+                             'permit': permit, 'control_id':data['control_id']}
+                early = self.early.pop((owner, gesture), None)
+                if early:
+                    self.hold['stopped'] = now
+                    self.hold['cancelled'] = early[0] == 'cancel'
+                    self.hold['permit'] = ''  # Out-of-order input can only become a short or cancel.
+            else:
+                if hold and hold['id'] == gesture and hold['owner'] != owner:
+                    raise OledError('Ce geste appartient à une autre session.', 403)
+                if not hold or hold['id'] != gesture or hold['owner'] != owner:
+                    if action in ('stop','cancel'):
+                        self.early[(owner,gesture)] = (action,now)
+                        while len(self.early) > 64:
+                            self.early.popitem(last=False)
+                        return {'accepted': True, 'action': action, 'gesture_id': gesture}
+                    raise OledError('Geste inconnu pour cette session.', 409)
+                if action == 'cancel':
+                    hold['cancelled'] = True
+                    if hold['stopped'] is None: hold['stopped'] = now
+                elif action == 'stop':
+                    if hold['stopped'] is None: hold['stopped'] = now
+                elif not hold['cancelled'] and hold['stopped'] is None:
+                    hold['lease'] = now + .8
+                else:
+                    raise OledError('Le maintien est terminé.', 409)
+            return {'accepted': True, 'action': action, 'gesture_id': gesture}
+
     def require_physical(self):
-        if self.origin == 'virtual':
+        if self.origin != 'physical' or self.physical_cancelled:
             raise OledError('Cette action exige un appui physique long.', 403)
 
     def submit(self, frame_id):
+        frame = self.frame_reader()
         now = self.clock()
         with self.lock:
             if self.physical or now - self.last_poll > 2:
                 raise OledError('Bouton physique occupé ou gestionnaire indisponible.', 409)
-            if self.pending or now - self.last_short < .7:
+            if self.pending or (self.hold and not self.hold['released']) or now - self.last_short < .7:
                 raise OledError('Un appui est déjà en cours. Réessayer après actualisation.', 429)
-            if self.frame_reader()['id'] != frame_id:
+            if frame['id'] != frame_id:
                 raise OledError('L’écran a changé. Actualiser avant de cliquer.', 409)
             event = {'id': frame_id, 'expires': now + 1, 'done': threading.Event(), 'error': None}
             self.pending = event
@@ -269,7 +482,28 @@ class LogicalButton:
     def poll(self, physical):
         now = self.clock()
         with self.lock:
+            self._expire()
+            if physical is None and self.origin == 'physical':
+                self.physical_cancelled = True
+                self.release_barrier = True
             self.physical, self.last_poll = bool(physical), now
+            if self.hold and not self.hold['released']:
+                hold = self.hold
+                if physical:
+                    hold['cancelled'] = True
+                    hold['stopped'] = now
+                    self.release_barrier = True
+                self.origin = 'remote'
+                if hold['cancelled']:
+                    hold['released'] = True
+                    return False
+                if not hold['consumed']:
+                    hold['consumed'] = True
+                    return True  # Even a fast press/release is observed exactly once.
+                if hold['stopped'] is None:
+                    return True
+                hold['released'] = True
+                return False
             if self.until:
                 # Never merge an overlapping physical press with a virtual pulse.
                 if physical:
@@ -279,7 +513,7 @@ class LogicalButton:
                 self.until = 0
                 return False
             if self.release_barrier:
-                if not physical:
+                if physical is False:
                     self.release_barrier = False
                 return False
             if self.pending:
@@ -295,6 +529,7 @@ class LogicalButton:
                     return True
             if physical:
                 self.origin = 'physical'
+                self.physical_cancelled = False
             return bool(physical)
 
     @contextlib.contextmanager
@@ -321,6 +556,8 @@ class LogicalButton:
                     data = receive_json(self.request, 1024)
                     if data == {'action': 'ping'}:
                         result = {'ok': True, 'result': {'ready': button.clock() - button.last_poll <= 2}}
+                    elif isinstance(data, dict) and data.get('action') in ('start', 'keep', 'stop', 'cancel'):
+                        result = {'ok': True, 'result': button.remote(data)}
                     elif not isinstance(data, dict) or set(data) != {'action', 'frame_id'} or data['action'] != 'short' or not valid_id(data['frame_id']):
                         raise OledError('Seul un appui court logique est autorisé.', 400)
                     else:
@@ -359,6 +596,10 @@ def request_short(frame_id, path=None):
 
 def ping(path=None):
     return local_request({'action': 'ping'}, path)
+
+
+def request_event(data, path=None):
+    return local_request(data, path)
 
 
 def local_request(payload, path=None):

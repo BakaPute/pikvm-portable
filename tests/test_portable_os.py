@@ -116,7 +116,8 @@ class IntegrationAuthTests(unittest.TestCase):
         self.server = api.share.Server(('127.0.0.1', 0), api.Handler)
         self.server.backend = type('Backend', (), {'status': lambda self: {'safe': True},
             'usb': lambda self: {}, 'logs': lambda self, unit: {}, 'hotspot': lambda self, enabled: {'requested': enabled},
-            'oled': lambda self: {'source': 'menu'}, 'oled_short': lambda self, frame_id: {'accepted': True}})()
+            'oled': lambda self: {'source': 'menu'}, 'oled_short': lambda self, frame_id: {'accepted': True},
+            'oled_event': lambda self, data, owner: {'accepted': True}})()
         self.server.action_lock = threading.Lock()
         self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
         self.thread.start()
@@ -167,6 +168,14 @@ class IntegrationAuthTests(unittest.TestCase):
         self.assertEqual(self.request('oled/short', {'action': 'long', 'frame_id': 'a' * 64}), 400)
         self.assertEqual(self.request('oled/short', {**short, 'duration': 5}), 400)
         self.assertEqual(self.request('oled/short', short), 200)
+
+    def test_held_button_requires_auth_csrf_and_forbids_owner_or_duration_forgery(self):
+        start = {'action':'start','gesture_id':'a'*32,'control_id':'b'*64,'permit':''}
+        self.assertEqual(self.request('oled/button',start,auth=False),401)
+        self.assertEqual(self.request('oled/button',start,csrf=False),403)
+        self.assertEqual(self.request('oled/button',{**start,'owner':'fake'}),400)
+        self.assertEqual(self.request('oled/button',{**start,'duration':5}),400)
+        self.assertEqual(self.request('oled/button',start),200)
 
     def test_network_change_requires_session_csrf_and_explicit_confirmation(self):
         self.assertEqual(self.request('hotspot', {'enabled': True}, auth=False), 401)

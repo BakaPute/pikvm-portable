@@ -14,89 +14,126 @@ export function unpackPixels(encoded) {
 }
 
 export function openOled(context) {
-    const host = document.getElementById('dialogs');
-    if (host.childElementCount) { notify('Fermer la fenêtre actuelle avant d’ouvrir l’OLED.', true); return; }
-    const previous = document.activeElement;
-    let closed = false, busy = false, reading = false, frame, timer, controller;
-    let initialWaiting = context.store.data.session !== 'ready';
-    const state = el('p', {role: 'status', 'aria-live': 'polite'}, context.store.data.session === 'expired' ?
-        'Session PiKVM expirée. Reconnectez-vous pour utiliser l’OLED.' : 'Connexion au framebuffer OLED…');
-    const details = el('p', {class: 'muted oled-detail'});
-    const canvas = el('canvas', {width: 128, height: 64, 'aria-hidden': 'true'});
-    const screen = button('', press, 'oled-screen', {'aria-label': 'Appui court sur le bouton OLED', disabled: true});
-    screen.append(canvas);
-    const close = () => {
-        closed = true; clearTimeout(timer); controller?.abort(); unsubscribe();
-        document.removeEventListener('visibilitychange', visibility);
-        window.removeEventListener('pagehide', close);
-        node.close(); node.remove(); previous?.focus();
-    };
-    const node = el('dialog', {class: 'oled-window', 'aria-labelledby': 'oled-title',
-        oncancel: event => { event.preventDefault(); close(); }},
-        el('div', {class: 'row'}, el('h2', {id: 'oled-title'}, 'OLED · Pi Zero 2 W'), button('Fermer', close, 'quiet')),
-        screen, state, details, hint('Un clic, un toucher ou Entrée : appui court. Les appuis longs restent physiques.'));
-    const unsubscribe = context.store.subscribe(data => {
-        if (data.session === 'expired') {
-            clearTimeout(timer); controller?.abort(); screen.disabled = true;
-            state.textContent = 'Session PiKVM expirée. Reconnectez-vous pour utiliser l’OLED.';
-        }
-        if (data.session === 'ready' && initialWaiting) { initialWaiting = false; refresh(); }
-    });
-    const visibility = () => {
-        clearTimeout(timer);
-        if (document.hidden) { screen.disabled = true; controller?.abort(); }
-        else refresh();
-    };
-    document.addEventListener('visibilitychange', visibility);
-    window.addEventListener('pagehide', close);
-    host.append(node); node.showModal(); refresh();
+    const host = document.getElementById('oled-sidebar');
+    if (!host.dataset.ready) createPanel(host, context);
+    host.hidden = !host.hidden;
+    document.getElementById('device-oled').setAttribute('aria-expanded', String(!host.hidden));
+    host.dispatchEvent(new Event('oled-toggle'));
+}
 
+function createPanel(host, context) {
+    host.dataset.ready = 'true';
+    let frame, timer, reading = false, controller, active, armedControl = null;
+    const status = el('p', {class:'oled-status',role:'status','aria-live':'polite'}, 'Connexion…');
+    const detail = el('p', {class:'oled-detail muted'});
+    const canvas = el('canvas', {width:128,height:64,'aria-hidden':'true'});
+    const screen = button('',()=>{},'oled-screen',{'aria-label':'Bouton OLED : appuyer et maintenir',disabled:true});
+    screen.append(canvas);
+    const arm = el('input',{type:'checkbox',onchange:()=>{armedControl=arm.checked?frame?.control_id:null;}});
+    const armText = el('span');
+    const armLabel = el('label',{class:'oled-arm',hidden:true},arm,armText);
+    host.append(screen,status,detail,armLabel);
+    function visible() {
+        return !host.hidden && !document.hidden && (!document.fullscreenElement||document.fullscreenElement.contains(host)) &&
+            getComputedStyle(host.closest('.sidebar')).visibility !== 'hidden';
+    }
+    const request = (data) => context.api.request('/extras/portable-os/api/oled/button',
+        {method:'POST',body:data,timeout:1500});
+    function capability(data) {
+        const c=data?.context||{};
+        if ((c.screen==='menu'&&c.selection===0)||c.screen==='rescue-power') return 'power';
+        if (c.screen==='rescue') return 'network';
+        if (c.screen==='iso-confirm') return 'delete';
+        return '';
+    }
     async function refresh() {
         clearTimeout(timer);
-        if (closed || busy || reading || document.hidden || context.store.data.session !== 'ready') return;
-        reading = true;
-        controller = new AbortController();
+        if (!visible() || reading || context.store.data.session!=='ready') return;
+        reading=true; controller=new AbortController();
         try {
-            const {result} = await context.api.request('/extras/portable-os/api/oled', {signal: controller.signal, timeout: 4000});
-            if (closed || context.store.data.session !== 'ready') return;
-            if (result.width !== 128 || result.height !== 64 || result.format !== '1bpp-msb') throw new Error('Format OLED incompatible.');
-            canvas.getContext('2d').putImageData(new ImageData(unpackPixels(result.pixels), 128, 64), 0, 0);
-            frame = result;
-            screen.disabled = !result.button_available || busy;
-            state.textContent = result.button_available ? 'Synchronisé · toucher l’écran pour un appui court.' :
-                'Affichage synchronisé · gestionnaire du bouton indisponible.';
-            details.textContent = `${result.source === 'menu' ? 'Menu physique' : 'Affichage normal'} · ${
-                result.physical === 'connected' ? 'OLED physique connecté' : 'Mode virtuel'} · actualisation 1 s`;
-        } catch (error) {
-            if (!closed && !busy && !document.hidden && context.store.data.session !== 'expired') {
-                screen.disabled = true; frame = null;
-                state.textContent = 'Hors ligne : ' + error.message;
-                details.textContent = 'Dernière image conservée ; les appuis sont bloqués.';
+            const {result}=await context.api.request('/extras/portable-os/api/oled',{signal:controller.signal,timeout:1500});
+            if (!visible()||context.store.data.session!=='ready') return;
+            if(result.width!==128||result.height!==64||result.format!=='1bpp-msb') throw new Error('Format OLED incompatible.');
+            if(frame?.id!==result.id) canvas.getContext('2d').putImageData(new ImageData(unpackPixels(result.pixels),128,64),0,0);
+            if(armedControl!==result.control_id) {arm.checked=false;armedControl=null;}
+            frame=result;
+            if(!result.button_available||(active?.permit&&active.control!==result.control_id)) finish(true);
+            screen.disabled=!result.button_available;
+            if(!active) status.textContent=result.button_available?'Appuyer ou maintenir · Échap annule':'Gestionnaire indisponible';
+            detail.textContent=(result.physical==='connected'?'OLED physique connecté':'Mode virtuel')+' · miroir natif';
+            const kind=capability(result); armLabel.hidden=!kind;
+            arm.disabled=!!context.store.data.transfer||!!context.store.data.operation;
+            armText.textContent=kind==='power'?'Autoriser arrêt / redémarrage pour cet appui':
+                kind==='network'?'Autoriser le changement réseau (connexion interrompue)':
+                'Autoriser la suppression de l’image affichée';
+        } catch(error) {
+            if(visible()&&context.store.data.session!=='expired') {
+                status.textContent='Hors ligne : '+error.message; screen.disabled=true;
+                detail.textContent='Dernière image conservée';
             }
+            // Lost display data also cancels input; it must never keep a blind hold.
+            finish(true);
         } finally {
-            reading = false; controller = null;
-            if (!closed && !busy && !document.hidden && context.store.data.session === 'ready') timer = setTimeout(refresh, 1000);
+            reading=false;controller=null;
+            if(visible()&&context.store.data.session==='ready') timer=setTimeout(refresh,200);
         }
     }
-
-    async function press() {
-        if (busy || !frame || screen.disabled || context.store.data.session !== 'ready') return;
-        busy = true; screen.disabled = true; clearTimeout(timer); controller?.abort();
-        try {
-            await context.action(async () => {
-                try {
-                    await context.api.request('/extras/portable-os/api/oled/short', {method: 'POST',
-                        body: {action: 'short', frame_id: frame.id}, timeout: 4000});
-                    if (!closed) state.textContent = 'Appui court transmis au gestionnaire du bouton.';
-                } catch (error) {
-                    if (!closed) state.textContent = 'Appui refusé : ' + error.message;
-                    throw error;
-                }
-            });
-        } finally {
-            busy = false;
-            // Read the result; never retry a potentially consumed input automatically.
-            if (!closed) timer = setTimeout(refresh, 400);
-        }
+    function start(event) {
+        if(active||screen.disabled||!frame||!visible()||context.store.data.session!=='ready') return;
+        if(event?.button!==undefined&&event.button!==0) return;
+        event?.preventDefault();
+        screen.focus();
+        if(event?.pointerId!==undefined) screen.setPointerCapture(event.pointerId);
+        const id=Array.from(crypto.getRandomValues(new Uint8Array(16)),n=>n.toString(16).padStart(2,'0')).join('');
+        const mayArm=!context.store.data.transfer&&!context.store.data.operation;
+        const gesture={id,control:frame.control_id,ended:false,beat:null,permit:mayArm&&!arm.disabled&&arm.checked&&armedControl===frame.control_id?capability(frame):''};
+        active=gesture; arm.checked=false;armedControl=null;
+        status.textContent='Maintien en cours…';screen.setAttribute('aria-pressed','true');
+        request({action:'start',gesture_id:id,control_id:frame.control_id,permit:gesture.permit})
+            .then(()=>{if(active===gesture&&!gesture.ended) beat(gesture);})
+            .catch(error=>{if(active===gesture){status.textContent=error.message;finish(true);}});
     }
+    async function beat(gesture) {
+        if(active!==gesture||gesture.ended) return;
+        if(!visible()){finish(true);return;}
+        try { await request({action:'keep',gesture_id:gesture.id}); }
+        catch(error) { if(active===gesture){status.textContent='Maintien annulé : '+error.message;finish(true);} return; }
+        if(active===gesture&&!gesture.ended) gesture.beat=setTimeout(()=>beat(gesture),200);
+    }
+    function finish(cancel=false) {
+        const gesture=active;
+        if(!gesture||gesture.ended) return;
+        gesture.ended=true;clearTimeout(gesture.beat);active=null;
+        screen.setAttribute('aria-pressed','false');
+        // Send release immediately, even if the start response has not arrived.
+        request({action:cancel?'cancel':'stop',gesture_id:gesture.id})
+            .catch(error=>{status.textContent='Relâchement non confirmé : '+error.message;});
+        status.textContent=cancel?'Appui annulé':'Appui relâché';
+    }
+    screen.addEventListener('pointerdown',start);
+    screen.addEventListener('pointerup',()=>finish());
+    for(const type of ['pointercancel','lostpointercapture']) screen.addEventListener(type,()=>finish(true));
+    screen.addEventListener('keydown',event=>{
+        if([' ','Enter'].includes(event.key)){event.preventDefault();if(!event.repeat)start();}
+        if(event.key==='Escape')finish(true);
+    });
+    screen.addEventListener('keyup',event=>{if([' ','Enter'].includes(event.key)){event.preventDefault();finish();}});
+    screen.addEventListener('blur',()=>finish(true));
+    function lifecycle(){
+        clearTimeout(timer);
+        if(context.store.data.session==='expired'){finish(true);screen.disabled=true;status.textContent='Session PiKVM expirée.';return;}
+        if(!visible()){finish(true);controller?.abort();screen.disabled=true;}
+        else refresh();
+    }
+    host.addEventListener('oled-toggle',lifecycle);
+    document.addEventListener('visibilitychange',lifecycle);
+    document.addEventListener('fullscreenchange',lifecycle);
+    window.addEventListener('resize',lifecycle);
+    window.addEventListener('blur',()=>finish(true));
+    window.addEventListener('pagehide',()=>{finish(true);clearTimeout(timer);controller?.abort();});
+    new MutationObserver(lifecycle).observe(document.body,{attributes:true,attributeFilter:['class']});
+    context.store.subscribe(data=>{
+        if(data.session==='expired'){finish(true);clearTimeout(timer);controller?.abort();screen.disabled=true;
+            status.textContent='Session PiKVM expirée.';}
+    });
 }

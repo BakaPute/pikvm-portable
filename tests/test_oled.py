@@ -301,10 +301,11 @@ class InputTests(unittest.TestCase):
 
     def test_sensitive_functions_have_secondary_origin_guard(self):
         button = oled.LogicalButton(); button.origin = 'virtual'
-        with patch.object(menu, 'INPUT', button), patch.object(menu.subprocess, 'run') as run, patch.object(menu.subprocess, 'Popen') as popen:
+        with patch.object(menu, 'INPUT', button), patch.object(menu, 'message'), patch.object(menu.subprocess, 'run') as run, patch.object(menu.subprocess, 'Popen') as popen:
             for function, args in ((menu.poweroff, ()), (menu.restart_pikvm, ()),
                                    (menu.hotspot_toggle, (True,)), (menu.delete_image, (Path('/unused'),))):
-                with self.assertRaises(oled.OledError): function(*args)
+                result = function(*args)
+                self.assertTrue(result is False or (isinstance(result,tuple) and result[0] is False))
             run.assert_not_called(); popen.assert_not_called()
 
     def test_short_cancels_real_iso_confirmation_and_leaves_rescue_power_without_shutdown(self):
@@ -367,8 +368,8 @@ class InstallTests(unittest.TestCase):
     def test_dead_button_service_disables_web_input_even_if_socket_remains(self):
         backend = api.SystemBackend()
         with patch.object(oled, 'read_frame', return_value={'id': 'a' * 64}), \
-             patch.object(oled, 'SOCKET', Mock(is_socket=lambda: True)), \
-             patch.object(backend, 'services', return_value={'pikvm-button-menu.service': {'ActiveState': 'failed'}}):
+             patch.object(oled, 'button_ready', return_value=False), \
+             patch.object(backend, 'services', side_effect=AssertionError('No service command in frame hot path')):
             self.assertFalse(backend.oled()['button_available'])
 
     def test_unknown_local_changes_are_preserved_and_reinstall_is_accepted(self):

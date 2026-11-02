@@ -59,16 +59,19 @@ def redact(message):
 class SystemBackend:
     def oled(self):
         frame = oled.read_frame()
-        available = False
-        if oled.SOCKET.is_socket():
-            try:
-                available = self.services().get('pikvm-button-menu.service', {}).get('ActiveState') == 'active'
-            except (OSError, share.ShareError, subprocess.TimeoutExpired):
-                pass
+        # Only two small tmpfs reads: no systemctl, socket roundtrip or service lock.
+        available = oled.button_ready()
         return {**frame, 'button_available': available}
 
     def oled_short(self, frame_id):
         return oled.request_short(frame_id)
+
+    def oled_event(self, data, owner):
+        if data.get('action') == 'start' and data.get('permit') == 'power':
+            drives = self.usb()['drives']
+            if any(drives.get(str(index), {}).get('attributes', {}).get('file') != '' for index in (0,1)) or share.LinuxBackend().lease_read():
+                raise oled.OledError('Éjecter et libérer les deux lecteurs avant une action alimentation distante.', 409)
+        return oled.request_event({**data, 'owner': owner})
 
     def __init__(self, gadget=Path('/sys/kernel/config/usb_gadget/kvmd'),
                  controllers=Path('/sys/class/udc')):
@@ -153,7 +156,7 @@ class Handler(share.Handler):
     server_version = 'PiKVM-Portable-OS'
     def dispatch(self, post=False):
         try:
-            share.authenticate(self.headers)
+            owner = share.authenticate(self.headers)
             if post:
                 share.check_csrf(self.headers)
             url = urlsplit(self.path)
@@ -172,6 +175,12 @@ class Handler(share.Handler):
                 if not isinstance(data, dict) or set(data) != {'action', 'frame_id'} or data['action'] != 'short':
                     raise share.ShareError('Seul un appui court logique est autorisé.', 400)
                 result = backend.oled_short(data['frame_id'])
+            elif post and route == 'oled/button':
+                data = self.body()
+                keys = {'action', 'gesture_id', 'control_id', 'permit'} if isinstance(data, dict) and data.get('action') == 'start' else {'action', 'gesture_id'}
+                if not isinstance(data, dict) or set(data) != keys or data.get('action') not in ('start','keep','stop','cancel'):
+                    raise share.ShareError('Événement OLED invalide.', 400)
+                result = backend.oled_event(data, owner)
             elif post and route == 'hotspot':
                 data = self.body()
                 if data.get('confirmed') is not True:

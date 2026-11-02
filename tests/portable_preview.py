@@ -3,6 +3,7 @@ import argparse
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 import json
 import hashlib
+import time
 from pathlib import Path
 from urllib.parse import parse_qs, urlsplit, unquote
 
@@ -11,14 +12,15 @@ FILES = {'welcome.txt': b'Portable OS local test fixture'}
 MODE = 'detached'
 UPLOADS = {}
 OLED_PAGE = -1
+OLED_HOLDS = {}
 
 
 def oled_frame():
     # Recorded from the real PIL renderers with mocked telemetry, never hardware.
     pixels = json.loads((Path(__file__).parent / 'fixtures/oled-frames.json').read_text())['frames'][OLED_PAGE + 1]
     return {'width': 128, 'height': 64, 'format': '1bpp-msb', 'pixels': pixels,
-            'id': hashlib.sha256(pixels.encode()).hexdigest(), 'source': 'status' if OLED_PAGE < 0 else 'menu',
-            'physical': 'disconnected', 'button_available': True, 'age': 0, 'context': {'selection': OLED_PAGE}}
+            'id': hashlib.sha256(pixels.encode()).hexdigest(), 'control_id': hashlib.sha256(str(OLED_PAGE).encode()).hexdigest(), 'source': 'status' if OLED_PAGE < 0 else 'menu',
+            'physical': 'disconnected', 'button_available': True, 'age': 0, 'context': {'screen':'status' if OLED_PAGE<0 else 'menu','selection': OLED_PAGE}}
 
 
 class Preview(SimpleHTTPRequestHandler):
@@ -94,9 +96,22 @@ class Preview(SimpleHTTPRequestHandler):
         if url.path == '/__test/reset' and self.headers.get('X-Portable-Test') == '1':
             MODE = 'detached'
             OLED_PAGE = -1
+            OLED_HOLDS.clear()
             FILES.clear(); FILES['welcome.txt'] = b'Portable OS local test fixture'; UPLOADS.clear()
             return self.reply({'ok': True})
         data = json.loads(raw or b'{}') if self.headers.get('Content-Type') != 'application/octet-stream' else {}
+        if url.path == '/extras/portable-os/api/oled/button':
+            ident=data.get('gesture_id'); action=data.get('action')
+            if action=='start':
+                OLED_HOLDS.setdefault(ident, {'started':time.monotonic(),'ended':False})
+            elif action in ('stop','cancel'):
+                hold=OLED_HOLDS.setdefault(ident,{'started':time.monotonic(),'ended':False})
+                duration=time.monotonic()-hold['started']
+                if not hold['ended'] and action=='stop' and duration<.8:
+                    OLED_PAGE=(OLED_PAGE+1)%4
+                hold['ended']=True
+                return self.reply({'ok':True,'result':{'accepted':True,'duration':duration}})
+            return self.reply({'ok':True,'result':{'accepted':True}})
         if url.path == '/extras/portable-os/api/oled/short':
             if data != {'action': 'short', 'frame_id': oled_frame()['id']}:
                 return self.reply({'ok': False, 'error': 'Appui court invalide.'}, 409)

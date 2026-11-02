@@ -201,3 +201,7 @@ appui court logique authentifié depuis la carte Pi Zero 2 W.
 
 La candidate **0.2.0-rc.4** rend l'accès SSD1306 facultatif et non bloquant :
 [mode virtuel, reconnexion automatique, tests et mise à jour](docs/portable-os-rc4.md).
+
+La candidate **0.2.0-rc.5** intègre l'OLED dans la sidebar, ajoute les maintiens
+logiques avec annulation et gardes sensibles, et sépare la télémétrie du rendu :
+[architecture, tests, mise à jour et rollback](docs/portable-os-rc5.md).

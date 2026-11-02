@@ -10,14 +10,14 @@ import time
 
 import sys
 sys.path.insert(0, "/usr/local/lib/pikvm-portable")
-from pikvm_oled import MirrorDevice, canvas
+from pikvm_oled import MirrorDevice, canvas, AsyncCache
 
 
 OLED_ADDR = 0x3C
 MAX17048_ADDR = "0x36"
 
 PAGE_DURATION = 10
-REFRESH = 1
+REFRESH = .1
 
 
 def cmd(args):
@@ -43,13 +43,15 @@ def max17048_word(reg):
         hi = int(subprocess.check_output(
             ["i2cget", "-y", "1", MAX17048_ADDR, hex(reg), "b"],
             text=True,
-            stderr=subprocess.DEVNULL
+            stderr=subprocess.DEVNULL,
+            timeout=1
         ).strip(), 16)
 
         lo = int(subprocess.check_output(
             ["i2cget", "-y", "1", MAX17048_ADDR, hex(reg + 1), "b"],
             text=True,
-            stderr=subprocess.DEVNULL
+            stderr=subprocess.DEVNULL,
+            timeout=1
         ).strip(), 16)
 
         return (hi << 8) | lo
@@ -732,6 +734,12 @@ def page_usb_transfer(device, remaining):
 # ------------------------------------------------------------
 
 def main():
+    cache = AsyncCache()
+    defaults = {'battery':(None,None), 'battery_charging':False, 'wifi':(None,None), 'ip_address':'-',
+                'usb_state':'?', 'hdmi_state':'?', 'cpu_temp':None, 'cpu_usage':None,
+                'transfer_info':{}, 'msd_free_space':None, 'uptime':'?'}
+    for name, default in defaults.items():
+        globals()[name] = cache.wrap(globals()[name], default, interval=1)
     device = MirrorDevice("status")
 
     base_pages = [
@@ -823,7 +831,7 @@ def main():
             )
 
         except Exception as e:
-            device.set_context(screen='error')
+            device.set_context(screen='error', error_type=type(e).__name__)
             with canvas(device) as draw:
                 draw.text(
                     (0, 0),
