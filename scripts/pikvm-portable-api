@@ -10,6 +10,7 @@ import signal
 import subprocess
 import threading
 import time
+import sys
 from urllib.parse import parse_qs, urlsplit
 
 
@@ -25,10 +26,14 @@ def load_share():
 
 
 share = load_share()
+sys.path.insert(0, '/usr/local/lib/pikvm-portable')
+sys.path.insert(1, str(Path(__file__).resolve().parent))
+import pikvm_oled as oled
 UNITS = ('kvmd.service', 'kvmd-nginx.service', 'wifi-wizard-api.service',
          'pikvm-share-api.service', 'pikvm-portable-api.service',
          'pikvm-power-hold.service', 'pikvm-auto-shutdown.service',
-         'pikvm-hotspot-hostapd.service', 'pikvm-hotspot-dnsmasq.service')
+         'pikvm-hotspot-hostapd.service', 'pikvm-hotspot-dnsmasq.service',
+         'pikvm-oled-custom.service', 'pikvm-button-menu.service')
 
 
 def read(path):
@@ -52,6 +57,19 @@ def redact(message):
 
 
 class SystemBackend:
+    def oled(self):
+        frame = oled.read_frame()
+        available = False
+        if oled.SOCKET.is_socket():
+            try:
+                available = self.services().get('pikvm-button-menu.service', {}).get('ActiveState') == 'active'
+            except (OSError, share.ShareError, subprocess.TimeoutExpired):
+                pass
+        return {**frame, 'button_available': available}
+
+    def oled_short(self, frame_id):
+        return oled.request_short(frame_id)
+
     def __init__(self, gadget=Path('/sys/kernel/config/usb_gadget/kvmd'),
                  controllers=Path('/sys/class/udc')):
         self.gadget = gadget
@@ -147,6 +165,13 @@ class Handler(share.Handler):
                 result = backend.usb()
             elif not post and route == 'logs':
                 result = backend.logs(parse_qs(url.query).get('unit', [''])[0])
+            elif not post and route == 'oled':
+                result = backend.oled()
+            elif post and route == 'oled/short':
+                data = self.body()
+                if not isinstance(data, dict) or set(data) != {'action', 'frame_id'} or data['action'] != 'short':
+                    raise share.ShareError('Seul un appui court logique est autorisé.', 400)
+                result = backend.oled_short(data['frame_id'])
             elif post and route == 'hotspot':
                 data = self.body()
                 if data.get('confirmed') is not True:
@@ -162,7 +187,7 @@ class Handler(share.Handler):
             self.reply(200, {'ok': True, 'result': result})
         except (BrokenPipeError, ConnectionResetError, TimeoutError):
             return
-        except share.ShareError as exc:
+        except (share.ShareError, oled.OledError) as exc:
             self.reply(exc.status, {'ok': False, 'error': str(exc)})
         except (ValueError, UnicodeError):
             self.reply(400, {'ok': False, 'error': 'Requête invalide.'})

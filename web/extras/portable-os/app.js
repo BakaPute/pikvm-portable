@@ -1,4 +1,5 @@
 import {routes} from '../../legacy/routes.js';
+import {openOled} from './modules/oled.js';
 import {Store} from './core/state.js';
 import {Client, Poller} from './core/api.js';
 import {el, icon, notify, guarded} from './core/ui.js';
@@ -17,6 +18,7 @@ const context = {api, store, poller, notify, action: async work => {
     try { return await guarded(work); } finally { store.update({operation: false}); }
 }};
 const nav = document.getElementById('navigation');
+document.getElementById('device-oled').onclick = () => openOled(context);
 let group;
 for (const module of modules) {
     if (module.group !== group) { group = module.group; nav.append(el('div', {class: 'nav-label'}, group)); }

@@ -9,8 +9,9 @@ import time
 from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFont
-from luma.core.interface.serial import i2c
-from luma.oled.device import ssd1306
+import sys
+sys.path.insert(0, "/usr/local/lib/pikvm-portable")
+from pikvm_oled import MirrorDevice, LogicalButton
 
 
 BUTTON = 18
@@ -84,16 +85,7 @@ def cmd(args, timeout=10):
     return p.stdout.strip()
 
 
-def button_setup():
-
-    subprocess.run(
-        ["pinctrl", "set", str(BUTTON), "ip", "pd"],
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL
-    )
-
-
-def button_down():
+def physical_button_down():
 
     try:
 
@@ -136,23 +128,17 @@ def wait_press_until(deadline):
     return False
 
 
+INPUT = LogicalButton()
+
+
+def button_down():
+    return INPUT.poll(physical_button_down())
+
+
 def get_device():
-
     global DEVICE
-
     if DEVICE is None:
-
-        serial = i2c(
-            port=1,
-            address=0x3C
-        )
-
-        DEVICE = ssd1306(
-            serial,
-            width=128,
-            height=64
-        )
-
+        DEVICE = MirrorDevice('menu')
     return DEVICE
 
 
@@ -698,6 +684,7 @@ def make_wifi_qr(ssid, password):
 
 def draw_power(held=0):
 
+    get_device().set_context(screen="menu", selection=0)
     im = frame()
     d = ImageDraw.Draw(im)
 
@@ -742,6 +729,7 @@ def draw_power(held=0):
 
 def draw_wifi(held=0):
 
+    get_device().set_context(screen="menu", selection=1)
     ssid = current_ssid()
     password = wifi_password(ssid)
 
@@ -814,6 +802,7 @@ def draw_wifi(held=0):
 
 def draw_rescue(held=0):
 
+    get_device().set_context(screen="rescue", selection=2)
     active = HOTSPOT_STATE.exists()
 
     env = load_hotspot()
@@ -1135,6 +1124,7 @@ def delete_image(path):
     # Sécurités
     # --------------------------------------------------------
 
+    INPUT.require_physical()
     if usb_transfer_busy():
 
         return (
@@ -1254,6 +1244,7 @@ def delete_image(path):
 
 def draw_iso_page(held=0):
 
+    get_device().set_context(screen="menu", selection=3)
     images = image_files()
 
     im = frame()
@@ -1306,6 +1297,7 @@ def draw_iso_browser(
     remaining=None,
 ):
 
+    get_device().set_context(screen="iso-browser", selection=index)
     image = images[index]
 
     im = frame()
@@ -1389,6 +1381,7 @@ def draw_iso_confirm(
     held=0,
 ):
 
+    get_device().set_context(screen="iso-confirm")
     im = frame()
     d = ImageDraw.Draw(im)
 
@@ -1458,14 +1451,13 @@ def confirm_delete(image):
             time.sleep(0.12)
 
 
-        start = time.monotonic()
+        start = INPUT.start()
 
 
         while button_down():
 
             held = (
-                time.monotonic()
-                - start
+                INPUT.duration(start)
             )
 
             draw_iso_confirm(
@@ -1483,8 +1475,7 @@ def confirm_delete(image):
 
 
         held = (
-            time.monotonic()
-            - start
+            INPUT.duration(start)
         )
 
         time.sleep(0.06)
@@ -1589,7 +1580,7 @@ def run_iso_manager():
             time.sleep(0.12)
 
 
-        start = time.monotonic()
+        start = INPUT.start()
 
 
         # ====================================================
@@ -1599,8 +1590,7 @@ def run_iso_manager():
         while button_down():
 
             held = (
-                time.monotonic()
-                - start
+                INPUT.duration(start)
             )
 
             draw_iso_browser(
@@ -1613,8 +1603,7 @@ def run_iso_manager():
 
 
         held = (
-            time.monotonic()
-            - start
+            INPUT.duration(start)
         )
 
         time.sleep(0.06)
@@ -1750,6 +1739,7 @@ def run_iso_manager():
 
 def message(line1, line2="", delay=1):
 
+    get_device().set_context(screen="message")
     im = frame()
     d = ImageDraw.Draw(im)
 
@@ -1776,6 +1766,7 @@ def message(line1, line2="", delay=1):
 
 def show_qr(ssid, password):
 
+    get_device().set_context(screen="wifi-qr")
     if not ssid or not password:
 
         message(
@@ -1948,6 +1939,7 @@ def show_qr(ssid, password):
 
 def restart_pikvm():
 
+    INPUT.require_physical()
     message(
         "RESTART PiKVM",
         "Services...",
@@ -1970,6 +1962,7 @@ def restart_pikvm():
 
 def poweroff():
 
+    INPUT.require_physical()
     try:
 
         Path(
@@ -1998,6 +1991,7 @@ def poweroff():
 
 def hotspot_toggle(enable):
 
+    INPUT.require_physical()
     if enable:
 
         message(
@@ -2072,6 +2066,7 @@ def draw_menu(index, held=0):
 
 def draw_rescue_power(held=0):
 
+    get_device().set_context(screen="rescue-power")
     im = frame()
     d = ImageDraw.Draw(im)
 
@@ -2154,7 +2149,7 @@ def run_rescue_power():
             time.sleep(0.12)
 
 
-        start = time.monotonic()
+        start = INPUT.start()
 
 
         # ----------------------------------------------------
@@ -2164,8 +2159,7 @@ def run_rescue_power():
         while button_down():
 
             held = (
-                time.monotonic()
-                - start
+                INPUT.duration(start)
             )
 
             draw_rescue_power(
@@ -2185,8 +2179,7 @@ def run_rescue_power():
 
 
         held = (
-            time.monotonic()
-            - start
+            INPUT.duration(start)
         )
 
 
@@ -2262,7 +2255,7 @@ def run_rescue_mode():
                 break
 
 
-            start = time.monotonic()
+            start = INPUT.start()
 
 
             # =================================================
@@ -2272,8 +2265,7 @@ def run_rescue_mode():
             while button_down():
 
                 held = (
-                    time.monotonic()
-                    - start
+                    INPUT.duration(start)
                 )
 
                 draw_rescue(
@@ -2305,8 +2297,7 @@ def run_rescue_mode():
 
 
             held = (
-                time.monotonic()
-                - start
+                INPUT.duration(start)
             )
 
 
@@ -2450,7 +2441,7 @@ def run_menu():
 
                 time.sleep(0.12)
 
-            start = time.monotonic()
+            start = INPUT.start()
 
             last_draw = 0
 
@@ -2459,8 +2450,7 @@ def run_menu():
             while button_down():
 
                 held = (
-                    time.monotonic()
-                    - start
+                    INPUT.duration(start)
                 )
 
                 now = time.monotonic()
@@ -2553,8 +2543,7 @@ def run_menu():
 
 
             held = (
-                time.monotonic()
-                - start
+                INPUT.duration(start)
             )
 
             last_action = time.monotonic()
@@ -2706,9 +2695,8 @@ def run_menu():
             )
 
 
-def main():
+def button_loop():
 
-    button_setup()
 
 
     while True:
@@ -2721,7 +2709,6 @@ def main():
 
             run_rescue_mode()
 
-            button_setup()
 
             time.sleep(0.2)
 
@@ -2738,12 +2725,17 @@ def main():
 
             run_menu()
 
-            button_setup()
 
             time.sleep(0.2)
 
 
         time.sleep(0.05)
+
+
+def main():
+    # GPIO18 is configured by the existing power-hold startup, never by web input.
+    with INPUT.listen():
+        button_loop()
 
 
 if __name__ == "__main__":

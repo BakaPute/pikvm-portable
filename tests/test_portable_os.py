@@ -115,7 +115,8 @@ class IntegrationAuthTests(unittest.TestCase):
     def setUp(self):
         self.server = api.share.Server(('127.0.0.1', 0), api.Handler)
         self.server.backend = type('Backend', (), {'status': lambda self: {'safe': True},
-            'usb': lambda self: {}, 'logs': lambda self, unit: {}, 'hotspot': lambda self, enabled: {'requested': enabled}})()
+            'usb': lambda self: {}, 'logs': lambda self, unit: {}, 'hotspot': lambda self, enabled: {'requested': enabled},
+            'oled': lambda self: {'source': 'menu'}, 'oled_short': lambda self, frame_id: {'accepted': True}})()
         self.server.action_lock = threading.Lock()
         self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
         self.thread.start()
@@ -138,18 +139,34 @@ class IntegrationAuthTests(unittest.TestCase):
             headers['Content-Type'] = 'application/json'
             if csrf:
                 headers['X-Pikvm-Share'] = '1'
-        connection.request('GET' if post is None else 'POST', '/extras/portable-os/api/' + path,
-                           json.dumps(post) if post is not None else None, headers)
-        response = connection.getresponse()
+        # Send this small fixture request as one packet. The zero-latency mocked
+        # auth can otherwise close HTTP/1.0 before http.client sends its body,
+        # producing a Windows TCP reset instead of the intended denial response.
+        body = json.dumps(post).encode() if post is not None else b''
+        headers.update({'Host': 'localhost', 'Content-Length': str(len(body))})
+        request = ('POST' if post is not None else 'GET') + ' /extras/portable-os/api/' + path + ' HTTP/1.0\r\n'
+        request += ''.join(name + ': ' + value + '\r\n' for name, value in headers.items()) + '\r\n'
+        connection.connect()
+        connection.sock.sendall(request.encode() + body)
+        response = http.client.HTTPResponse(connection.sock)
+        response.begin()
         status = response.status
         response.read()
         connection.close()
         return status
 
     def test_all_read_routes_require_native_session(self):
-        for path in ('status', 'usb', 'logs?unit=kvmd.service'):
+        for path in ('status', 'usb', 'logs?unit=kvmd.service', 'oled'):
             self.assertEqual(self.request(path, auth=False), 401)
         self.assertEqual(self.request('status'), 200)
+
+    def test_oled_short_requires_auth_csrf_and_exact_short_action(self):
+        short = {'action': 'short', 'frame_id': 'a' * 64}
+        self.assertEqual(self.request('oled/short', short, auth=False), 401)
+        self.assertEqual(self.request('oled/short', short, csrf=False), 403)
+        self.assertEqual(self.request('oled/short', {'action': 'long', 'frame_id': 'a' * 64}), 400)
+        self.assertEqual(self.request('oled/short', {**short, 'duration': 5}), 400)
+        self.assertEqual(self.request('oled/short', short), 200)
 
     def test_network_change_requires_session_csrf_and_explicit_confirmation(self):
         self.assertEqual(self.request('hotspot', {'enabled': True}, auth=False), 401)

@@ -61,6 +61,8 @@ class PortableInstallTests(unittest.TestCase):
             target = root / 'portable.html'
             fallback = root / 'legacy/main.js'
             routes = root / 'portable-server.conf'
+            oled_script = root / 'oled-script'
+            oled_script.write_bytes(b'previous OLED with local compatibility fixes')
             state = {'active': False, 'enabled': False}
             def run(args):
                 if args[:2] == ['systemctl', 'start']:
@@ -70,14 +72,20 @@ class PortableInstallTests(unittest.TestCase):
                 elif args[:2] == ['systemctl', 'stop']:
                     state['active'] = False
                 return ''
-            stack.enter_context(patch.object(h, 'run', side_effect=run))
+            run_mock = stack.enter_context(patch.object(h, 'run', side_effect=run))
             stack.enter_context(patch.object(h, 'service_state', side_effect=lambda: dict(state)))
             stack.enter_context(patch.object(h.os, 'chown', create=True))
             stack.enter_context(patch.object(portable, 'policy_preflight', return_value=(b'', False)))
+            stack.enter_context(patch.object(portable, 'oled_preflight'))
+            stack.enter_context(patch.object(portable, 'oled_states', return_value={
+                'pikvm-oled-custom.service': {'active': False, 'enabled': False},
+                'pikvm-button-menu.service': {'active': True, 'enabled': True}}))
             stack.enter_context(patch.object(portable, 'active', return_value=True))
             stack.enter_context(patch.object(portable, 'wait_ready'))
+            stack.enter_context(patch.object(portable, 'wait_oled_ready'))
             stack.enter_context(patch.object(portable, 'file_map', return_value={target: (b'portable app', 0o644),
-                fallback: (b'independent fallback', 0o644), routes: (b'entry and legacy routes', 0o644)}))
+                fallback: (b'independent fallback', 0o644), routes: (b'entry and legacy routes', 0o644),
+                oled_script: (b'new OLED mirror', 0o755)}))
             stack.enter_context(patch('sys.stdout', new_callable=io.StringIO))
             with patch.object(portable, 'nginx_config'):
                 portable.install(h)
@@ -91,6 +99,10 @@ class PortableInstallTests(unittest.TestCase):
             self.assertFalse(target.exists())
             self.assertFalse(fallback.exists())
             self.assertFalse(routes.exists())
+            self.assertEqual(oled_script.read_bytes(), b'previous OLED with local compatibility fixes')
+            self.assertIn(unittest.mock.call(['systemctl', 'disable', 'pikvm-oled-custom.service']), run_mock.call_args_list)
+            self.assertIn(unittest.mock.call(['systemctl', '--job-mode=ignore-dependencies', 'start', 'pikvm-button-menu.service']), run_mock.call_args_list)
+            self.assertFalse(any('pikvm-power-hold.service' in call.args[0] for call in run_mock.call_args_list))
             self.assertEqual(h.NGINX_CONFIG.read_bytes(), b'original nginx')
             with patch.object(portable, 'nginx_config', side_effect=RuntimeError('invalid nginx')):
                 with self.assertRaisesRegex(RuntimeError, 'invalid nginx'):

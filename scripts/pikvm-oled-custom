@@ -8,9 +8,9 @@ import shutil
 import subprocess
 import time
 
-from luma.core.interface.serial import i2c
-from luma.oled.device import ssd1306
-from luma.core.render import canvas
+import sys
+sys.path.insert(0, "/usr/local/lib/pikvm-portable")
+from pikvm_oled import MirrorDevice, canvas
 
 
 OLED_ADDR = 0x3C
@@ -731,116 +731,114 @@ def page_usb_transfer(device, remaining):
 # Main
 # ------------------------------------------------------------
 
-serial = i2c(
-    port=1,
-    address=OLED_ADDR
-)
+def main():
+    device = MirrorDevice("status")
 
-device = ssd1306(
-    serial,
-    width=128,
-    height=64
-)
+    base_pages = [
+        page_main,
+        page_battery,
+        page_system
+    ]
 
-base_pages = [
-    page_main,
-    page_battery,
-    page_system
-]
+    page = 0
+    last_page = time.monotonic()
+    last_transfer_phase = None
 
-page = 0
-last_page = time.monotonic()
-last_transfer_phase = None
+    while True:
+        try:
+            now = time.monotonic()
 
-while True:
-    try:
-        now = time.monotonic()
+            transfer = transfer_info()
 
-        transfer = transfer_info()
-
-        transfer_active = bool(
-            transfer.get("active")
-        )
-
-        transfer_phase = (
-            transfer.get("state")
-            if transfer_active
-            else None
-        )
-
-        pages = list(
-            base_pages
-        )
-
-        if transfer_active:
-            pages.append(
-                page_usb_transfer
+            transfer_active = bool(
+                transfer.get("active")
             )
 
-        # Affiche immédiatement la page USB
-        # lorsqu'un transfert ou un import commence.
-        if (
-            transfer_active
-            and transfer_phase
-            != last_transfer_phase
-        ):
-            page = len(base_pages)
-            last_page = now
-
-        # Dès que le transfert/import est terminé,
-        # la quatrième page disparaît.
-        elif (
-            not transfer_active
-            and page >= len(base_pages)
-        ):
-            page = 0
-            last_page = now
-
-        if now - last_page >= PAGE_DURATION:
-            page = (
-                page + 1
-            ) % len(pages)
-
-            last_page = now
-
-        if page >= len(pages):
-            page = 0
-            last_page = now
-
-        elapsed = (
-            now - last_page
-        )
-
-        remaining = max(
-            1,
-            int(
-                PAGE_DURATION
-                - elapsed
-                + 0.999
-            )
-        )
-
-        pages[page](
-            device,
-            remaining
-        )
-
-        last_transfer_phase = (
-            transfer_phase
-        )
-
-    except Exception as e:
-        with canvas(device) as draw:
-            draw.text(
-                (0, 0),
-                "OLED ERROR",
-                fill="white"
+            transfer_phase = (
+                transfer.get("state")
+                if transfer_active
+                else None
             )
 
-            draw.text(
-                (0, 18),
-                str(e)[:20],
-                fill="white"
+            pages = list(
+                base_pages
             )
 
-    time.sleep(REFRESH)
+            if transfer_active:
+                pages.append(
+                    page_usb_transfer
+                )
+
+            # Affiche immédiatement la page USB
+            # lorsqu'un transfert ou un import commence.
+            if (
+                transfer_active
+                and transfer_phase
+                != last_transfer_phase
+            ):
+                page = len(base_pages)
+                last_page = now
+
+            # Dès que le transfert/import est terminé,
+            # la quatrième page disparaît.
+            elif (
+                not transfer_active
+                and page >= len(base_pages)
+            ):
+                page = 0
+                last_page = now
+
+            if now - last_page >= PAGE_DURATION:
+                page = (
+                    page + 1
+                ) % len(pages)
+
+                last_page = now
+
+            if page >= len(pages):
+                page = 0
+                last_page = now
+
+            elapsed = (
+                now - last_page
+            )
+
+            remaining = max(
+                1,
+                int(
+                    PAGE_DURATION
+                    - elapsed
+                    + 0.999
+                )
+            )
+
+            device.set_context(screen="status", page=pages[page].__name__, remaining=remaining)
+            pages[page](
+                device,
+                remaining
+            )
+
+            last_transfer_phase = (
+                transfer_phase
+            )
+
+        except Exception as e:
+            device.set_context(screen='error')
+            with canvas(device) as draw:
+                draw.text(
+                    (0, 0),
+                    "OLED ERROR",
+                    fill="white"
+                )
+
+                draw.text(
+                    (0, 18),
+                    str(e)[:20],
+                    fill="white"
+                )
+
+        time.sleep(REFRESH)
+
+
+if __name__ == "__main__":
+    main()

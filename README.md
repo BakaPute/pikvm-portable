@@ -194,3 +194,7 @@ progressive. Voir [la procédure exacte et l'audit des modules](docs/portable-os
 La candidate **0.2.0-rc.2** fait de Portable OS l'entrée `/`, intègre les contrôles
 KVM natifs dans une barre flottante et conserve un menu de secours autonome
 `/legacy/`. Voir [mise à jour, tests et retour arrière](docs/portable-os-rc2.md).
+
+La candidate **0.2.0-rc.3** ajoute le [miroir OLED interactif](docs/portable-os-oled.md) :
+pixels partagés avec les producteurs physiques, fonctionnement sans écran I2C et
+appui court logique authentifié depuis la carte Pi Zero 2 W.

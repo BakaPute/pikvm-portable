@@ -174,11 +174,17 @@ sauvegarder /usr/share/kvmd/web/extras/image-manager/index.html
 sauvegarder /usr/share/kvmd/web/share/js/power-control.js
 sauvegarder /usr/share/kvmd/web/share/js/usb-transfer.js
 sauvegarder /usr/share/kvmd/web/share/js/drive-folders.js
+sauvegarder /usr/local/bin/pikvm-oled-custom
+sauvegarder /usr/local/bin/pikvm-button-menu
+sauvegarder /usr/local/lib/pikvm-portable/pikvm_oled.py
 
 echo "[OK] Sauvegardes : $BACKUP"
 
 echo
 echo "[3/8] Installation des scripts..."
+
+install -d -m 755 /usr/local/lib/pikvm-portable
+install -m 644 "$REPO/scripts/pikvm_oled.py" /usr/local/lib/pikvm-portable/pikvm_oled.py
 
 install -m 755 \
     "$REPO/scripts/pikvm-oled-custom" \

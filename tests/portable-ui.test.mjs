@@ -7,6 +7,17 @@ import {getTheme, saveTheme} from '../web/extras/portable-os/core/preferences.js
 import {createModules} from '../web/extras/portable-os/modules/index.js';
 import {routes, extensionLink} from '../web/legacy/routes.js';
 import {nativeMenus} from '../web/extras/portable-os/core/kvm-adapter.js';
+import {unpackPixels} from '../web/extras/portable-os/modules/oled.js';
+
+test('OLED decodes the exact 128×64 monochrome MSB framebuffer, without a second renderer', () => {
+    const raw = Buffer.alloc(1024); raw[0] = 128; raw[1023] = 1;
+    const pixels = unpackPixels(raw.toString('base64'));
+    assert.equal(pixels.length, 128 * 64 * 4);
+    assert.deepEqual([...pixels.slice(0, 4)], [212,247,230,255]);
+    assert.deepEqual([...pixels.slice(4, 8)], [5,10,9,255]);
+    assert.deepEqual([...pixels.slice(-4)], [212,247,230,255]);
+    assert.throws(() => unpackPixels(''), /incompatible/);
+});
 
 test('navigation contract keeps fallback independent and extension URLs local', () => {
     assert.equal(routes.legacy, '/legacy/');

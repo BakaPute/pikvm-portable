@@ -6,6 +6,7 @@ import contextlib
 import importlib.machinery
 import importlib.util
 import http.client
+import hashlib
 from html.parser import HTMLParser
 import json
 import os
@@ -21,6 +22,38 @@ SHARE_API = Path('/usr/local/bin/pikvm-share-api')
 SHARE_EXTRAS = Path('/usr/share/kvmd/extras/portable-os')
 LIB = Path('/usr/local/lib/pikvm-portable')
 WEB_ROOT = Path('/usr/share/kvmd/web')
+OLED_UNITS = ('pikvm-oled-custom.service', 'pikvm-button-menu.service')
+BIN = Path('/usr/local/bin')
+
+
+def oled_preflight():
+    # Do not overwrite unidentified on-device Python/system compatibility fixes.
+    baseline = json.loads((REPO / 'scripts/pikvm-oled-baselines.json').read_text(encoding='utf-8'))
+    for name in ('pikvm-oled-custom', 'pikvm-button-menu'):
+        installed = BIN / name
+        if installed.is_symlink() or not installed.is_file():
+            raise RuntimeError('Script OLED installé absent ou non ordinaire : ' + name)
+        source = installed.read_bytes().replace(b'\r\n', b'\n')
+        candidate = (REPO / 'scripts' / name).read_bytes().replace(b'\r\n', b'\n')
+        if source != candidate and hashlib.sha256(source).hexdigest() != baseline[name]:
+            raise RuntimeError('Correctifs OLED locaux à examiner avant migration : ' + name)
+    result = subprocess.run(['systemctl', 'is-active', '--quiet', 'pikvm-power-hold.service'],
+                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    if result.returncode:
+        raise RuntimeError('Power-hold doit déjà être actif ; il ne sera jamais démarré par cet installateur.')
+    subprocess.run(['/usr/bin/python3', '-I', '-B', '-c', 'from PIL import Image,ImageDraw,ImageFont'], check=True)
+
+
+def oled_states(h):
+    return {unit: {'active': active(h, unit), 'enabled': subprocess.run(
+        ['systemctl', 'is-enabled', '--quiet', unit], stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL).returncode == 0} for unit in OLED_UNITS}
+
+
+def stop_oled(h):
+    # Stop the menu first: no timer may write another frame during the update.
+    h.run(['systemctl', 'stop', 'pikvm-button-menu.service'])
+    h.run(['systemctl', 'stop', 'pikvm-oled-custom.service'])
 
 
 def load(name, path):
@@ -113,11 +146,12 @@ def file_map():
                     source.suffix in {'.js', '.css', '.svg', '.html', '.json', '.conf', '.yaml'} and
                     not any(part.startswith('.') or part == 'node_modules' for part in parts)):
                 result[Path(destination) / source.relative_to(REPO / relative)] = (source.read_bytes(), 0o644)
-    for name in ('pikvm-portable-api', 'pikvm-portable-install'):
+    for name in ('pikvm-portable-api', 'pikvm-portable-install', 'pikvm-oled-custom', 'pikvm-button-menu'):
         result[Path('/usr/local/bin') / name] = ((REPO / 'scripts' / name).read_bytes(), 0o755)
     result[Path('/etc/systemd/system') / PORTABLE_SERVICE] = ((REPO / 'systemd' / PORTABLE_SERVICE).read_bytes(), 0o644)
     result[LIB / 'installer.py'] = ((REPO / 'scripts/pikvm-share-install').read_bytes(), 0o644)
     result[LIB / 'preflight.sh'] = ((REPO / 'scripts/pikvm-portable-preflight.sh').read_bytes(), 0o755)
+    result[LIB / 'pikvm_oled.py'] = ((REPO / 'scripts/pikvm_oled.py').read_bytes(), 0o644)
     return result
 
 
@@ -129,6 +163,7 @@ def preflight():
         raise RuntimeError('Précontrôle de compatibilité absent.')
     subprocess.run(['bash', str(path)], check=True, timeout=60)
     navigation_preflight()
+    oled_preflight()
 
 
 def navigation_preflight():
@@ -186,6 +221,21 @@ def wait_ready(h, timeout=20):
     raise RuntimeError('API Portable OS non prête ou authentification absente ; rollback requis.')
 
 
+def wait_oled_ready(h, observed_after, timeout=25):
+    module = load('portable_oled_readiness', LIB / 'pikvm_oled.py')
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        try:
+            # A pre-update frame or a leftover socket never proves readiness.
+            if (module.read_frame()['monotonic'] >= observed_after and
+                    module.ping().get('ready') is True and active(h, 'pikvm-button-menu.service')):
+                return
+        except (OSError, module.OledError):
+            pass
+        time.sleep(.25)
+    raise RuntimeError('Miroir OLED ou gestionnaire logique non prêt ; rollback requis.')
+
+
 @contextlib.contextmanager
 def mutation_lock():
     import fcntl
@@ -234,6 +284,7 @@ def active(h, service):
 
 
 def install(h):
+    oled_preflight()
     policy, changed = policy_preflight()
     mapping = file_map()
     if changed:
@@ -243,9 +294,11 @@ def install(h):
     manifest = json.loads(manifest_path.read_text())
     manifest['share_policy_patch'] = changed
     manifest['share_was_active'] = active(h, 'pikvm-share-api.service')
+    manifest['oled_units'] = oled_states(h)
     h.write_file(manifest_path, json.dumps(manifest, indent=2).encode(), 0o600)
     print('Sauvegarde : ' + str(backup), flush=True)
     try:
+        stop_oled(h)
         if h.service_state()['active']:
             h.run(['systemctl', 'stop', PORTABLE_SERVICE])
         if changed:
@@ -255,6 +308,13 @@ def install(h):
         h.run(['systemctl', 'daemon-reload'])
         if changed and manifest['share_was_active']:
             h.run(['systemctl', 'start', 'pikvm-share-api.service'])
+        # Persist the mirror across boots; snapshot restores original enablement.
+        # Do not let systemd start/restart the power-hold dependency indirectly.
+        oled_started = time.monotonic()
+        for unit in OLED_UNITS:
+            h.run(['systemctl', 'enable', unit])
+            h.run(['systemctl', '--job-mode=ignore-dependencies', 'start', unit])
+        wait_oled_ready(h, oled_started)
         # Stage service/readiness before switching any public nginx routing.
         h.run(['systemctl', 'start', PORTABLE_SERVICE])
         wait_ready(h)
@@ -275,6 +335,9 @@ def restore(h, backup):
         if backend.drive() or backend.lease_read():
             raise RuntimeError('Éjecter et libérer SHARE avant restauration.')
         backend.ensure_unmounted()
+    if 'oled_units' in manifest:
+        stop_oled(h)
+    if manifest.get('share_policy_patch'):
         h.run(['systemctl', 'stop', 'pikvm-share-api.service'])
     if h.service_state()['active']:
         h.run(['systemctl', 'stop', PORTABLE_SERVICE])
@@ -284,6 +347,11 @@ def restore(h, backup):
         h.run(['systemctl', 'start', 'pikvm-share-api.service'])
     if restart:
         h.run(['systemctl', 'start', PORTABLE_SERVICE])
+    for unit, previous in manifest.get('oled_units', {}).items():
+        if unit in OLED_UNITS:
+            h.run(['systemctl', 'enable' if previous['enabled'] else 'disable', unit])
+            if previous['active']:
+                h.run(['systemctl', '--job-mode=ignore-dependencies', 'start', unit])
 
 
 def main():
