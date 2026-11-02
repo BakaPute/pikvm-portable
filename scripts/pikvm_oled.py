@@ -83,30 +83,116 @@ def physical_device():
     return ssd1306(i2c(port=1, address=0x3C), width=128, height=64)
 
 
+class PhysicalOutput:
+    """One optional I2C worker, one latest frame. Never blocks the renderer.
+
+    Failed attempts retry after 30 seconds, including failures while displaying.
+    A blocked kernel/driver call cannot grow a queue or spawn more workers.
+    """
+    def __init__(self, factory, clock=time.monotonic, background=True):
+        self.factory, self.clock, self.background = factory, clock, background
+        self.condition = threading.Condition()
+        self.device = None
+        self.latest = None
+        self.generation = 0
+        self.sent = 0
+        self.retry_at = 0
+        self.state = 'disconnected'
+        self.closed = False
+        self.thread = None
+
+    def offer(self, image):
+        with self.condition:
+            if self.closed:
+                return
+            self.latest = image.copy()
+            self.generation += 1
+            if self.background and self.thread is None:
+                self.thread = threading.Thread(target=self._run, name='oled-i2c', daemon=True)
+                self.thread.start()
+            self.condition.notify()
+
+    def _attempt(self):
+        with self.condition:
+            if self.closed or self.latest is None:
+                return False
+            if self.device is None and self.clock() < self.retry_at:
+                return False
+            if self.device is not None and self.sent == self.generation:
+                return False
+        # All driver calls run OUTSIDE the condition protecting the latest slot.
+        try:
+            if self.device is None:
+                self.device = self.factory()
+                if self.device is None:
+                    raise OSError('SSD1306 unavailable')
+            with self.condition:
+                if self.closed:
+                    return False
+                image, generation = self.latest, self.generation
+            self.device.display(image)
+            with self.condition:
+                self.sent, self.state = generation, 'connected'
+        except Exception:
+            # Keep the failed object alive until OUTSIDE the condition: driver
+            # finalizers may themselves access I2C or block during cleanup.
+            failed_device = self.device
+            self.device = None
+            with self.condition:
+                self.state = 'disconnected'
+                self.retry_at = self.clock() + 30
+            del failed_device
+        return True
+
+    def _run(self):
+        while True:
+            if not self._attempt():
+                with self.condition:
+                    if self.closed:
+                        return
+                    # New frames wake this wait. A frozen screen also retries.
+                    self.condition.wait(timeout=.5)
+
+    def close(self):
+        with self.condition:
+            self.closed = True
+            self.condition.notify_all()
+        # Do not wait on a blocked I2C call or blank a screen owned by the menu.
+        if self.thread is not None:
+            self.thread.join(timeout=.1)
+
+
 class MirrorDevice:
     mode, size = '1', (128, 64)
 
-    def __init__(self, source, path=None, factory=physical_device, clock=time.monotonic):
+    def __init__(self, source, path=None, factory=None, clock=time.monotonic, background=True):
         self.source, self.path = source, path or FRAME
-        self.factory, self.clock = factory, clock
-        self.device = None
-        self.retry_at = 0
+        self.clock = clock
+        self.output = PhysicalOutput(factory or physical_device, clock, background)
         self.published = float('-inf')
         self.context = {}
-        self.physical = 'unknown'
+        self.reported_physical = None
         self.last_id = None
 
     def set_context(self, **values):
         self.context = values
 
+    @property
+    def physical(self):
+        return self.output.state
+
+    def close(self):
+        self.output.close()
+
     def publish(self, image, force=False):
         now = self.clock()
-        if not force and now - self.published < .25:
+        physical = self.physical
+        if not force and physical == self.reported_physical and now - self.published < .25:
             return
         raw = image.tobytes()
         identity = hashlib.sha256(raw + json.dumps(self.context, sort_keys=True).encode() + self.source.encode()).hexdigest()
         data = {'width': 128, 'height': 64, 'format': '1bpp-msb', 'pixels': base64.b64encode(raw).decode(),
-                'id': identity, 'source': self.source, 'context': self.context, 'physical': self.physical,
+                'id': identity, 'source': self.source, 'context': self.context, 'physical': physical,
                 'monotonic': now, 'updated_at': time.time()}
         private_directory(self.path.parent)
         temporary = self.path.with_name(f'.frame-{os.getpid()}.tmp')
@@ -115,24 +201,13 @@ class MirrorDevice:
             json.dump(data, file, separators=(',', ':'))
         os.replace(temporary, self.path)
         self.published, self.last_id = now, identity
+        self.reported_physical = physical
 
     def display(self, image):
         if image.size != self.size or image.mode != self.mode:
             raise ValueError('Framebuffer OLED attendu : 128×64 monochrome.')
-        self.publish(image)  # Mirror the actual frame BEFORE accessing I2C.
-        previous = self.physical
-        try:
-            if self.device is None and self.clock() >= self.retry_at:
-                self.retry_at = self.clock() + 30
-                self.device = self.factory()
-            if self.device is not None:
-                self.device.display(image)
-                self.physical = 'connected'
-        except Exception:
-            self.device = None
-            self.physical = 'disconnected'
-        if previous != self.physical:
-            self.publish(image, force=True)
+        self.publish(image)
+        self.output.offer(image)  # Non-blocking, bounded latest-frame slot.
 
 
 @contextlib.contextmanager

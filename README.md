@@ -198,3 +198,6 @@ KVM natifs dans une barre flottante et conserve un menu de secours autonome
 La candidate **0.2.0-rc.3** ajoute le [miroir OLED interactif](docs/portable-os-oled.md) :
 pixels partagés avec les producteurs physiques, fonctionnement sans écran I2C et
 appui court logique authentifié depuis la carte Pi Zero 2 W.
+
+La candidate **0.2.0-rc.4** rend l'accès SSD1306 facultatif et non bloquant :
+[mode virtuel, reconnexion automatique, tests et mise à jour](docs/portable-os-rc4.md).

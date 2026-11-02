@@ -8,14 +8,14 @@ from pathlib import Path
 import tarfile
 
 ROOT = Path(__file__).resolve().parent.parent
-RELEASE = 'pikvm-portable-os-0.2.0-rc.3'
+RELEASE = 'pikvm-portable-os-0.2.0-rc.4'
 FILES = ('install-portable-os.sh', 'systemd/pikvm-portable-api.service',
          'scripts/pikvm-portable-api', 'scripts/pikvm-portable-install',
          'scripts/pikvm-share-install', 'scripts/pikvm-portable-preflight.sh',
          'scripts/pikvm-python-logging-repair.sh', 'scripts/pikvm-portable-diagnose.sh',
          'scripts/pikvm-share-windows-diagnose.ps1', 'scripts/pikvm-portable-package.py',
          'scripts/pikvm_oled.py', 'scripts/pikvm-oled-custom', 'scripts/pikvm-button-menu',
-         'scripts/pikvm-oled-baselines.json', 'docs/portable-os-oled.md',
+         'scripts/pikvm-oled-baselines.json', 'docs/portable-os-oled.md', 'docs/portable-os-rc4.md',
          'docs/portable-os-rc1.md', 'docs/portable-os-rc2.md', 'docs/portable-os.md')
 
 

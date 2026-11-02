@@ -29,13 +29,17 @@ BIN = Path('/usr/local/bin')
 def oled_preflight():
     # Do not overwrite unidentified on-device Python/system compatibility fixes.
     baseline = json.loads((REPO / 'scripts/pikvm-oled-baselines.json').read_text(encoding='utf-8'))
-    for name in ('pikvm-oled-custom', 'pikvm-button-menu'):
-        installed = BIN / name
+    paths = [(name, BIN / name) for name in ('pikvm-oled-custom', 'pikvm-button-menu')]
+    shared = LIB / 'pikvm_oled.py'
+    if shared.exists() or shared.is_symlink():
+        paths.append(('pikvm_oled.py', shared))
+    for name, installed in paths:
         if installed.is_symlink() or not installed.is_file():
             raise RuntimeError('Script OLED installé absent ou non ordinaire : ' + name)
         source = installed.read_bytes().replace(b'\r\n', b'\n')
         candidate = (REPO / 'scripts' / name).read_bytes().replace(b'\r\n', b'\n')
-        if source != candidate and hashlib.sha256(source).hexdigest() != baseline[name]:
+        known = baseline[name] if isinstance(baseline[name], list) else [baseline[name]]
+        if source != candidate and hashlib.sha256(source).hexdigest() not in known:
             raise RuntimeError('Correctifs OLED locaux à examiner avant migration : ' + name)
     result = subprocess.run(['systemctl', 'is-active', '--quiet', 'pikvm-power-hold.service'],
                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)

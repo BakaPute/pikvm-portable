@@ -65,8 +65,8 @@ export function openOled(context) {
             screen.disabled = !result.button_available || busy;
             state.textContent = result.button_available ? 'Synchronisé · toucher l’écran pour un appui court.' :
                 'Affichage synchronisé · gestionnaire du bouton indisponible.';
-            details.textContent = `${result.source === 'menu' ? 'Menu physique' : 'Affichage normal'} · OLED physique ${
-                result.physical === 'connected' ? 'connecté' : result.physical === 'disconnected' ? 'déconnecté' : 'non confirmé'} · actualisation 1 s`;
+            details.textContent = `${result.source === 'menu' ? 'Menu physique' : 'Affichage normal'} · ${
+                result.physical === 'connected' ? 'OLED physique connecté' : 'Mode virtuel'} · actualisation 1 s`;
         } catch (error) {
             if (!closed && !busy && !document.hidden && context.store.data.session !== 'expired') {
                 screen.disabled = true; frame = null;

@@ -1,5 +1,9 @@
 # OLED miroir — candidate 0.2.0-rc.3
 
+La candidate [RC4](portable-os-rc4.md) remplace les échanges I2C synchrones par un
+worker non bloquant et étend le contrôle de migration au module partagé. Utiliser
+sa procédure de mise à jour pour un OLED physique débranché.
+
 ## Fonctionnement
 
 La carte « Pi Zero 2 W » de la barre latérale ouvre une fenêtre OLED. Elle présente

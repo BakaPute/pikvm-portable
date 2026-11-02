@@ -9,6 +9,7 @@ from pathlib import Path
 import socket
 import sys
 import struct
+import subprocess
 import tempfile
 import threading
 import time
@@ -40,21 +41,138 @@ def event(frame_id, expires):
 
 
 class FrameTests(unittest.TestCase):
+    def test_ssd1306_configuration_is_exactly_i2c_3c_128_by_64(self):
+        serial, device = Mock(), Mock()
+        with patch.dict(sys.modules, {'luma.core.interface.serial': Mock(i2c=serial),
+                                      'luma.oled.device': Mock(ssd1306=device)}):
+            self.assertIs(oled.physical_device(), device.return_value)
+        serial.assert_called_once_with(port=1, address=0x3C)
+        device.assert_called_once_with(serial.return_value, width=128, height=64)
+
+    def test_disconnect_and_reconnect_keep_latest_pixels_and_retry_every_30_seconds(self):
+        with tempfile.TemporaryDirectory() as directory:
+            now = [0.0]
+            first, restored = Mock(), Mock()
+            factory = Mock(side_effect=[first, OSError('still absent'), restored])
+            device = oled.MirrorDevice('status', path=Path(directory) / 'oled/frame.json', factory=factory,
+                                       clock=lambda: now[0], background=False)
+            image = Image.new('1', (128, 64))
+            device.display(image); self.assertTrue(device.output._attempt())
+            self.assertEqual(device.physical, 'connected')
+            first.display.side_effect = OSError('unplugged')
+            now[0] = 1; image.putpixel((1, 2), 255)
+            device.display(image); device.output._attempt()
+            self.assertEqual(device.physical, 'disconnected')
+            now[0] = 30; image.putpixel((127, 63), 255)
+            device.display(image)
+            self.assertFalse(device.output._attempt()); self.assertEqual(factory.call_count, 1)
+            now[0] = 31; device.output._attempt()  # reconnect still fails
+            self.assertEqual(factory.call_count, 2)
+            now[0] = 60; self.assertFalse(device.output._attempt())
+            now[0] = 61; device.output._attempt()  # retry with NO further render
+            self.assertEqual(device.physical, 'connected')
+            self.assertEqual(restored.display.call_args.args[0].tobytes(), image.tobytes())
+            device.display(image)
+            data = oled.read_frame(device.path, clock=lambda: now[0])
+            self.assertEqual(data['physical'], 'connected')
+            self.assertEqual(base64.b64decode(data['pixels']), image.tobytes())
+
+    def test_blocked_factory_and_display_never_block_virtual_rendering_or_queue_frames(self):
+        for blocked_call in ('factory', 'display'):
+            with self.subTest(blocked_call=blocked_call), tempfile.TemporaryDirectory() as directory:
+                entered, release, delivered = threading.Event(), threading.Event(), threading.Event()
+                now, output = [0.0], []
+                class Driver:
+                    def display(self, image):
+                        if blocked_call == 'display' and not release.is_set():
+                            entered.set(); release.wait(5)
+                        output.append(image.tobytes()); delivered.set()
+                def factory():
+                    if blocked_call == 'factory':
+                        entered.set(); release.wait(5)
+                    return Driver()
+                device = oled.MirrorDevice('status', path=Path(directory) / 'oled/frame.json',
+                                           factory=factory, clock=lambda: now[0])
+                try:
+                    device.display(Image.new('1', (128, 64)))
+                    self.assertTrue(entered.wait(1))
+                    started = time.perf_counter()
+                    for index in range(20):
+                        now[0] += 1
+                        latest = Image.new('1', (128, 64)); latest.putpixel((index, 2), 255)
+                        device.display(latest)
+                    self.assertLess(time.perf_counter() - started, 1, 'Rendering must not wait for blocked I2C')
+                    self.assertEqual(base64.b64decode(oled.read_frame(device.path, clock=lambda: now[0])['pixels']), latest.tobytes())
+                    worker = device.output.thread
+                    self.assertTrue(worker.is_alive())
+                    self.assertEqual(device.output.generation, 21)
+                    release.set()
+                    deadline = time.monotonic() + 2
+                    while (not output or output[-1] != latest.tobytes()) and time.monotonic() < deadline:
+                        delivered.wait(.01); delivered.clear()
+                    self.assertEqual(output[-1], latest.tobytes())
+                    self.assertIs(device.output.thread, worker)
+                finally:
+                    release.set(); device.close()
+
+    def test_actual_service_entry_loop_survives_missing_i2c_without_process_restart(self):
+        # Windows has no systemd. Run the real service main loop in one child
+        # process and replace only telemetry and the physical driver.
+        harness = '''
+import sys,importlib.machinery,importlib.util
+from pathlib import Path
+root=Path(sys.argv[1]);sys.path.insert(0,str(root/'scripts'))
+import pikvm_oled as oled
+oled.FRAME=Path(sys.argv[2])
+class DeviceNotFoundError(Exception):pass
+def absent():raise DeviceNotFoundError('I2C device not found on address: 0x3C')
+oled.physical_device=absent
+loader=importlib.machinery.SourceFileLoader('oled_service',str(root/'scripts/pikvm-oled-custom'))
+spec=importlib.util.spec_from_loader(loader.name,loader);module=importlib.util.module_from_spec(spec);loader.exec_module(module)
+module.battery=lambda:(82,3.95)
+module.battery_charging=lambda:False
+module.wifi=lambda:('fixture',-50)
+module.ip_address=lambda:'192.0.2.1'
+module.transfer_info=lambda:{}
+module.main()
+'''
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'oled/frame.json'
+            process = subprocess.Popen([sys.executable, '-B', '-c', harness, str(ROOT), str(path)],
+                                       stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            try:
+                timestamps = set(); deadline = time.monotonic() + 8
+                while len(timestamps) < 3 and time.monotonic() < deadline:
+                    self.assertIsNone(process.poll(), 'Service main loop exited on an I2C error')
+                    try:
+                        data = oled.read_frame(path); timestamps.add(data['monotonic'])
+                        self.assertEqual(data['physical'], 'disconnected')
+                    except oled.OledError:
+                        pass
+                    time.sleep(.05)
+                self.assertEqual(len(timestamps), 3)
+                self.assertIsNone(process.poll())
+            finally:
+                process.terminate(); stdout, stderr = process.communicate(timeout=5)
+            self.assertEqual(stderr, b'', 'Missing hardware must not leak a service traceback')
+
     def test_exact_pixels_shared_with_physical_and_without_i2c(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / 'oled/frame.json'
             physical = Mock()
-            device = oled.MirrorDevice('menu', path=path, factory=lambda: physical)
+            device = oled.MirrorDevice('menu', path=path, factory=lambda: physical, background=False)
             image = Image.new('1', (128, 64)); image.putpixel((33, 12), 255)
             device.set_context(screen='menu', selection=2)
             device.display(image)
+            device.output._attempt(); device.publish(image, force=True)
             data = oled.read_frame(path)
             self.assertEqual(base64.b64decode(data['pixels']), physical.display.call_args.args[0].tobytes())
             self.assertEqual(data['context'], {'screen': 'menu', 'selection': 2})
             self.assertEqual(data['physical'], 'connected')
             factory = Mock(side_effect=OSError('No I2C device'))
-            headless = oled.MirrorDevice('status', path=path, factory=factory)
+            headless = oled.MirrorDevice('status', path=path, factory=factory, background=False)
             headless.display(image); headless.display(image)
+            headless.output._attempt()
             self.assertEqual(oled.read_frame(path)['physical'], 'disconnected')
             self.assertEqual(factory.call_count, 1, 'Absent I2C is retried at most every 30 seconds')
             self.assertEqual(base64.b64decode(oled.read_frame(path)['pixels']), image.tobytes())
@@ -63,15 +181,17 @@ class FrameTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / 'oled/frame.json'
             physical = Mock()
-            device = oled.MirrorDevice('menu', path=path, factory=lambda: physical)
+            device = oled.MirrorDevice('menu', path=path, factory=lambda: physical, background=False)
             with patch.object(menu, 'DEVICE', device):
                 menu.draw_menu(0)
+                device.output._attempt()
                 first = oled.read_frame(path)
                 self.assertEqual(first['context']['selection'], 0)
                 self.assertEqual(base64.b64decode(first['pixels']), physical.display.call_args.args[0].tobytes())
                 device.published = float('-inf')
                 with patch.object(menu, 'current_ssid', return_value='Test network'), patch.object(menu, 'wifi_password', return_value='test only'):
                     menu.draw_menu(1)
+                device.output._attempt()
                 second = oled.read_frame(path)
                 self.assertEqual(second['context']['selection'], 1)
                 self.assertNotEqual(first['pixels'], second['pixels'])
@@ -79,12 +199,13 @@ class FrameTests(unittest.TestCase):
             with patch.object(status, 'battery', return_value=(82, 3.95)), patch.object(status, 'battery_charging', return_value=False), \
                  patch.object(status, 'wifi', return_value=('Test network', -50)), patch.object(status, 'ip_address', return_value='192.0.2.1'):
                 status.page_main(device, 10)
+            device.output._attempt()
             self.assertEqual(base64.b64decode(oled.read_frame(path)['pixels']), physical.display.call_args.args[0].tobytes())
 
     def test_stale_or_invalid_frame_is_offline(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / 'oled/frame.json'
-            device = oled.MirrorDevice('menu', path=path, factory=lambda: Mock(), clock=lambda: 10)
+            device = oled.MirrorDevice('menu', path=path, factory=lambda: Mock(), clock=lambda: 10, background=False)
             device.display(Image.new('1', (128, 64)))
             with self.assertRaisesRegex(oled.OledError, 'périmé'):
                 oled.read_frame(path, clock=lambda: 26)
@@ -255,8 +376,17 @@ class InstallTests(unittest.TestCase):
             root = Path(directory)
             for name in ('pikvm-oled-custom', 'pikvm-button-menu'):
                 (root / name).write_bytes((ROOT / 'scripts' / name).read_bytes())
-            with patch.object(portable, 'BIN', root), patch.object(portable.subprocess, 'run', return_value=Mock(returncode=0)):
+            library = root / 'lib'; library.mkdir()
+            shared = library / 'pikvm_oled.py'
+            shared.write_bytes((ROOT / 'scripts/pikvm_oled.py').read_bytes())
+            with patch.object(portable, 'BIN', root), patch.object(portable, 'LIB', library), \
+                 patch.object(portable.subprocess, 'run', return_value=Mock(returncode=0)):
                 portable.oled_preflight(); portable.oled_preflight()
+                shared.write_bytes(b'# unreviewed local library fix\n')
+                with self.assertRaisesRegex(RuntimeError, 'locaux'):
+                    portable.oled_preflight()
+                self.assertEqual(shared.read_bytes(), b'# unreviewed local library fix\n')
+                shared.write_bytes((ROOT / 'scripts/pikvm_oled.py').read_bytes())
                 target = root / 'pikvm-oled-custom'; target.write_bytes(b'# local Python fix\n')
                 with self.assertRaisesRegex(RuntimeError, 'locaux'):
                     portable.oled_preflight()
