@@ -219,6 +219,51 @@ prépare ces contrôles sous Python 3.11 et 3.14 ; son exécution attend la publ
 La compatibilité matérielle, les montages Linux et nginx 4.213 devront encore
 être validés sur l'appareil après autorisation.
 
+Les tests nginx sont activés si `nginx` est disponible dans PATH, ou si
+`NGINX_BINARY` désigne un exécutable local. La CI installe nginx explicitement.
+Ils exécutent seulement `-t` / `-T` sur une configuration jetable, sans démarrer
+ni recharger de serveur. Sous Linux, la structure reprend les globs de
+répertoires de KVMD 4.213 ; sous Windows, qui ne permet pas ces globs avec
+FindFirstFile, les tests réels adaptent seulement le motif en glob de nom de
+fichier. Les tests de régression simulés gardent le motif exact 4.213.
+
+### Correction de validation nginx du 2 novembre 2026
+
+L'ancien contrôle cherchait littéralement `/extras/pikvm-share/api/` dans le
+fichier principal généré. C'était incorrect pour KVMD 4.213 : son générateur
+rend le modèle Mako, en conservant les directives
+`include /usr/share/kvmd/extras/*/nginx.ctx-http.conf;` et
+`include /usr/share/kvmd/extras/*/nginx.ctx-server.conf;`.
+
+L'installation utilise désormais `nginx -T` pour vérifier la syntaxe et obtenir
+la liste des fichiers réellement chargés. Elle exige les deux fichiers de
+configuration SHARE, vérifie leur contenu testé et les contrats de proxy,
+session, origine CSRF et authentification de chaque location. Un glob vide ne
+suffit pas : il peut être valide pour nginx, mais l'absence de SHARE est bloquante.
+Le dump complet reste en mémoire et n'est ni imprimé ni enregistré.
+
+L'API garde son URI complète via un `proxy_pass` sans suffixe `/`. L'include
+proxy natif 4.213 ajoute des en-têtes et ne redéfinit pas les timeouts ou le
+buffering de SHARE. `proxy_intercept_errors off` est explicite pour conserver
+les erreurs du backend sous forme de réponses API. La sous-requête native
+`/auth_check` reste interne et pointe vers KVMD. Le précontrôle d'authentification
+et le contrôle `nginx -t` juste avant le rechargement sont conservés.
+
+Validation locale du correctif : 52 tests exécutés sous Python 3.12.14,
+51 réussis et un test de lien symbolique ignoré sous Windows. Trois tests
+utilisent nginx Windows 1.26.3 réel, notamment pour rejeter un doublon de
+directive proxy et les includes SHARE absents. Les tests de transaction
+vérifient deux installations successives, deux restaurations du même snapshot,
+et deux installations échouées avec retour au même état initial. La CI Linux
+est préparée mais n'a pas été exécutée pendant cette correction locale.
+
+Sources exactes vérifiées pour cette correction :
+[modèle nginx 4.213](https://github.com/pikvm/kvmd/blob/v4.213/configs/nginx/nginx.conf.mako),
+[générateur 4.213](https://github.com/pikvm/kvmd/blob/v4.213/kvmd/apps/ngxmkconf/__init__.py),
+[configuration serveur 4.213](https://github.com/pikvm/kvmd/blob/v4.213/configs/nginx/kvmd.ctx-server.conf),
+[include proxy 4.213](https://github.com/pikvm/kvmd/blob/v4.213/configs/nginx/loc-proxy.conf)
+et [options officielles de nginx](https://nginx.org/en/docs/switches.html).
+
 Validation locale du 29 octobre 2026 : Python 3.12.14, 40 tests exécutés,
 39 réussis et un test de création de lien symbolique ignoré faute de privilège
 Windows (prévu pour s'exécuter sur Linux en CI). Compilation des trois scripts

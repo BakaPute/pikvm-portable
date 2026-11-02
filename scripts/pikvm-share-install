@@ -9,6 +9,7 @@ import importlib.util
 import json
 import os
 from pathlib import Path
+import re
 import shutil
 import stat
 import subprocess
@@ -20,6 +21,12 @@ LIB = Path('/usr/local/lib/pikvm-share')
 BACKUPS = Path('/root/pikvm-share-backups')
 SERVICE = 'pikvm-share-api.service'
 WRAPPER_MARKER = b'Compatibility guard: defer native MSD remount-ro'
+NGINX_PREFIX = Path('/etc/kvmd/nginx')
+NGINX_CONFIG = Path('/run/kvmd/nginx.conf')
+SHARE_EXTRAS = Path('/usr/share/kvmd/extras/pikvm-share')
+SHARE_UNIT = Path('/etc/systemd/system') / SERVICE
+SHARE_ENABLE_LINK = Path('/etc/systemd/system/multi-user.target.wants') / SERVICE
+NGINX_GLOBALS = 'pid /run/kvmd/nginx.pid; user kvmd-nginx; error_log stderr;'
 
 
 def api_module():
@@ -162,26 +169,101 @@ def check(module):
     print('Précontrôles réussis : Drive 1 éjecté, image 4 Gio, aucun montage, auth active.')
 
 
+def nginx_args(flag, config):
+    # Match the native KVMD 4.213 service prefix and global directives.
+    return ['nginx', flag, '-p', str(NGINX_PREFIX), '-c', str(config), '-g', NGINX_GLOBALS]
+
+
+def nginx_dump_files(dump):
+    """Read nginx -T's file boundaries, not a flattened/expanded configuration.
+
+    Keep the dump in memory: included files may contain private configuration.
+    Only nginx determines which includes were actually loaded and are valid.
+    """
+    markers = list(re.finditer(r'^# configuration file (.+):\r?$', dump, re.MULTILINE))
+    files = {}
+    for index, marker in enumerate(markers):
+        end = markers[index + 1].start() if index + 1 < len(markers) else len(dump)
+        path = Path(marker.group(1).rstrip('\r')).resolve()
+        if path in files:
+            raise RuntimeError('Sortie nginx -T ambiguë ; validation refusée.')
+        files[path] = dump[marker.end():end].strip()
+    return files
+
+
+def nginx_location(text, modifier, route):
+    # Contract checks on our fixed location blocks, AFTER nginx parsed syntax.
+    # This is deliberately not a substitute for nginx's configuration parser.
+    text = re.sub(r'(?m)^\s*#.*$', '', text)
+    pattern = (r'\blocation\s+' + re.escape(modifier) + r'\s+' + re.escape(route) +
+               r'\s*\{([^{}]*)\}')
+    matches = re.findall(pattern, text)
+    if len(matches) != 1:
+        raise RuntimeError('Location nginx attendue absente ou ambiguë : ' + route)
+    return matches[0]
+
+
+def require_nginx_directive(text, pattern, description):
+    if not re.search(pattern, text):
+        raise RuntimeError('Configuration nginx SHARE non conforme : ' + description)
+
+
+def validate_share_nginx(dump):
+    files = nginx_dump_files(dump)
+    if not (SHARE_EXTRAS / 'manifest.yaml').is_file():
+        raise RuntimeError('Manifeste SHARE absent ; validation nginx refusée.')
+    loaded = {}
+    for name in ('nginx.ctx-http.conf', 'nginx.ctx-server.conf'):
+        path = SHARE_EXTRAS / name
+        content = files.get(path.resolve())
+        if content is None:
+            raise RuntimeError('Extension SHARE non chargée par nginx : ' + name)
+        if not path.is_file() or content != path.read_text().strip():
+            raise RuntimeError('Le fichier SHARE testé par nginx a changé : ' + name)
+        loaded[name] = content
+
+    # Inspect the LOADED files. Generic include directives in the main file are
+    # expected on KVMD 4.213; searching the main text for a route is incorrect.
+    upstream = loaded['nginx.ctx-http.conf']
+    require_nginx_directive(upstream, r'\bupstream\s+pikvm_share_api\s*\{', 'upstream SHARE')
+    require_nginx_directive(upstream, r'\bserver\s+127\.0\.0\.1:9877\s+[^;]*;', 'API locale 9877')
+    server = loaded['nginx.ctx-server.conf']
+    api = nginx_location(server, '^~', '/extras/pikvm-share/api/')
+    web = nginx_location(server, '^~', '/extras/pikvm-share/')
+    for location in (api, web):
+        require_nginx_directive(location, r'\bauth_request\s+/auth_check\s*;', 'authentification de chaque location')
+    require_nginx_directive(api, r'\bproxy_pass\s+http://pikvm_share_api\s*;', 'proxy sans réécriture du préfixe API')
+    require_nginx_directive(api, r'\bproxy_set_header\s+Cookie\s+\$http_cookie\s*;', 'transmission de la session PiKVM')
+    require_nginx_directive(api, r'\bproxy_set_header\s+X-Share-Origin\s+\$scheme://\$http_host\s*;', 'origine contrôlée par nginx')
+    require_nginx_directive(api, r'\bproxy_set_header\s+X-Pikvm-Share\s+\$http_x_pikvm_share\s*;', 'en-tête CSRF')
+    require_nginx_directive(api, r'\bproxy_intercept_errors\s+off\s*;', 'erreurs API sans redirection de connexion')
+
+    # Also require the native files used by the extension, and the internal
+    # auth subrequest. nginx -T succeeds only if all their contexts are valid.
+    for name in ('loc-proxy.conf', 'loc-login.conf', 'loc-nocache.conf', 'kvmd.ctx-server.conf'):
+        if (NGINX_PREFIX / name).resolve() not in files:
+            raise RuntimeError('Include PiKVM attendu non chargé : ' + name)
+    auth = nginx_location(files[(NGINX_PREFIX / 'kvmd.ctx-server.conf').resolve()], '=', '/auth_check')
+    require_nginx_directive(auth, r'\binternal\s*;', 'sous-requête auth interne')
+    require_nginx_directive(auth, r'\bproxy_pass\s+http://kvmd/auth/check\s*;', 'authentification auprès de KVMD')
+
+
 def nginx_config():
-    candidate = Path('/run/kvmd/pikvm-share-nginx.candidate')
+    candidate = NGINX_CONFIG.with_name('pikvm-share-nginx.candidate')
     try:
-        run(['kvmd-nginx-mkconf', '/etc/kvmd/nginx/nginx.conf.mako', str(candidate)])
-        text = candidate.read_text()
-        # Check that the native renderer actually included our extension.
-        if Path('/usr/share/kvmd/extras/pikvm-share/manifest.yaml').exists():
-            if '/extras/pikvm-share/api/' not in text or 'auth_request /auth_check;' not in text:
-                raise RuntimeError('Extension SHARE absente de la configuration nginx générée.')
-        run(['nginx', '-t', '-p', '/etc/kvmd/nginx', '-c', str(candidate),
-             '-g', 'pid /run/kvmd/nginx.pid; user kvmd-nginx; error_log stderr;'])
-        write_file(Path('/run/kvmd/nginx.conf'), candidate.read_bytes())
+        run(['kvmd-nginx-mkconf', str(NGINX_PREFIX / 'nginx.conf.mako'), str(candidate)])
+        # -T performs -t's syntax/file checks AND reports every effective include.
+        # A glob with no matching SHARE files is legal nginx syntax, but must fail
+        # our presence checks. Do not publish or reload until both checks pass.
+        validate_share_nginx(run(nginx_args('-T', candidate)))
+        write_file(NGINX_CONFIG, candidate.read_bytes())
         reload_nginx()
     finally:
         candidate.unlink(missing_ok=True)
 
 
 def reload_nginx():
-    run(['nginx', '-t', '-p', '/etc/kvmd/nginx', '-c', '/run/kvmd/nginx.conf',
-         '-g', 'pid /run/kvmd/nginx.pid; user kvmd-nginx; error_log stderr;'])
+    run(nginx_args('-t', NGINX_CONFIG))
     run(['systemctl', 'reload', 'kvmd-nginx.service'])
 
 
@@ -199,11 +281,11 @@ def restore_files(folder):
         else:
             path.unlink(missing_ok=True)
     run(['systemctl', 'daemon-reload'])
-    if Path('/etc/systemd/system/' + SERVICE).exists():
+    if SHARE_UNIT.exists():
         run(['systemctl', 'enable' if manifest['service']['enabled'] else 'disable', SERVICE])
     else:
         # Unit removed by restoring the initial state: remove only its own enable link.
-        Path('/etc/systemd/system/multi-user.target.wants/' + SERVICE).unlink(missing_ok=True)
+        SHARE_ENABLE_LINK.unlink(missing_ok=True)
     return manifest['service']['active']
 
 
@@ -216,7 +298,7 @@ def install(module):
     guarded = WRAPPER_MARKER in helper.read_bytes()
     if guarded and not original.is_file():
         raise RuntimeError('Garde installée mais helper original absent.')
-    paths = list(mapping) + [original, Path('/run/kvmd/nginx.conf')]
+    paths = list(mapping) + [original, NGINX_CONFIG]
     folder = snapshot(paths)
     print('Sauvegarde applicative : ' + str(folder), flush=True)
     previous = service_state()
