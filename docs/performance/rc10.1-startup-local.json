@@ -1,0 +1,75 @@
+{
+  "platform": "Windows local; NOT Raspberry Pi",
+  "python": "3.12.14",
+  "baseline_commit": "2f2a484d6bac7e130c205e73bb7b631fc8e72c93",
+  "method": "Three isolated imports of installer only, no preflight run. Working set from GetProcessMemoryInfo; excludes import probes and real services. Cold-cache startup not controlled.",
+  "measurements": {
+    "rc10": [
+      {
+        "wall_seconds": 0.06239,
+        "cpu_seconds": 0.0625,
+        "additional_modules": 71,
+        "working_set_bytes": 23543808,
+        "peak_working_set_bytes": 23543808,
+        "deferred_modules_present": [
+          "http.client",
+          "ssl",
+          "html.parser",
+          "ast"
+        ]
+      },
+      {
+        "wall_seconds": 0.06212,
+        "cpu_seconds": 0.0625,
+        "additional_modules": 71,
+        "working_set_bytes": 23629824,
+        "peak_working_set_bytes": 23629824,
+        "deferred_modules_present": [
+          "http.client",
+          "ssl",
+          "html.parser",
+          "ast"
+        ]
+      },
+      {
+        "wall_seconds": 0.05999,
+        "cpu_seconds": 0.0625,
+        "additional_modules": 71,
+        "working_set_bytes": 23638016,
+        "peak_working_set_bytes": 23638016,
+        "deferred_modules_present": [
+          "http.client",
+          "ssl",
+          "html.parser",
+          "ast"
+        ]
+      }
+    ],
+    "rc10.1": [
+      {
+        "wall_seconds": 0.02284,
+        "cpu_seconds": 0.03125,
+        "additional_modules": 25,
+        "working_set_bytes": 17973248,
+        "peak_working_set_bytes": 17973248,
+        "deferred_modules_present": []
+      },
+      {
+        "wall_seconds": 0.02254,
+        "cpu_seconds": 0.03125,
+        "additional_modules": 25,
+        "working_set_bytes": 18165760,
+        "peak_working_set_bytes": 18165760,
+        "deferred_modules_present": []
+      },
+      {
+        "wall_seconds": 0.02346,
+        "cpu_seconds": 0.03125,
+        "additional_modules": 25,
+        "working_set_bytes": 18264064,
+        "peak_working_set_bytes": 18264064,
+        "deferred_modules_present": []
+      }
+    ]
+  }
+}

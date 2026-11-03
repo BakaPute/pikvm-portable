@@ -18,10 +18,18 @@ checks = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(checks)
 
 
+def probe_output(group):
+    names = ('copyreg','logging','asyncio','ssl','aiohttp','mako','kvmd') if group == 'runtime' else ('PIL.Image','PIL.ImageDraw','PIL.ImageFont')
+    config = 'PROBE BEGIN config=msd\nPROBE OK config=msd\n' if group == 'runtime' else ''
+    return ''.join('PROBE BEGIN import=' + name + '\nPROBE OK import=' + name + ' elapsed=0.001s\n' for name in names) + config + 'PROBE COMPLETE group=' + group + '\n'
+
+
 class PreflightTests(unittest.TestCase):
     def journal(self, directory):
         # Keep test output concise; the durable files remain under the test root.
         self.enterContext(contextlib.redirect_stderr(io.StringIO()))
+        self.enterContext(patch.object(checks, 'resources', return_value={
+            'memory_kib': {'MemAvailable': 131072}, 'psi': {}, 'vmstat': {}, 'cgroups': []}))
         return checks.Journal(directory)
 
     def test_intermittent_drive_imports_and_systemctl_fail_closed_then_pass_on_a_new_run(self):
@@ -91,16 +99,20 @@ class PreflightTests(unittest.TestCase):
         journal=Mock();journal.phase.side_effect=lambda name:contextlib.nullcontext()
         outputs={'package-python':'python 3.14.7-1\n','package-kvmd':'kvmd 4.213-1\n',
                  'logging-baseline':'a'*64,'logging-sha256':'a'*64+'  file',
-                 'copyreg-baseline':'a'*64,'copyreg-sha256':'a'*64+'  file'}
+                 'copyreg-baseline':'a'*64,'copyreg-sha256':'a'*64+'  file',
+                 'python-kvmd-imports':probe_output('runtime'), 'pillow-imports':probe_output('pillow'),
+                 'drive1-read':'file_empty=1\ncdrom=0\nro=0\nremovable=1\nnofua=0\nLUN_READ_COMPLETE\n'}
         journal.step.side_effect=lambda name,args,timeout:outputs.get(name,'')
         with patch.object(checks.Path,'is_file',return_value=True),patch.object(checks.Path,'is_symlink',return_value=False):
             checks.compatibility(journal)
         commands={call.args[0]:call.args[1:] for call in journal.step.call_args_list}
-        self.assertEqual(commands['drive1-read'],(['kvmd-otgmsd','-i','1'],20))
+        self.assertEqual(commands['drive1-read'][0][0], '/bin/sh')
+        self.assertTrue(commands['drive1-read'][0][1].endswith('pikvm-portable-drive-check.sh'))
+        self.assertEqual(commands['drive1-read'][1],10)
         self.assertEqual(commands['python-kvmd-imports'][1],15)
         self.assertEqual(commands['kvmd.service'],(['systemctl','is-active','--quiet','kvmd.service'],10))
         self.assertIn('nginx-syntax',commands);self.assertIn('kvmd-nginx.service',commands)
-        self.assertEqual(len(commands),11)
+        self.assertEqual(len(commands),12)
 
     def test_failed_check_never_continues_to_later_commands(self):
         journal=Mock();journal.step.side_effect=checks.PreflightError('blocked pacman')
@@ -109,7 +121,7 @@ class PreflightTests(unittest.TestCase):
 
     def test_import_drive_or_systemctl_timeout_stops_the_entire_gate(self):
         order=['package-python','package-kvmd','logging-baseline','logging-sha256','copyreg-baseline','copyreg-sha256',
-               'python-kvmd-imports','drive1-read','nginx-syntax','kvmd.service','kvmd-nginx.service']
+               'python-kvmd-imports','pillow-imports','drive1-read','nginx-syntax','kvmd.service','kvmd-nginx.service']
         for fault in ('python-kvmd-imports','drive1-read','kvmd.service'):
             with self.subTest(fault=fault):
                 journal=Mock();journal.phase.side_effect=lambda name:contextlib.nullcontext()
@@ -117,7 +129,9 @@ class PreflightTests(unittest.TestCase):
                     if name==fault:raise checks.PreflightError('TIMEOUT '+name)
                     return {'package-python':'python 3.14.7-1','package-kvmd':'kvmd 4.213-1',
                             'logging-baseline':'a'*64,'logging-sha256':'a'*64+'  file',
-                 'copyreg-baseline':'a'*64,'copyreg-sha256':'a'*64+'  file'}.get(name,'')
+                 'copyreg-baseline':'a'*64,'copyreg-sha256':'a'*64+'  file',
+                 'python-kvmd-imports':probe_output('runtime'), 'pillow-imports':probe_output('pillow'),
+                 'drive1-read':'file_empty=1\ncdrom=0\nro=0\nremovable=1\nnofua=0\nLUN_READ_COMPLETE\n'}.get(name,'')
                 journal.step.side_effect=step
                 with patch.object(checks.Path,'is_file',return_value=True),patch.object(checks.Path,'is_symlink',return_value=False):
                     with self.assertRaisesRegex(checks.PreflightError,fault):checks.compatibility(journal)
@@ -140,7 +154,7 @@ class PreflightTests(unittest.TestCase):
             portable.oled_preflight()
         self.assertEqual(journal.step.call_args_list[0].args,
             ('power-hold-active',['systemctl','is-active','--quiet','pikvm-power-hold.service'],10))
-        self.assertEqual(journal.step.call_args_list[1].args[0],'pillow-imports')
+        self.assertEqual(len(journal.step.call_args_list),1, 'Pillow is checked once in compatibility, not again during install')
 
     def test_wrapper_and_installed_payload_keep_the_shared_supervisor(self):
         source=(ROOT/'scripts/pikvm-portable-preflight.sh').read_text()

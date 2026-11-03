@@ -234,6 +234,9 @@ le panneau, sans comprimer la vidéo : [layout, tests, mise à jour et retour RC
 journal de reprise, statut USB observé, API authentifiées et bornées, migration
 contrôlée. [Audit, tests, limites matérielles et déploiement/retour arrière](docs/portable-os-rc10-audit.md).
 
+**RC10.1** allège le précontrôle et diagnostique les attentes sous pression mémoire :
+[sondes, délais conditionnels, tests et mise à jour](docs/portable-os-rc10.1.md).
+
 Sur un Pi existant, utiliser l'installateur additif `install-portable-os.sh`, après
 autorisation. Le bootstrap `install.sh --initial-hardware-setup` configure le
 matériel et le démarrage : réservé à une installation initiale explicitement revue,

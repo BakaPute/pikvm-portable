@@ -1,13 +1,9 @@
 #!/usr/bin/env python3
 """Additive Portable OS install/restore. Never configures GPIO, gadget or Drive 0."""
 import argparse
-import ast
 import contextlib
 import importlib.machinery
 import importlib.util
-import http.client
-import hashlib
-from html.parser import HTMLParser
 import json
 import os
 from pathlib import Path
@@ -39,6 +35,7 @@ def preflight_journal():
 
 
 def oled_preflight():
+    import hashlib
     # Do not overwrite unidentified on-device Python/system compatibility fixes.
     baseline = json.loads((REPO / 'scripts/pikvm-oled-baselines.json').read_text(encoding='utf-8'))
     paths = [(name, BIN / name) for name in ('pikvm-oled-custom', 'pikvm-button-menu')]
@@ -61,7 +58,8 @@ def oled_preflight():
             raise RuntimeError('Correctifs GPIO locaux à examiner avant migration : pikvm_gpio.py')
     journal = preflight_journal()
     journal.step('power-hold-active', ['systemctl', 'is-active', '--quiet', 'pikvm-power-hold.service'], 10)
-    journal.step('pillow-imports', ['/usr/bin/python3', '-I', '-B', '-c', 'from PIL import Image,ImageDraw,ImageFont'], 15)
+    # Pillow was checked in an isolated process by compatibility(), before the
+    # parent loads storage/auth/HTML modules. Do not repeat that heavy startup.
 
 
 def oled_states(h):
@@ -104,6 +102,7 @@ def manual_shutdown_policy(source):
     No AST unparse: leave all unrelated text, imports and Python 3.14 fixes intact.
     Unknown ways of starting the service are rejected, never rewritten blindly.
     """
+    import ast
     tree = ast.parse(source)
     lines = source.splitlines(keepends=True)
     changes = []
@@ -157,6 +156,7 @@ def policy_preflight():
 
 def bounded_share_policy(source):
     """Replace only the recognized HTTP server class, preserving local fixes."""
+    import ast
     legacy = '''class Server(socketserver.ThreadingMixIn, socketserver.TCPServer):
     allow_reuse_address = True
     daemon_threads = False
@@ -213,6 +213,8 @@ def file_map():
     result[LIB / 'preflight.sh'] = ((REPO / 'scripts/pikvm-portable-preflight.sh').read_bytes(), 0o755)
     result[LIB / 'pikvm-python-integrity.sh'] = ((REPO / 'scripts/pikvm-python-integrity.sh').read_bytes(), 0o755)
     result[LIB / 'pikvm_preflight.py'] = ((REPO / 'scripts/pikvm_preflight.py').read_bytes(), 0o644)
+    result[LIB / 'pikvm_preflight_probe.py'] = ((REPO / 'scripts/pikvm_preflight_probe.py').read_bytes(), 0o644)
+    result[LIB / 'pikvm-portable-drive-check.sh'] = ((REPO / 'scripts/pikvm-portable-drive-check.sh').read_bytes(), 0o755)
     result[LIB / 'pikvm_oled.py'] = ((REPO / 'scripts/pikvm_oled.py').read_bytes(), 0o644)
     result[LIB / 'pikvm_gpio.py'] = ((REPO / 'scripts/pikvm_gpio.py').read_bytes(), 0o644)
     result[LIB / 'pikvm_transfer.py'] = ((REPO / 'scripts/pikvm_transfer.py').read_bytes(), 0o644)
@@ -228,6 +230,7 @@ def storage_sources():
 
 
 def storage_preflight():
+    import hashlib
     evidence = storage_sources()
     for source, destination in evidence['files'].items():
         installed = Path(destination)
@@ -257,6 +260,7 @@ def preflight():
 
 def navigation_preflight():
     """Read-only native DOM contract: never patch KVMD's own frontend."""
+    from html.parser import HTMLParser
     class NativeDocument(HTMLParser):
         ids = None
         full_tab = False
@@ -292,6 +296,7 @@ def verify_backup(h, backup):
 
 
 def wait_ready(h, timeout=20):
+    import http.client
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
         connection = http.client.HTTPConnection('127.0.0.1', 9878, timeout=1)
@@ -326,6 +331,7 @@ def wait_oled_ready(h, observed_after, timeout=25):
 
 
 def wait_wifi_ready(timeout=15):
+    import http.client
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
         connection = http.client.HTTPConnection('127.0.0.1', 9876, timeout=1)
@@ -503,16 +509,17 @@ def main():
     sys.dont_write_bytecode = True
     if args.action != 'restore':
         preflight()
-    h = helper()
     if args.action == 'check':
         with preflight_journal().phase('share-authentication-and-policy'):
             _, changed = policy_preflight()
         print('Précontrôle sans modification système (journal temporaire conservé) ; patch SHARE nécessaire : ' + str(changed))
     elif args.action == 'install':
+        h = helper()
         transfer = load('portable_transfer_lock', REPO / 'scripts/pikvm_transfer.py' if (REPO / 'scripts/pikvm_transfer.py').exists() else LIB / 'pikvm_transfer.py')
         with mutation_lock(), transfer.exclusive(transfer.STORAGE_LOCK), transfer.exclusive(transfer.LOCK):
             install(h)
     elif args.backup:
+        h = helper()
         transfer = load('portable_transfer_lock', REPO / 'scripts/pikvm_transfer.py' if (REPO / 'scripts/pikvm_transfer.py').exists() else LIB / 'pikvm_transfer.py')
         with mutation_lock(), transfer.exclusive(transfer.STORAGE_LOCK), transfer.exclusive(transfer.LOCK):
             restore(h, args.backup.resolve(strict=True))

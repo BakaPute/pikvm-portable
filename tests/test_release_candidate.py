@@ -48,7 +48,7 @@ class CandidateTests(unittest.TestCase):
         response.read.return_value = b'{"ok":true}'
         response.getheader.return_value = 'PiKVM-Portable-OS'
         h = SimpleNamespace(service_state=lambda: {'active': True})
-        with patch.object(portable.http.client, 'HTTPConnection', return_value=connection), \
+        with patch('http.client.HTTPConnection', return_value=connection), \
              patch.object(portable.time, 'monotonic', side_effect=[0, 0, 2]), patch.object(portable.time, 'sleep'):
             with self.assertRaisesRegex(RuntimeError, 'non prête'):
                 portable.wait_ready(h, timeout=1)
@@ -60,7 +60,7 @@ class CandidateTests(unittest.TestCase):
         response.read.return_value = b'{"ok":false}'
         response.getheader.return_value = 'PiKVM-Portable-OS Python/3.14'
         h = SimpleNamespace(service_state=lambda: {'active': True})
-        with patch.object(portable.http.client, 'HTTPConnection', return_value=connection):
+        with patch('http.client.HTTPConnection', return_value=connection):
             portable.wait_ready(h)
         connection.close.assert_called_once()
 
@@ -96,8 +96,9 @@ class CandidateTests(unittest.TestCase):
 
     def test_logging_integrity_gate_precedes_python_and_usb_commands(self):
         source = (ROOT / 'scripts/pikvm_preflight.py').read_text()
-        self.assertLess(source.index('sha256sum'), source.index("journal.step('python-kvmd-imports'"))
-        self.assertLess(source.index('sha256sum'), source.index('kvmd-otgmsd'))
+        self.assertLess(source.index('sha256sum'), source.index("import_probe(journal, 'python-kvmd-imports'"))
+        self.assertLess(source.index('sha256sum'), source.index("journal.step('drive1-read'"))
+        self.assertNotIn("['kvmd-otgmsd'", source)
         self.assertNotIn('--set-', source)
         self.assertNotIn('pinctrl set', source)
 

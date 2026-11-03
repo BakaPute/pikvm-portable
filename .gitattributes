@@ -7,6 +7,7 @@ scripts/pikvm-button-menu text eol=lf
 scripts/pikvm_oled.py text eol=lf
 scripts/pikvm_gpio.py text eol=lf
 scripts/pikvm_preflight.py text eol=lf
+scripts/pikvm_preflight_probe.py text eol=lf
 scripts/pikvm_transfer.py text eol=lf
 scripts/pikvm-usb-transfer text eol=lf
 scripts/pikvm-image-folders text eol=lf
