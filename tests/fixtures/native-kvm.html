@@ -1,8 +1,8 @@
 <!doctype html><html lang="fr"><head><title>KVMD lifecycle fixture</title>
 <style>.hidden{display:none}.menu{background:#222;color:white}#stream-window{background:#111;color:#eee}#stream-box{min-height:300px;padding-top:180px}</style></head>
 <body><ul id="navbar"><li><a href="/">PiKVM</a></li></ul>
-<div id="stream-window" tabindex="0"><div id="stream-window-header" class="window-header"><button data-wm-window-set-full-tab>Full tab</button></div>
-<div id="stream-box">Vidéo / clavier / souris simulés</div></div>
+<div id="stream-window" tabindex="0"><div id="stream-window-header" class="window-header"><span class="window-grab">MJPEG - 1600x900</span><button data-wm-window-set-full-tab>Full tab</button></div>
+<div id="stream-box"><img id="stream-image" src="/__test/remote-desktop.svg" alt="Bureau distant simulé"></div></div>
 <div class="hidden window" id="keyboard-window" style="position:fixed;bottom:60px;left:0;z-index:2147483643;background:#222"><button data-wm-window-close aria-label="Fermer le clavier">Fermer</button><div class="keypad-row"><div class="key" data-keypad-code="KeyA">A</div></div></div>
 <div class="hidden window" id="mouse-window" style="position:fixed;bottom:60px;left:0;z-index:2147483643;background:#222"><button data-wm-window-close aria-label="Fermer la souris">Fermer</button>Souris native simulée</div>
 <div id="pkpm-root"><button>Power hérité</button></div><div id="pk-battery">Batterie héritée</div>
@@ -11,7 +11,7 @@
 window.lifecycle = {down:0, up:0, mouse:0, releases:0, shortcuts:0, macros:0};
 document.querySelector('[data-wm-window-set-full-tab]').onclick=()=>document.getElementById('stream-window').classList.add('window-full-tab');
 for (const [id,title,content] of [
- ['msd-dropdown','Drive','<select id="msd-image-selector" aria-label="Image Drive 0"><option value="rescue.iso">rescue.iso</option></select><button id="msd-connect-button">Connecter Drive 0 simulé</button><input id="msd-new-file" type="file" aria-label="Importer ISO simulé"><a href="/extras/image-manager/" onclick="window.unexpectedNativeNavigation = true">Images natives</a>'],
+ ['msd-dropdown','Drive','<p><b>Mass Storage Drive</b> · Déconnecté du PC</p><div class="text"><table><tr><td rowspan="2">ℹ</td><td><b>Lecteur natif Drive 0</b></td></tr><tr><td><sup>Les commandes restent gérées par le contrôleur KVMD natif. Données simulées.</sup></td></tr></table></div><table class="kv"><tr><td>Image</td><td><select id="msd-image-selector" aria-label="Image Drive 0"><option value="rescue.iso">rescue.iso</option></select></td></tr><tr><td>Mode</td><td><select aria-label="Mode Drive 0"><option>CD/DVD</option><option>Flash</option></select></td></tr><tr><td>Nouvelle image</td><td><input id="msd-new-file" type="file" aria-label="Importer ISO simulé"></td></tr><tr><td>Lecture seule</td><td><input type="checkbox" checked aria-label="Lecture seule simulée"></td></tr></table><div class="buttons-row"><button id="msd-connect-button">Connecter Drive 0 simulé</button><a href="/extras/image-manager/" onclick="window.unexpectedNativeNavigation = true">Images natives</a></div>'],
  ['atx-dropdown','ATX','<button id="atx-test">Power PC simulé</button>'],
  ['shortcuts-dropdown','Shortcuts','<button id="shortcut" data-keyboard-shortcut="ControlLeft AltLeft Delete">Ctrl Alt Suppr simulé</button>'],
  ['macro-dropdown','Macro','<button id="macro">Macro simulée</button>'],

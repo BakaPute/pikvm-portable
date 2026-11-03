@@ -9,6 +9,21 @@ import {routes, extensionLink} from '../web/legacy/routes.js';
 import {nativeMenus} from '../web/extras/portable-os/core/kvm-adapter.js';
 import {unpackPixels} from '../web/extras/portable-os/modules/oled.js';
 import {OledInput} from '../web/extras/portable-os/core/oled-input.js';
+import {streamSize} from '../web/extras/portable-os/core/stream-size.js';
+
+test('stream ratio follows decoded media and native status, never panel geometry',()=>{
+    const nodes={};const doc={getElementById:id=>nodes[id],querySelector:()=>({textContent:'MJPEG - 1920x1080 / 30 FPS'})};
+    const media=attrs=>({hidden:false,classList:{contains:()=>false},style:{},getAttribute:()=>'',hasAttribute:()=>false,...attrs});
+    nodes['stream-image']=media({naturalWidth:640,naturalHeight:480});
+    assert.deepEqual(streamSize(doc),{width:640,height:480});
+    nodes['stream-video']=media({videoWidth:1280,videoHeight:720});
+    assert.deepEqual(streamSize(doc),{width:1280,height:720});
+    nodes['stream-video'].hidden=true;nodes['stream-image'].getAttribute=()=>'/blank-stream.webp';
+    assert.deepEqual(streamSize(doc),{width:1920,height:1080});
+    doc.querySelector=()=>null;assert.equal(streamSize(doc),null);
+    nodes['stream-canvas']=media({width:1440,height:1080,hasAttribute:()=>true});
+    assert.deepEqual(streamSize(doc),{width:1440,height:1080});
+});
 
 test('OLED release is sent before the delayed start response, without a late keep',async()=>{
     let resolveStart;const actions=[];

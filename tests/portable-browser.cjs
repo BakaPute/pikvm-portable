@@ -94,7 +94,11 @@ const path = require('node:path');
         await page.unroute(/\/api\/oled(?:\?.*)?$/);
         await page.screenshot({path: path.join(output, 'portable-os-desktop.png'), fullPage: true, animations: 'disabled'});
         const idle = () => page.waitForFunction(() => document.body.getAttribute('aria-busy') === 'false');
-        const navigate = async id => { await idle(); await page.locator(`[data-route="${id}"]`).click(); await idle(); };
+        const navigate = async id => {
+            await idle();await page.locator(`[data-route="${id}"]`).click();
+            await page.waitForFunction(route=>document.querySelector(`[data-route="${route}"]`)?.getAttribute('aria-current')==='page',id);
+            await idle();
+        };
         await navigate('share');
         await page.getByRole('button', {name: 'Gestion Web', exact: true}).click();
         const modal = page.getByRole('dialog');

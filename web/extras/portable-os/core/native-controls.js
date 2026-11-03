@@ -23,6 +23,10 @@ export function projectControls(source, {activate, enabled=()=>true, allowed=()=
         if(led){target.dataset.nativeLed='gray';target.setAttribute('role','status');}
         if(keypad)target.dataset.nativeKey=node.getAttribute('data-keypad-code');
         if(node.classList.contains('keypad-row'))target.classList.add('native-keys');
+        if(node.classList.contains('kv')&&tag==='table')target.classList.add('native-form-table');
+        if(node.classList.contains('text'))target.classList.add('native-notice');
+        if(node.classList.contains('radio-box')||node.classList.contains('switch-box'))target.classList.add('native-options');
+        if(node.classList.contains('buttons-row'))target.classList.add('native-actions');
         if(['input','select','textarea','button'].includes(tag)) {
             target.id='native-proxy-'+(++serial)+'-'+Math.random().toString(36).slice(2,7);
             const label=Array.from(node.labels||[],n=>n.textContent.trim()).filter(Boolean).join(' ')||node.closest('tr')?.querySelector('td')?.textContent.trim();
@@ -65,6 +69,7 @@ export function projectControls(source, {activate, enabled=()=>true, allowed=()=
         if(!target){target=make(node);if(!target)return null;nodes.set(node,target);}
         if(node.nodeType===3){if(target.textContent!==node.textContent)target.textContent=node.textContent;return target;}
         const tag=node.tagName.toLowerCase();
+        if(tag==='tr')target.classList.toggle('native-form-row',node.cells.length===2&&node.closest('table')?.classList.contains('kv')&&!!node.querySelector('input,select,textarea'));
         const responsive=node.id==='keyboard-mobile'||node.id==='keyboard-desktop';
         target.hidden=!(isRoot&&rootVisible)&&(node.hidden||node.classList.contains('hidden')||node.style.display==='none'||(responsive&&win.getComputedStyle(node).display==='none'));
         if(target.dataset.nativeLed){target.dataset.nativeLed=(node.className.match(/\bled-(green|red|gray|yellow|blue)\b/)||[])[1]||'gray';target.setAttribute('aria-label',node.title||node.id);}
@@ -74,7 +79,7 @@ export function projectControls(source, {activate, enabled=()=>true, allowed=()=
         if('disabled' in target)target.disabled=!!blocked(node);
         if('readOnly' in target)target.readOnly=!!node.readOnly;
         if('required' in target)target.required=!!node.required;
-        for(const attr of ['title','min','max','step','placeholder','accept','multiple']) {
+        for(const attr of ['title','min','max','step','placeholder','accept','multiple','colspan','rowspan']) {
             const value=node.getAttribute(attr);
             if(value===null)target.removeAttribute(attr);else if(target.getAttribute(attr)!==value)target.setAttribute(attr,value);
         }

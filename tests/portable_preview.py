@@ -40,6 +40,9 @@ class Preview(SimpleHTTPRequestHandler):
 
     def do_GET(self):
         url = urlsplit(self.path)
+        if url.path == '/__test/remote-desktop.svg':
+            payload=(Path(__file__).parent/'fixtures/remote-desktop.svg').read_bytes()
+            self.send_response(200);self.send_header('Content-Type','image/svg+xml');self.send_header('Content-Length',str(len(payload)));self.end_headers();self.wfile.write(payload);return
         if url.path in ('/', '/legacy'):
             self.send_response(302); self.send_header('Location', '/extras/portable-os/' if url.path == '/' else '/legacy/'); self.end_headers(); return
         if url.path == '/api/info':

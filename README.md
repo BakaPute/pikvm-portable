@@ -223,3 +223,6 @@ avec sélection matérielle prudente et diagnostic CPU cgroup :
 Pour le profil réel GPIO18 `ip --` : [RC8 corrigée et comparaison passive LOW/HIGH](docs/portable-os-rc8-gpio-profile.md).
 
 Pour sysfs sans `resource` sur le Zero 2 W : [RC8 corrigée, traduction Device Tree et diagnostic passif](docs/portable-os-rc8-sysfs.md).
+
+La candidate **0.2.0-rc.9** place la vidéo KVM en premier, puis les commandes et
+le panneau, sans comprimer la vidéo : [layout, tests, mise à jour et retour RC8](docs/portable-os-rc9.md).

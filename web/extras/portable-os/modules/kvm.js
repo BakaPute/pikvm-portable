@@ -3,7 +3,7 @@ import {releaseNativeInput, bridgeNavigation} from '../core/native-bridge.js';
 import {adaptKvm} from '../core/kvm-adapter.js';
 import {routes} from '../../../legacy/routes.js';
 export function nativeFrameModule({id, title, subtitle, icon, source}) {
-    let wrapper, frame, unbridge, adapter, mounted = false, watcher;
+    let wrapper, frame, unbridge, adapter, mounted = false;
     return {id, title, subtitle, icon, group: id === 'kvm' ? 'ESPACE DE TRAVAIL' : 'SYSTÈME', mount(outlet, context) {
         mounted = true;
         const dock = document.getElementById('native-dock');
@@ -32,10 +32,10 @@ export function nativeFrameModule({id, title, subtitle, icon, source}) {
                             });
                         if (frame.contentDocument !== doc) return;
                         if (id === 'kvm') {
-                            adapter = adaptKvm(frame, fullscreen);
-                            frame.before(adapter.controls,adapter.panel);
-                            watcher?.disconnect();watcher=new ResizeObserver(resize);
-                            watcher.observe(adapter.controls);watcher.observe(adapter.panel);
+                            adapter = adaptKvm(frame, fullscreen, size=>{
+                                wrapper.style.setProperty('--kvm-ratio',`${size.width} / ${size.height}`);
+                            });
+                            frame.after(adapter.controls,adapter.panel);
                         }
                         frame.style.visibility = 'visible'; frame.style.display = 'block';
                         if (!mounted || context?.store.data.session !== 'ready') adapter?.suspend();
@@ -48,17 +48,19 @@ export function nativeFrameModule({id, title, subtitle, icon, source}) {
                     }
                 }});
             if (id === 'kvm') frame.style.visibility = 'hidden';
-            wrapper = el('section', {class: 'native-panel'}, frame); dock.append(wrapper);
+            wrapper = el('section', {class: 'native-panel'+(id==='kvm'?' kvm-console':'')}, frame); dock.append(wrapper);
         }
         wrapper.hidden = false; dock.hidden = false;
-        const resize = () => wrapper.style.setProperty('--native-height',
-            Math.max(280, innerHeight - (frame.getBoundingClientRect().top + scrollY) - 24) + 'px');
+        if(id==='kvm')document.documentElement.classList.add('kvm-page');
+        const resize = () => {
+            if(id!=='kvm')wrapper.style.setProperty('--native-height',
+                Math.max(280, innerHeight - (frame.getBoundingClientRect().top + scrollY) - 24) + 'px');
+        };
         const layout = requestAnimationFrame(resize);
         window.addEventListener('resize', resize);
         if (context?.store.data.session === 'ready') adapter?.resume();
         if(id==='kvm'){
             outlet.append(hint('Moteur KVMD natif · commandes et panneaux dans Portable OS · Ctrl+Maj+Échap libère la capture.'));
-            if(adapter){watcher?.disconnect();watcher=new ResizeObserver(resize);watcher.observe(adapter.controls);watcher.observe(adapter.panel);}
         }else outlet.append(el('div', {class: 'native-toolbar'}, hint('Terminal PiKVM natif · session authentifiée'),
             button('Activer le terminal', () => {
                 if (context?.store.data.session !== 'ready') return notify('Session PiKVM requise.', true);
@@ -68,6 +70,7 @@ export function nativeFrameModule({id, title, subtitle, icon, source}) {
             if (data.session === 'expired') { adapter?.suspend(); releaseNativeInput(frame); }
         });
         return () => { mounted = false; cancelAnimationFrame(layout); window.removeEventListener('resize', resize);
-            watcher?.disconnect();unsubscribe?.(); adapter?.suspend(); releaseNativeInput(frame); wrapper.hidden = true; dock.hidden = true; };
+            if(id==='kvm')document.documentElement.classList.remove('kvm-page');
+            unsubscribe?.(); adapter?.suspend(); releaseNativeInput(frame); wrapper.hidden = true; dock.hidden = true; };
     }};
 }
