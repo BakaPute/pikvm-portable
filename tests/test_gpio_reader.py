@@ -135,7 +135,7 @@ class GpioTests(unittest.TestCase):
             compat.write_bytes(b'raspberrypi,model-zero-2-w\0brcm,bcm2837\0')
             with self.assertRaises(gpio.Unavailable):gpio.validate_platform(compat,root,device)
 
-    def test_exact_driver_window_and_device_identity_are_required(self):
+    def test_resource_alone_cannot_authorize_missing_dt_and_driver_links(self):
         with tempfile.TemporaryDirectory() as directory:
             root=Path(directory);compat=root/'compatible'
             compat.write_bytes(b'raspberrypi,model-zero-2-w\0brcm,bcm2837\0')
@@ -146,9 +146,9 @@ class GpioTests(unittest.TestCase):
             (platform/'resource').write_text('0x3f200000 0x3f200fff 0x200\n')
             with patch.object(gpio.Path,'lstat',return_value=Mock(st_mode=stat.S_IFCHR,st_rdev=0)), \
                  patch.object(gpio.os,'major',return_value=0,create=True),patch.object(gpio.os,'minor',return_value=0,create=True):
-                self.assertEqual(gpio.validate_platform(compat,root)['devno'],'0:0')
+                with self.assertRaises((gpio.Unavailable,OSError)):gpio.validate_platform(compat,root)
                 (platform/'resource').write_text('0x7e200000 0x7e200fff 0x200\n')
-                with self.assertRaises(gpio.Unavailable):gpio.validate_platform(compat,root)
+                with self.assertRaises((gpio.Unavailable,OSError)):gpio.validate_platform(compat,root)
     def test_cross_check_selects_persistent_reader_without_subprocesses_per_sample(self):
         device=Mock();device.read.return_value=False;sample=Mock(return_value=False)
         fallback=Mock()

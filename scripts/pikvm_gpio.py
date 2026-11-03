@@ -92,31 +92,135 @@ def validate_board(compatible=Path('/proc/device-tree/compatible')):
         raise Unavailable('Only Raspberry Pi Zero 2 W / BCM2837 is supported')
 
 
+def dt_cells(path):
+    with path.open('rb') as file:
+        raw = file.read(4097)
+    if not raw or len(raw) > 4096 or len(raw) % 4:
+        raise Unavailable('Invalid DT cells: '+str(path))
+    return [int.from_bytes(raw[i:i+4],'big') for i in range(0,len(raw),4)]
+
+
+def cell_count(path):
+    values = dt_cells(path)
+    if len(values) != 1 or values[0] not in (1,2):
+        raise Unavailable('Unsupported DT cell count: '+str(path))
+    return values[0]
+
+
+def cell_number(cells):
+    value = 0
+    for cell in cells:value = (value << 32) | cell
+    return value
+
+
+def dt_region(node, dtroot):
+    """Translate a single direct soc child; never guess cell widths or addresses."""
+    soc = dtroot/'soc'
+    if node.parent != soc or b'simple-bus' not in (soc/'compatible').read_bytes().split(b'\0'):
+        raise Unavailable('Unsupported DT bus topology: '+str(node))
+    for entry in (soc,node):
+        status = entry/'status'
+        if status.exists() and status.read_bytes().rstrip(b'\0') not in (b'ok',b'okay'):
+            raise Unavailable('Disabled DT node: '+str(entry))
+    address = cell_count(soc/'#address-cells')
+    size = cell_count(soc/'#size-cells')
+    parent = cell_count(dtroot/'#address-cells')
+    reg = dt_cells(node/'reg')
+    if len(reg) != address+size:
+        raise Unavailable('Exactly one DT register window required: '+str(node/'reg'))
+    bus, length = cell_number(reg[:address]), cell_number(reg[address:])
+    if length <= 0 or bus+length > 1 << (32*address):
+        raise Unavailable('Invalid DT register extent: '+str(node/'reg'))
+    ranges = dt_cells(soc/'ranges')
+    stride = address+parent+size
+    if len(ranges) % stride:
+        raise Unavailable('Malformed DT soc/ranges')
+    hits = []
+    for i in range(0,len(ranges),stride):
+        row = ranges[i:i+stride]
+        child = cell_number(row[:address]);cpu = cell_number(row[address:address+parent])
+        span = cell_number(row[address+parent:])
+        if span <= 0 or child+span > 1 << (32*address) or cpu+span > 1 << (32*parent):
+            raise Unavailable('Invalid DT soc/ranges extent')
+        if child < bus+length and bus < child+span:
+            if not (child <= bus and bus+length <= child+span):
+                raise Unavailable('DT soc/ranges partially overlaps the register window')
+            hits.append({'child':child,'cpu':cpu,'range_size':span,'physical':cpu+bus-child})
+    if len(hits) != 1:
+        raise Unavailable('DT soc/ranges must translate the complete window exactly once')
+    return {'bus':bus,**hits[0],'size':length}
+
+
+def validate_binding(entry, driver_dir, sysroot, dtroot):
+    platform = entry.resolve(strict=True)
+    expected = sysroot/'devices/platform/soc/3f200000.gpiomem'
+    if platform != expected:
+        raise Unavailable('Unexpected platform link target: '+str(platform))
+    if (platform/'driver').resolve(strict=True) != driver_dir:
+        raise Unavailable('Platform driver backlink is inconsistent: '+str(platform/'driver'))
+    node = (platform/'of_node').resolve(strict=True)
+    if not node.is_relative_to(dtroot) or (node/'compatible').read_bytes().split(b'\0') != [b'brcm,bcm2835-gpiomem',b'']:
+        raise Unavailable('Platform of_node is not the recognised legacy gpiomem binding')
+    gpio = dtroot/'soc/gpio@7e200000'
+    if (gpio/'compatible').read_bytes().split(b'\0') != [b'brcm,bcm2835-gpio',b'']:
+        raise Unavailable('GPIO controller compatible is not BCM2835')
+    control = dt_region(gpio,dtroot)
+    memory = dt_region(node,dtroot)
+    if (control['bus'],control['physical'],control['size']) != (0x7E200000,0x3F200000,0xB4):
+        raise Unavailable('GPIO DT reg/ranges do not describe BCM2837 GPIO at 0x3f200000')
+    if memory['bus'] != control['bus'] or memory['physical'] != control['physical'] or memory['size'] not in (0xB4,0x1000):
+        raise Unavailable('gpiomem DT reg/ranges do not map the validated GPIO registers')
+    resource = platform/'resource'
+    try:
+        rows = resource.read_text().splitlines()
+    except FileNotFoundError:
+        if resource.is_symlink():raise Unavailable('Dangling resource link')
+        rows = None
+    if rows is not None:
+        if len(rows) != 1:
+            raise Unavailable('Ambiguous sysfs resource window')
+        try:start,end,flags = (int(value,16) for value in rows[0].split())
+        except ValueError:raise Unavailable('Malformed sysfs resource window') from None
+        if start != memory['physical'] or end != start+memory['size']-1 or not flags & 0x200:
+            raise Unavailable('sysfs resource contradicts DT reg/ranges')
+    return {'platform':str(platform),'driver':str(driver_dir),'of_node':str(node),
+            'basis':'device-tree+sysfs-links','resource_present':rows is not None,
+            'gpio_region':control,'gpiomem_region':memory}
+
+
 def validate_platform(compatible=Path('/proc/device-tree/compatible'),
                       sysroot=Path('/sys'), device=Path('/dev/gpiomem')):
     validate_board(compatible)
+    dtroot = compatible.parent.resolve(strict=True)
+    sysroot = sysroot.resolve(strict=True)
     info = device.lstat()
     if not stat.S_ISCHR(info.st_mode):
         raise Unavailable('/dev/gpiomem must be an ordinary character device')
     devno = f'{os.major(info.st_rdev)}:{os.minor(info.st_rdev)}'
-    classes = [sysroot/'class'/name/'gpiomem/dev' for name in ('gpiomem','bcm2835-gpiomem')]
-    if not any(path.is_file() and path.read_text().strip() == devno for path in classes):
-        raise Unavailable('gpiomem device number not confirmed by sysfs')
+    classes = []
+    for name in ('gpiomem','bcm2835-gpiomem'):
+        try:directory = (sysroot/'class'/name/'gpiomem').resolve(strict=True)
+        except FileNotFoundError:continue
+        if not directory.is_relative_to(sysroot/'devices'):
+            raise Unavailable('gpiomem class target is outside sysfs devices')
+        if (directory/'dev').read_text().strip() != devno:
+            raise Unavailable('gpiomem device number contradicts sysfs class')
+        classes.append(directory)
+    if len(classes) != 1 or (sysroot/'dev/char'/devno).resolve(strict=True) != classes[0]:
+        raise Unavailable('gpiomem class and /sys/dev/char identity are not unique and consistent')
+    uevent = classes[0]/'uevent'
+    if uevent.exists():
+        values = dict(line.split('=',1) for line in uevent.read_text().splitlines() if '=' in line)
+        if values.get('DEVNAME') != 'gpiomem' or values.get('MAJOR') != devno.split(':')[0] or values.get('MINOR') != devno.split(':')[1]:
+            raise Unavailable('gpiomem uevent identity is inconsistent')
     matches = []
     for driver in ('rpi-gpiomem','gpiomem-bcm2835'):
-        for entry in (sysroot/'bus/platform/drivers'/driver).glob('*'):
-            node = entry/'of_node/compatible'
-            if not node.is_file() or b'brcm,bcm2835-gpiomem' not in node.read_bytes().split(b'\0'):
-                continue
-            ranges = (entry/'resource').read_text().splitlines()
-            if len(ranges) != 1:
-                continue
-            start, end, flags = (int(value,16) for value in ranges[0].split())
-            if start == 0x3F200000 and end == 0x3F200FFF and flags & 0x200:
-                matches.append(str(entry))
+        directory = sysroot/'bus/platform/drivers'/driver
+        for entry in sorted(directory.glob('*.gpiomem')):
+            matches.append(validate_binding(entry,directory,sysroot,dtroot))
     if len(matches) != 1:
         raise Unavailable('A unique BCM2837 GPIO register window was not confirmed')
-    return {'device':str(device),'devno':devno,'platform':matches[0]}
+    return {'device':str(device),'devno':devno,'class_device':str(classes[0]),**matches[0]}
 
 
 class ReadOnlyLevel:
@@ -239,6 +343,37 @@ def compare_controlled(seconds=30, save=False, factory=ReadOnlyLevel, sample=pin
         reader.close()
 
 
+def inspect_hardware():
+    """Bounded, passive evidence retained even when fast-reader selection fails."""
+    dtroot = Path('/proc/device-tree')
+    properties = {}
+    def property_info(path):
+        try:
+            with path.open('rb') as file:raw = file.read(4097)
+            return {'hex':raw[:4096].hex(),'truncated':len(raw)>4096}
+        except OSError as error:return {'error':str(error)}
+    for name in ('compatible','#address-cells','soc/compatible','soc/#address-cells',
+                 'soc/#size-cells','soc/ranges','soc/gpio@7e200000/compatible','soc/gpio@7e200000/reg'):
+        properties[name] = property_info(dtroot/name)
+    bindings = []
+    for driver in ('rpi-gpiomem','gpiomem-bcm2835'):
+        for entry in sorted((Path('/sys/bus/platform/drivers')/driver).glob('*.gpiomem')):
+            record = {'entry':str(entry)}
+            try:
+                platform = entry.resolve(strict=True)
+                record.update(platform=str(platform),driver=str((platform/'driver').resolve(strict=True)))
+                node = (platform/'of_node').resolve(strict=True)
+                record['of_node'] = str(node)
+                if node.is_relative_to(dtroot.resolve(strict=True)):
+                    record['properties'] = {name:property_info(node/name) for name in ('compatible','reg','status')}
+                record['resource_present'] = (platform/'resource').exists()
+            except OSError as error:record['error'] = str(error)
+            bindings.append(record)
+    try:validation = validate_platform()
+    except (OSError,ValueError,Unavailable) as error:validation = {'error':str(error)}
+    return {'device_tree':properties,'bindings':bindings,'platform_validation':validation}
+
+
 def diagnose():
     """Passive feature probe; no line requests or service changes."""
     import importlib.metadata
@@ -250,6 +385,7 @@ def diagnose():
         return {**result,'kernel':platform.release(),'gpiod_python_version':version,
                 'sample':read() if resource else None,
                 'validation':resource.platform if resource else None,
+                'hardware':inspect_hardware(),
                 'event_backend_enabled':False,
                 'note':'No GPIO request, configuration, write or module loading performed.'}
     finally:

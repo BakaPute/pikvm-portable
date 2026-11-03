@@ -1,5 +1,8 @@
 # PiKVM Portable OS 0.2.0-rc.8 — lecteur physique GPIO18
 
+**Sysfs du noyau 6.12 :** `resource` n'est plus obligatoire si les preuves DT et
+les liens sont cohérents. Voir [le correctif sysfs/Device Tree](portable-os-rc8-sysfs.md).
+
 **Correctif du profil réel `ip --` :** les règles de sélection et le budget de
 supervision ci-dessous sont remplacés par [le correctif GPIO18](portable-os-rc8-gpio-profile.md).
 

@@ -221,3 +221,5 @@ avec sélection matérielle prudente et diagnostic CPU cgroup :
 [audit, vérifications passives, installation et rollback RC7](docs/portable-os-rc8.md).
 
 Pour le profil réel GPIO18 `ip --` : [RC8 corrigée et comparaison passive LOW/HIGH](docs/portable-os-rc8-gpio-profile.md).
+
+Pour sysfs sans `resource` sur le Zero 2 W : [RC8 corrigée, traduction Device Tree et diagnostic passif](docs/portable-os-rc8-sysfs.md).

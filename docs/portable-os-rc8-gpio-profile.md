@@ -1,5 +1,8 @@
 # RC8 corrigée : profil réel GPIO18 `ip --`
 
+Pour le noyau 6.12 sans fichier sysfs `resource`, utiliser aussi
+[le correctif de validation Device Tree/sysfs](portable-os-rc8-sysfs.md).
+
 Le test matériel communiqué montre deux impulsions HIGH d'environ **554 ms** et
 **332 ms**, avec retour LOW. Il confirme la polarité historique HIGH=appuyé et le
 fonctionnement du lecteur pinctrl sur cette installation. Il ne constitue pas à
