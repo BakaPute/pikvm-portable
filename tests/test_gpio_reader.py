@@ -1,5 +1,6 @@
 """RC8 GPIO fixtures only: never open a real device or request a GPIO line."""
 import contextlib
+import json
 import mmap
 import os
 from pathlib import Path
@@ -17,6 +18,85 @@ import pikvm_gpio as gpio
 
 
 class GpioTests(unittest.TestCase):
+    def test_dash_profile_is_recognised_only_on_the_validated_board_for_fallback(self):
+        with patch.object(gpio,'pinctrl_state',return_value={'config':'ip --','level':True}), \
+             patch.object(gpio,'validate_board') as board:
+            self.assertTrue(gpio.pinctrl_sample());board.assert_called_once()
+            board.side_effect=gpio.Unavailable('wrong board')
+            with self.assertRaises(gpio.Unavailable):gpio.pinctrl_sample()
+
+    def test_dash_fast_reader_requires_explicit_evidence_and_matching_configuration(self):
+        device=Mock();device.read.return_value=False;device.platform={'device':'test'}
+        state=lambda:{'config':'ip --','level':False}
+        with patch.object(gpio,'read_validation',side_effect=gpio.Unavailable('unvalidated')):
+            _,resource,status=gpio.select_reader(lambda:None,factory=lambda:device,sample=state)
+            self.assertIsNone(resource);self.assertEqual(status['backend'],'pinctrl')
+        with patch.object(gpio,'read_validation',return_value={'valid':True}) as evidence:
+            _,resource,status=gpio.select_reader(lambda:None,factory=lambda:device,sample=state)
+            self.assertIs(resource,device);self.assertEqual(status['config'],'ip --')
+            evidence.assert_called_once_with(device.platform)
+        states=Mock(side_effect=[{'config':'ip pd','level':False},{'config':'ip --','level':False}])
+        _,resource,_=gpio.select_reader(lambda:None,factory=lambda:device,sample=states)
+        self.assertIsNone(resource)
+
+    def test_passive_comparison_records_both_levels_and_two_complete_releases(self):
+        values=[False,False,True,True,False,False,True,True,False,False]
+        tick=[0];device=Mock();device.platform={'device':'fixture'}
+        device.read.side_effect=lambda:values[min(tick[0],len(values)-1)]
+        def state():return {'config':'ip --','level':values[min(tick[0],len(values)-1)]}
+        def sleep(delay):tick[0]+=1
+        with tempfile.TemporaryDirectory() as directory:
+            path=Path(directory)/'proof/validation.json'
+            with patch.object(gpio,'VALIDATION',path),patch.object(gpio,'boot_id',return_value='boot-A'), \
+                 patch.object(gpio.time,'monotonic',side_effect=lambda:tick[0]*.05),patch.object(gpio.time,'sleep',side_effect=sleep):
+                record=gpio.compare_controlled(.49,True,factory=lambda:device,sample=state)
+            self.assertEqual(record['cycles'],2);self.assertEqual(record['high_pairs'],4)
+            self.assertTrue(json.loads(path.read_text())['valid'])
+        device.close.assert_called_once()
+
+    def test_comparison_mismatch_removes_old_permission_and_never_saves_success(self):
+        device=Mock();device.read.return_value=False
+        with tempfile.TemporaryDirectory() as directory:
+            path=Path(directory)/'validation.json';path.write_text('{"valid":true}')
+            with patch.object(gpio,'VALIDATION',path):
+                with self.assertRaisesRegex(gpio.Unavailable,'diverge'):
+                    gpio.compare_controlled(1,True,factory=lambda:device,
+                        sample=lambda:{'config':'ip --','level':True})
+                self.assertFalse(path.exists())
+        device.close.assert_called_once()
+
+    def test_permission_is_bound_to_boot_platform_freshness_and_both_levels(self):
+        record={'schema':1,'config':'ip --','platform':{'device':'fixture'},'boot_id':'boot-A',
+                'at':100,'low_pairs':2,'high_pairs':2,'cycles':2,'valid':True}
+        with tempfile.TemporaryDirectory() as directory:
+            path=Path(directory)/'proof.json'
+            with patch.object(gpio,'boot_id',return_value='boot-A'),patch.object(gpio.time,'monotonic',return_value=101), \
+                 patch.object(gpio.Path,'lstat',return_value=Mock(st_mode=stat.S_IFREG|0o600,st_size=256,st_uid=0)):
+                path.write_text(json.dumps(record));self.assertTrue(gpio.read_validation(record['platform'],path)['valid'])
+                for changed in ({'boot_id':'old'},{'platform':{}},{'at':-86400},{'high_pairs':0},{'cycles':1},{'at':None}):
+                    path.write_text(json.dumps({**record,**changed}))
+                    with self.assertRaises(gpio.Unavailable):gpio.read_validation(record['platform'],path)
+                path.write_text(json.dumps(record))
+                for mode,owner in ((stat.S_IFREG|0o666,0),(stat.S_IFREG|0o600,1000),(stat.S_IFLNK|0o600,0)):
+                    with patch.object(gpio.os,'geteuid',return_value=0,create=True), \
+                         patch.object(gpio.Path,'lstat',return_value=Mock(st_mode=mode,st_size=256,st_uid=owner)):
+                        with self.assertRaises(gpio.Unavailable):gpio.read_validation(record['platform'],path)
+
+    def test_guard_latches_level_divergence_or_configuration_change(self):
+        for changed in ({'config':'ip pd','level':False},{'config':'ip --','level':True}):
+            device=gpio.ReadOnlyLevel.__new__(gpio.ReadOnlyLevel)
+            device.mapping=bytearray(4096);device.words=memoryview(device.mapping).cast('I')
+            device.failure=None;device.check_at=0;device.expected_config='ip --';device.check_sample=lambda:changed
+            with patch.object(gpio.time,'monotonic',return_value=2):
+                self.assertIsNotNone(device.check()['failure'])
+            with self.assertRaises(gpio.Unavailable):device.read()
+
+    def test_fast_reader_rejects_a_stalled_periodic_guard(self):
+        device=gpio.ReadOnlyLevel.__new__(gpio.ReadOnlyLevel)
+        device.failure=None;device.check_sample=lambda:None;device.check_at=10
+        with patch.object(gpio.time,'monotonic',return_value=13):
+            with self.assertRaisesRegex(gpio.Unavailable,'stale'):device.read()
+
     def test_mapping_is_read_only_and_gpio18_level_and_mode_are_exact(self):
         registers=bytearray(4096)
         info=Mock(st_mode=stat.S_IFCHR,st_rdev=0)
@@ -38,6 +118,8 @@ class GpioTests(unittest.TestCase):
                     with self.assertRaises(TypeError):mapping[0:4]=b'\0'*4
                     reader.close();reader.close();close.assert_called_once_with(123)
         reader=gpio.ReadOnlyLevel.__new__(gpio.ReadOnlyLevel);reader.mapping=registers
+        reader.failure=None
+        reader.check_sample=None
         reader.words=memoryview(registers).cast('I')
         struct.pack_into('<I',registers,0x34,1<<17)
         self.assertFalse(reader.read(),'GPIO17 must not be used as the button')

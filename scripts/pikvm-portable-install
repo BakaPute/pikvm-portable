@@ -55,7 +55,8 @@ def oled_preflight():
     gpio = LIB / 'pikvm_gpio.py'
     if gpio.exists() or gpio.is_symlink():
         if (gpio.is_symlink() or not gpio.is_file() or
-                gpio.read_bytes().replace(b'\r\n',b'\n') != (REPO / 'scripts/pikvm_gpio.py').read_bytes().replace(b'\r\n',b'\n')):
+                (gpio.read_bytes().replace(b'\r\n',b'\n') != (REPO / 'scripts/pikvm_gpio.py').read_bytes().replace(b'\r\n',b'\n') and
+                 hashlib.sha256(gpio.read_bytes().replace(b'\r\n',b'\n')).hexdigest() not in baseline.get('pikvm_gpio.py',[]))):
             raise RuntimeError('Correctifs GPIO locaux à examiner avant migration : pikvm_gpio.py')
     journal = preflight_journal()
     journal.step('power-hold-active', ['systemctl', 'is-active', '--quiet', 'pikvm-power-hold.service'], 10)

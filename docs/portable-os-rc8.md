@@ -1,5 +1,8 @@
 # PiKVM Portable OS 0.2.0-rc.8 — lecteur physique GPIO18
 
+**Correctif du profil réel `ip --` :** les règles de sélection et le budget de
+supervision ci-dessous sont remplacés par [le correctif GPIO18](portable-os-rc8-gpio-profile.md).
+
 Candidate locale de `codex/portable-os`, basée sur RC7 `db1e079`. Aucun accès SSH,
 diagnostic matériel ou déploiement effectué pendant ce développement.
 

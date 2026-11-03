@@ -219,3 +219,5 @@ suspend les rafraîchissements cachés et ajoute un diagnostic Linux passif :
 La candidate **0.2.0-rc.8** ajoute un lecteur GPIO18 persistant en lecture seule,
 avec sélection matérielle prudente et diagnostic CPU cgroup :
 [audit, vérifications passives, installation et rollback RC7](docs/portable-os-rc8.md).
+
+Pour le profil réel GPIO18 `ip --` : [RC8 corrigée et comparaison passive LOW/HIGH](docs/portable-os-rc8-gpio-profile.md).

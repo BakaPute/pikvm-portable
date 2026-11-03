@@ -134,9 +134,10 @@ class ButtonReader:
             self.sample, self.at = value, now
 
     def status(self):
+        validation = self.resource.check() if self.resource is not None else None
         with self.lock:
             age = time.monotonic() - self.at
-            return {**self.diagnostic,'samples':self.samples,'errors':self.errors,
+            return {**self.diagnostic,**({'validation':validation} if isinstance(validation,dict) else {}),'samples':self.samples,'errors':self.errors,
                     'sample_age_ms':round(age*1000,1) if self.samples else None}
 
     def close(self):
