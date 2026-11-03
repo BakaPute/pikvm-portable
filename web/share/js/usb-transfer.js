@@ -8,6 +8,7 @@
     window.__pikvmUsbTransferLoaded = true;
 
     let busy = false;
+    let polling = false;
     let lastState = null;
 
     // Une fois l'import terminé, le message reste visible
@@ -22,14 +23,16 @@
 
     async function request(url, options = {}) {
 
-        const response = await fetch(
-            url,
-            {
-                credentials: "same-origin",
-                cache: "no-store",
-                ...options
-            }
-        );
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), options.method === 'POST' ? 250000 : 10000);
+        let response;
+        try {
+            response = await fetch(url, {credentials: 'same-origin', cache: 'no-store',
+                ...options, signal: controller.signal});
+        } catch (error) {
+            if (controller.signal.aborted) throw new Error('Délai USB dépassé ; vérifier l’état avant de réessayer.');
+            throw error;
+        } finally { clearTimeout(timer); }
 
         let data = {};
 
@@ -68,9 +71,9 @@
             {
                 method: "POST",
                 headers: {
-                    "Content-Type": "application/json"
+                    "Content-Type": "application/json", "X-Pikvm-Share": "1"
                 },
-                body: "{}"
+                body: JSON.stringify(action === "start" ? {allow_usb_reset: true} : {})
             }
         );
     }
@@ -95,19 +98,6 @@
             path + "?" + query.toString(),
             {
                 method: "POST"
-            }
-        );
-    }
-
-
-    async function syncNormalDrive() {
-
-        await nativePost(
-            "/api/msd/set_params",
-            {
-                image: "",
-                cdrom: 1,
-                rw: 0
             }
         );
     }
@@ -186,8 +176,10 @@
             >
                 Terminer transfert
             </button>
+            <button id="pk-usb-transfer-import" type="button" disabled>Importer / reprendre les ISO</button>
         `;
 
+        row.querySelector('#pk-usb-transfer-import').addEventListener('click', importImages);
 
         const status =
             document.createElement("div");
@@ -360,31 +352,11 @@
                 && msd.drive.connected
             ) {
 
-                const name =
-                    msd.drive.image?.name
-                    || "le lecteur actuel";
-
-
-                if (
-                    !confirm(
-                        `${name} est actuellement connecté.\n\n`
-                        + "Il doit être déconnecté pour "
-                        + "activer PIKVM-XFER.\n\n"
-                        + "Continuer ?"
-                    )
-                ) {
-                    return;
-                }
-
-
-                await nativePost(
-                    "/api/msd/set_connected",
-                    {
-                        connected: 0
-                    }
-                );
+                throw new Error("Éjecte proprement le Drive 0 côté PC avant le transfert.");
             }
 
+
+            if (!confirm("L’activation interrompt temporairement tout l’USB, clavier et souris inclus. Drive 1 et SHARE doivent être libérés. Continuer ?")) return;
 
             const data =
                 await transferPost(
@@ -423,6 +395,16 @@
     // ========================================================
 
     async function finishTransfer() {
+        if (busy) return;
+        busy = true;
+        try {
+            const data = await transferPost('stop');
+            showStatus(data.transfer?.message || 'Transfert terminé ; source conservée.');
+        } catch (error) { showStatus(error.message, true); }
+        finally { busy = false; await refresh(); }
+    }
+
+    async function importImages() {
 
         if (busy) {
             return;
@@ -501,6 +483,7 @@
 
 
     async function refresh() {
+        if (polling) return;
 
         const {
             start,
@@ -513,6 +496,7 @@
         }
 
 
+        polling = true;
         try {
 
             const data =
@@ -551,6 +535,7 @@
                 );
 
 
+            const unknown = !drive.known || state === 'unknown';
             const operating = [
                 "starting",
                 "stopping",
@@ -562,13 +547,14 @@
             start.disabled =
                 busy
                 || operating
-                || active;
+                || active || unknown || Boolean(drive.image);
 
 
             finish.disabled =
                 busy
                 || operating
-                || !active;
+                || unknown || Boolean(drive.image) || !transfer.exists;
+            document.getElementById('pk-usb-transfer-import').disabled = finish.disabled;
 
 
             if (active || operating) {
@@ -636,7 +622,7 @@
                 );
 
             }
-            else if (state === "error") {
+            else if (["error", "unknown", "interrupted"].includes(state)) {
 
                 showStatus(
                     transfer.message
@@ -646,17 +632,6 @@
 
             }
             else if (state === "done") {
-
-                if (lastState !== "done") {
-
-                    try {
-                        await syncNormalDrive();
-                    }
-                    catch (_) {
-                        // Le Drive physique est déjà normal.
-                    }
-                }
-
 
                 const imported =
                     transfer.imported || [];
@@ -682,7 +657,7 @@
             }
             else {
 
-                showStatus("");
+                showStatus(transfer.message || "");
             }
 
 
@@ -690,12 +665,15 @@
 
         }
         catch (error) {
+            start.disabled = finish.disabled = true;
+            document.getElementById('pk-usb-transfer-import').disabled = true;
 
             showStatus(
                 "USB : " + error.message,
                 true
             );
         }
+        finally { polling = false; }
     }
 
 

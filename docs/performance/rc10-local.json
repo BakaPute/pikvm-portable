@@ -1,0 +1,16 @@
+{
+  "environment": "local synthetic, NOT Raspberry Pi",
+  "python": "3.12.14",
+  "platform": "win32",
+  "cycles": 64,
+  "bytes_per_file": 1048576,
+  "copied_bytes": 67108864,
+  "repeat_finalize": 64,
+  "wall_seconds": 2.344,
+  "cpu_seconds": 2.047,
+  "peak_python_heap_bytes": 4374969,
+  "descriptors_before": null,
+  "descriptors_after": null,
+  "journal_bytes": 18596,
+  "result": "passed"
+}

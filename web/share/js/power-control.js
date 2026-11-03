@@ -261,7 +261,7 @@
                 method: "POST",
 
                 headers: {
-                    "Content-Type": "application/json"
+                    "Content-Type": "application/json", "X-Pikvm-Share": "1"
                 },
 
                 credentials: "same-origin",

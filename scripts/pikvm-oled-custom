@@ -341,48 +341,10 @@ MSD_PATH = "/var/lib/kvmd/msd"
 
 
 def transfer_info():
-    data = {}
-
-    try:
-        with open(TRANSFER_STATE) as f:
-            data = json.load(f)
-    except Exception:
-        pass
-
-    image = ""
-
-    try:
-        with open(TRANSFER_LUN) as f:
-            image = f.read().strip()
-    except Exception:
-        pass
-
-    connected = (
-        os.path.normpath(image)
-        == os.path.normpath(TRANSFER_IMAGE)
-    ) if image else False
-
-    state = data.get(
-        "state",
-        "idle"
-    )
-
-    active_states = {
-        "starting",
-        "connected",
-        "stopping",
-        "importing",
-        "preparing",
-    }
-
-    active = (
-        connected
-        or state in active_states
-    )
-
-    data["connected"] = connected
-    data["active"] = active
-
+    from pikvm_transfer import observe
+    data = observe()
+    data['connected'] = data['drive']['transfer_active']
+    data['active'] = bool(data['busy'] or data['connected'])
     return data
 
 

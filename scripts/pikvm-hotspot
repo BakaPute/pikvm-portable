@@ -1,6 +1,6 @@
 #!/bin/bash
 
-set -u
+set -eu
 
 ENV_FILE="/etc/kvmd/pikvm-hotspot.env"
 AP_NETWORK="/run/systemd/network/05-pikvm-hotspot.network"
@@ -105,7 +105,7 @@ APEOF
     echo
     echo "Hotspot active"
     echo "SSID : $HOTSPOT_SSID"
-    echo "PASS : $HOTSPOT_PASS"
+    # Never print the password during activation (service logs/diagnostics).
     echo "IP   : $HOTSPOT_IP"
 }
 

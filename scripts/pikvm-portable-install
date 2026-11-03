@@ -12,6 +12,7 @@ import json
 import os
 from pathlib import Path
 import re
+import shutil
 import subprocess
 import sys
 import time
@@ -141,7 +142,7 @@ def policy_preflight():
     if SHARE_API.is_symlink() or not SHARE_API.is_file():
         raise RuntimeError('Installer/configurer SHARE avant Portable OS ; API ordinaire requise.')
     source = SHARE_API.read_text()
-    patched = manual_shutdown_policy(source)
+    patched = share_power_policy(bounded_share_policy(manual_shutdown_policy(source)))
     auth = load('portable_installed_share', SHARE_API)
     if auth.kvmd_check() not in (401, 403):
         raise RuntimeError('Une authentification PiKVM active est obligatoire.')
@@ -152,6 +153,46 @@ def policy_preflight():
             raise RuntimeError('Éjecter puis démonter/libérer SHARE avant le patch de politique.')
         backend.ensure_unmounted()
     return patched.encode(), patched != source
+
+
+def bounded_share_policy(source):
+    """Replace only the recognized HTTP server class, preserving local fixes."""
+    legacy = '''class Server(socketserver.ThreadingMixIn, socketserver.TCPServer):
+    allow_reuse_address = True
+    daemon_threads = False
+    block_on_close = True
+    request_queue_size = 8'''
+    candidate = (REPO / 'scripts/pikvm-share-api').read_text()
+    def server(text):
+        nodes = [n for n in ast.parse(text).body if isinstance(n, ast.ClassDef) and n.name == 'Server']
+        if len(nodes) != 1:
+            raise RuntimeError('Classe serveur SHARE inconnue ; examen manuel requis')
+        return nodes[0], ast.get_source_segment(text, nodes[0])
+    node, installed = server(source)
+    _, replacement = server(candidate)
+    if ast.dump(ast.parse(installed)) == ast.dump(ast.parse(replacement)):
+        return source
+    if ast.dump(ast.parse(installed)) != ast.dump(ast.parse(legacy)):
+        raise RuntimeError('Correctifs locaux du serveur SHARE inconnus ; aucun remplacement')
+    lines = source.splitlines(keepends=True)
+    lines[node.lineno-1:node.end_lineno] = [replacement + '\n']
+    result = ''.join(lines)
+    compile(result, 'pikvm-share-api', 'exec')
+    return result
+
+
+def share_power_policy(source):
+    old = '    def operation(self):\n        if not self.lock.acquire(blocking=False):'
+    new = ("    def operation(self):\n        if Path('/run/pikvm-poweroff-requested').exists():\n"
+           "            raise ShareError('Arrêt demandé ; accès stockage suspendu.', 423)\n"
+           '        if not self.lock.acquire(blocking=False):')
+    if new in source:
+        return source
+    if source.count(old) != 1:
+        raise RuntimeError('Garde opération SHARE inconnue ; correctif local à examiner')
+    result = source.replace(old, new, 1)
+    compile(result, 'pikvm-share-api', 'exec')
+    return result
 
 
 def file_map():
@@ -170,16 +211,44 @@ def file_map():
     result[Path('/etc/systemd/system') / PORTABLE_SERVICE] = ((REPO / 'systemd' / PORTABLE_SERVICE).read_bytes(), 0o644)
     result[LIB / 'installer.py'] = ((REPO / 'scripts/pikvm-share-install').read_bytes(), 0o644)
     result[LIB / 'preflight.sh'] = ((REPO / 'scripts/pikvm-portable-preflight.sh').read_bytes(), 0o755)
+    result[LIB / 'pikvm-python-integrity.sh'] = ((REPO / 'scripts/pikvm-python-integrity.sh').read_bytes(), 0o755)
     result[LIB / 'pikvm_preflight.py'] = ((REPO / 'scripts/pikvm_preflight.py').read_bytes(), 0o644)
     result[LIB / 'pikvm_oled.py'] = ((REPO / 'scripts/pikvm_oled.py').read_bytes(), 0o644)
     result[LIB / 'pikvm_gpio.py'] = ((REPO / 'scripts/pikvm_gpio.py').read_bytes(), 0o644)
+    result[LIB / 'pikvm_transfer.py'] = ((REPO / 'scripts/pikvm_transfer.py').read_bytes(), 0o644)
+    for source, destination in storage_sources()['files'].items():
+        result[Path(destination)] = ((REPO / source).read_bytes(), 0o755 if source.startswith('scripts/') else 0o644)
+    result[Path('/usr/local/bin/pikvm-portable-report')] = ((REPO / 'scripts/pikvm-portable-report').read_bytes(), 0o755)
+    result[LIB / 'pikvm-storage-baselines.json'] = ((REPO / 'scripts/pikvm-storage-baselines.json').read_bytes(), 0o644)
     return result
+
+
+def storage_sources():
+    return json.loads((REPO / 'scripts/pikvm-storage-baselines.json').read_text(encoding='utf-8'))
+
+
+def storage_preflight():
+    evidence = storage_sources()
+    for source, destination in evidence['files'].items():
+        installed = Path(destination)
+        if installed.is_symlink() or not installed.is_file():
+            raise RuntimeError('Composant historique absent/non ordinaire : ' + destination)
+        content = installed.read_bytes().replace(b'\r\n', b'\n')
+        if (content != (REPO / source).read_bytes().replace(b'\r\n', b'\n') and
+                hashlib.sha256(content).hexdigest() != evidence['baselines'][destination]):
+            raise RuntimeError('Correctif local inconnu à examiner, aucun remplacement : ' + destination)
+    transfer = load('portable_transfer_preflight', REPO / 'scripts/pikvm_transfer.py')
+    observed = transfer.observe()
+    if observed['busy'] or not observed['drive']['known'] or observed['drive']['image']:
+        raise RuntimeError('Maintenance exige Drive 0 éjecté et aucun import actif ; état matériel connu')
 
 
 def preflight():
     journal = preflight_journal()
     # Shared implementation; no opaque outer process or cumulative 60s timeout.
     journal.compatibility()
+    with journal.phase('storage-migration'):
+        storage_preflight()
     with journal.phase('native-navigation'):
         navigation_preflight()
     with journal.phase('oled-baselines-and-health'):
@@ -256,6 +325,25 @@ def wait_oled_ready(h, observed_after, timeout=25):
     raise RuntimeError('Miroir OLED ou gestionnaire logique non prêt ; rollback requis.')
 
 
+def wait_wifi_ready(timeout=15):
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        connection = http.client.HTTPConnection('127.0.0.1', 9876, timeout=1)
+        try:
+            connection.request('GET', '/api/usb-transfer/status')
+            response = connection.getresponse()
+            payload = json.loads(response.read(4096))
+            if (response.status == 401 and payload.get('ok') is False and
+                    response.getheader('Server', '').startswith('PiKVM-Portable-Wifi')):
+                return
+        except (OSError, ValueError, http.client.HTTPException):
+            pass
+        finally:
+            connection.close()
+        time.sleep(.25)
+    raise RuntimeError('API Wi-Fi/stockage non prête ou authentification absente ; rollback requis.')
+
+
 @contextlib.contextmanager
 def mutation_lock():
     import fcntl
@@ -271,6 +359,20 @@ def nginx_config(h):
         h.run(['kvmd-nginx-mkconf', str(h.NGINX_PREFIX / 'nginx.conf.mako'), str(candidate)])
         dump = h.run(h.nginx_args('-T', candidate))
         files = h.nginx_dump_files(dump)
+        for extra, upstream in (('wifi-wizard', 'wifi_wizard_api'), ('image-manager', 'image_manager_api')):
+            directory = SHARE_EXTRAS.parent / extra
+            path = directory / 'nginx.ctx-server.conf'
+            if files.get(path.resolve()) != path.read_text().strip():
+                raise RuntimeError('Configuration historique non incluse par nginx : ' + extra)
+            body = h.nginx_location(files[path.resolve()], '^~', '/extras/' + extra + '/api/')
+            h.require_nginx_directive(body, r'\bauth_request\s+/auth_check\s*;', 'authentification stockage')
+            h.require_nginx_directive(body, r'\bproxy_set_header\s+X-Share-Origin\s+\$scheme://\$http_host\s*;', 'origine stockage')
+            h.require_nginx_directive(body, r'\bproxy_pass\s+http://' + upstream + r'\s*;', 'proxy stockage')
+            h.require_nginx_directive(body, r'\bproxy_intercept_errors\s+off\s*;', 'erreurs JSON stockage')
+            http = directory / 'nginx.ctx-http.conf'
+            if files.get(http.resolve()) != http.read_text().strip():
+                raise RuntimeError('Upstream historique non inclus : ' + extra)
+            h.require_nginx_directive(files[http.resolve()], r'\bserver\s+127\.0\.0\.1:9876\s+[^;]*;', 'API stockage locale 9876')
         for name in ('nginx.ctx-http.conf', 'nginx.ctx-server.conf'):
             path = SHARE_EXTRAS / name
             if files.get(path.resolve()) != path.read_text().strip():
@@ -309,16 +411,26 @@ def install(h):
     mapping = file_map()
     if changed:
         mapping[SHARE_API] = (policy, SHARE_API.stat().st_mode & 0o777)
+    probe = h.BACKUPS
+    while not probe.exists():
+        probe = probe.parent
+    required = 16 * 1024**2 + sum(len(content) for content, _ in mapping.values())
+    required += sum(path.stat().st_size for path in mapping if path.is_file())
+    if shutil.disk_usage(probe).free < required:
+        raise RuntimeError('Espace insuffisant pour mise à jour et sauvegarde ; aucun service arrêté.')
     backup = h.snapshot([*mapping, h.NGINX_CONFIG])
     manifest_path = backup / 'manifest.json'
     manifest = json.loads(manifest_path.read_text())
     manifest['share_policy_patch'] = changed
     manifest['share_was_active'] = active(h, 'pikvm-share-api.service')
     manifest['oled_units'] = oled_states(h)
+    manifest['wifi_was_active'] = active(h, 'wifi-wizard-api.service')
     h.write_file(manifest_path, json.dumps(manifest, indent=2).encode(), 0o600)
     print('Sauvegarde : ' + str(backup), flush=True)
     try:
         stop_oled(h)
+        if manifest['wifi_was_active']:
+            h.run(['systemctl', 'stop', 'wifi-wizard-api.service'])
         if h.service_state()['active']:
             h.run(['systemctl', 'stop', PORTABLE_SERVICE])
         if changed:
@@ -328,6 +440,9 @@ def install(h):
         h.run(['systemctl', 'daemon-reload'])
         if changed and manifest['share_was_active']:
             h.run(['systemctl', 'start', 'pikvm-share-api.service'])
+        if manifest['wifi_was_active']:
+            h.run(['systemctl', 'start', 'wifi-wizard-api.service'])
+            wait_wifi_ready()
         # Persist the mirror across boots; snapshot restores original enablement.
         # Do not let systemd start/restart the power-hold dependency indirectly.
         oled_started = time.monotonic()
@@ -357,12 +472,16 @@ def restore(h, backup):
         backend.ensure_unmounted()
     if 'oled_units' in manifest:
         stop_oled(h)
+    if manifest.get('wifi_was_active'):
+        h.run(['systemctl', 'stop', 'wifi-wizard-api.service'])
     if manifest.get('share_policy_patch'):
         h.run(['systemctl', 'stop', 'pikvm-share-api.service'])
     if h.service_state()['active']:
         h.run(['systemctl', 'stop', PORTABLE_SERVICE])
     restart = h.restore_files(backup)
     h.reload_nginx()
+    if manifest.get('wifi_was_active'):
+        h.run(['systemctl', 'start', 'wifi-wizard-api.service'])
     if manifest.get('share_policy_patch') and manifest.get('share_was_active'):
         h.run(['systemctl', 'start', 'pikvm-share-api.service'])
     if restart:
@@ -390,10 +509,12 @@ def main():
             _, changed = policy_preflight()
         print('Précontrôle sans modification système (journal temporaire conservé) ; patch SHARE nécessaire : ' + str(changed))
     elif args.action == 'install':
-        with mutation_lock():
+        transfer = load('portable_transfer_lock', REPO / 'scripts/pikvm_transfer.py' if (REPO / 'scripts/pikvm_transfer.py').exists() else LIB / 'pikvm_transfer.py')
+        with mutation_lock(), transfer.exclusive(transfer.STORAGE_LOCK), transfer.exclusive(transfer.LOCK):
             install(h)
     elif args.backup:
-        with mutation_lock():
+        transfer = load('portable_transfer_lock', REPO / 'scripts/pikvm_transfer.py' if (REPO / 'scripts/pikvm_transfer.py').exists() else LIB / 'pikvm_transfer.py')
+        with mutation_lock(), transfer.exclusive(transfer.STORAGE_LOCK), transfer.exclusive(transfer.LOCK):
             restore(h, args.backup.resolve(strict=True))
     else:
         parser.error('Chemin de sauvegarde requis pour restore')

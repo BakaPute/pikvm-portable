@@ -305,6 +305,8 @@ class Controller:
 
     @contextlib.contextmanager
     def operation(self):
+        if Path('/run/pikvm-poweroff-requested').exists():
+            raise ShareError('Arrêt demandé ; accès stockage suspendu.', 423)
         if not self.lock.acquire(blocking=False):
             raise ShareError('Opération en cours ; réessaie après sa fin.', 423)
         try:
@@ -722,6 +724,26 @@ class Server(socketserver.ThreadingMixIn, socketserver.TCPServer):
     daemon_threads = False
     block_on_close = True
     request_queue_size = 8
+
+    def __init__(self, *args, **kwargs):
+        self.slots = threading.BoundedSemaphore(8)
+        super().__init__(*args, **kwargs)
+
+    def process_request(self, request, address):
+        if not self.slots.acquire(blocking=False):
+            self.shutdown_request(request)
+            return
+        try:
+            super().process_request(request, address)
+        except BaseException:
+            self.slots.release()
+            raise
+
+    def process_request_thread(self, request, address):
+        try:
+            super().process_request_thread(request, address)
+        finally:
+            self.slots.release()
 
 
 def main():

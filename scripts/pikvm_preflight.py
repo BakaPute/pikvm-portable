@@ -129,14 +129,28 @@ def compatibility(journal):
             raise PreflightError('logging baseline hash unavailable.')
         if not actual or actual[0] != expected:
             raise PreflightError('logging checksum mismatch: repair before migration.')
+    target = Path('/usr/lib/python3.14/copyreg.py')
+    mtree = Path('/var/lib/pacman/local/python-3.14.7-1/mtree')
+    with journal.phase('copyreg-metadata'):
+        if not target.is_file() or target.is_symlink() or not mtree.is_file():
+            raise PreflightError('copyreg or package metadata unavailable.')
+    expected = journal.step('copyreg-baseline', ['bash', '-o', 'pipefail', '-c',
+        'gzip -dc "$1" | awk \'$1 == "./usr/lib/python3.14/copyreg.py" {for(i=2;i<=NF;i++) if($i ~ /^sha256digest=/) {sub(/^sha256digest=/,"",$i); print $i}}\'',
+        'preflight-mtree', str(mtree)], 10).strip()
+    actual = journal.step('copyreg-sha256', ['sha256sum', str(target)], 10).split()
+    with journal.phase('copyreg-integrity'):
+        if len(expected) != 64 or any(c not in '0123456789abcdef' for c in expected):
+            raise PreflightError('copyreg baseline hash unavailable.')
+        if not actual or actual[0] != expected:
+            raise PreflightError('copyreg checksum mismatch: repair before migration.')
     journal.step('python-kvmd-imports', ['/usr/bin/python3', '-I', '-B', '-c',
-        'import sys,logging,asyncio,ssl,aiohttp,mako,kvmd; assert sys.version_info[:2] == (3,14); assert kvmd.__version__ == "4.213"; assert hasattr(logging,"FileHandler")'], 15)
+        'import sys,copyreg,logging,asyncio,ssl,aiohttp,mako,kvmd; assert sys.version_info[:2] == (3,14); assert kvmd.__version__ == "4.213"; assert hasattr(logging,"FileHandler")'], 15)
     journal.step('drive1-read', ['kvmd-otgmsd', '-i', '1'], 20)
     journal.step('nginx-syntax', ['nginx', '-t', '-p', '/etc/kvmd/nginx', '-c',
         '/run/kvmd/nginx.conf', '-g', 'pid /run/kvmd/nginx.pid; user kvmd-nginx; error_log stderr;'], 15)
     for service in ('kvmd.service', 'kvmd-nginx.service'):
         journal.step(service, ['systemctl', 'is-active', '--quiet', service], 10)
-    journal.write('COMPATIBILITY OK: Python, logging, KVMD, Drive 1 read, nginx, services')
+    journal.write('COMPATIBILITY OK: Python, logging, copyreg, KVMD, Drive 1 read, nginx, services')
 
 
 if __name__ == '__main__':

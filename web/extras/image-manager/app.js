@@ -141,7 +141,8 @@ async function jsonRequest(
                 cache:
                     "no-store",
 
-                ...options
+                ...options,
+                headers: {"X-Pikvm-Share": "1", ...options.headers}
             }
         );
 
@@ -252,8 +253,8 @@ function selectedName() {
 
 function usbBusy() {
 
-    if (!usbState) {
-        return false;
+    if (!usbState || !usbState.drive?.known) {
+        return true;
     }
 
     const state =
@@ -384,7 +385,7 @@ function renderUsb() {
 
     start.disabled =
         active
-        || operating
+        || operating || !usbState?.drive?.known
         || Boolean(
             msdState
             ?.drive
@@ -392,13 +393,13 @@ function renderUsb() {
         );
 
 
-    finish.disabled =
-        !active;
+    finish.disabled = operating || !usbState?.drive?.known || Boolean(usbState?.drive?.image) || !usbState?.exists;
+    document.getElementById('usbImport').disabled = finish.disabled;
 
 
     upload.disabled =
         active
-        || operating
+        || operating || !usbState?.drive?.known
         || Boolean(
             msdState
             ?.drive
@@ -463,9 +464,7 @@ function renderUsb() {
         percent = 100;
 
     }
-    else if (
-        state === "error"
-    ) {
+    else if (["error", "interrupted", "unknown"].includes(state)) {
 
         message =
             "Erreur USB : "
@@ -1265,11 +1264,11 @@ async function uploadFiles(files) {
 
 
 async function startUsbTransfer() {
-
+    if (!confirm("Interruption globale USB/HID. Drive 0/1 et SHARE doivent être libérés. Continuer ?")) return;
     try {
 
         await managerPost(
-            "usb-transfer/start"
+            "usb-transfer/start", {allow_usb_reset: true}
         );
 
         showToast(
@@ -1290,6 +1289,14 @@ async function startUsbTransfer() {
 
 
 async function finishUsbTransfer() {
+    try {
+        await managerPost('usb-transfer/stop');
+        showToast('Transfert terminé ; source conservée. Import séparé.');
+        await loadAll();
+    } catch (error) { showToast(error.message, true); }
+}
+
+async function importUsbImages() {
 
     if (
         !confirm(
@@ -1469,3 +1476,5 @@ setInterval(
     loadAll,
     2000
 );
+
+document.getElementById('usbImport').addEventListener('click', importUsbImages);

@@ -8,6 +8,15 @@ if [ "${1:-}" = "--share-only" ]; then
     exec bash "$(dirname "$0")/install-share.sh" "$@"
 fi
 
+# Existing machines use the additive Portable OS installer. This historical
+# bootstrap configures boot/GPIO/network and must never be an accidental update.
+if [ "${1:-}" != "--initial-hardware-setup" ]; then
+    echo "ERREUR : installation matérielle initiale uniquement (--initial-hardware-setup)." >&2
+    echo "Pour une mise à jour : bash install-portable-os.sh check puis install, après autorisation." >&2
+    exit 2
+fi
+shift
+
 # ------------------------------------------------------------
 # PiKVM Portable - Installation automatique
 # ------------------------------------------------------------
@@ -132,7 +141,8 @@ if [ "${#MANQUANTS[@]}" -gt 0 ]; then
 
     echo "Paquets manquants : ${MANQUANTS[*]}"
 
-    pacman -Sy --needed --noconfirm "${MANQUANTS[@]}"
+    echo "ERREUR : dépendances absentes. Préparer des paquets officiels compatibles avant de reprendre ; aucune mise à jour partielle automatique." >&2
+    exit 1
 
 else
 
@@ -177,6 +187,7 @@ sauvegarder /usr/share/kvmd/web/share/js/drive-folders.js
 sauvegarder /usr/local/bin/pikvm-oled-custom
 sauvegarder /usr/local/bin/pikvm-button-menu
 sauvegarder /usr/local/lib/pikvm-portable/pikvm_oled.py
+sauvegarder /usr/local/lib/pikvm-portable/pikvm_transfer.py
 sauvegarder /usr/local/lib/pikvm-portable/pikvm_gpio.py
 
 echo "[OK] Sauvegardes : $BACKUP"
@@ -185,6 +196,7 @@ echo
 echo "[3/8] Installation des scripts..."
 
 install -d -m 755 /usr/local/lib/pikvm-portable
+install -m 644 "$REPO/scripts/pikvm_transfer.py" /usr/local/lib/pikvm-portable/pikvm_transfer.py
 install -m 644 "$REPO/scripts/pikvm_oled.py" /usr/local/lib/pikvm-portable/pikvm_oled.py
 install -m 644 "$REPO/scripts/pikvm_gpio.py" /usr/local/lib/pikvm-portable/pikvm_gpio.py
 
@@ -207,6 +219,13 @@ install -m 755 \
 install -m 755 \
     "$REPO/scripts/wifi-wizard-api" \
     /usr/local/bin/wifi-wizard-api
+
+# Wi-Fi reuses the KVMD authentication provider, even before the optional SHARE
+# service/image is installed. Importing this file never runs its CLI/main().
+# Preserve any existing provider and its local compatibility fixes.
+if [ ! -e /usr/local/bin/pikvm-share-api ] && [ ! -L /usr/local/bin/pikvm-share-api ]; then
+    install -m 755 "$REPO/scripts/pikvm-share-api" /usr/local/bin/pikvm-share-api
+fi
 
 install -m 755 \
     "$REPO/scripts/pikvm-auto-shutdown" \

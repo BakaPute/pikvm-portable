@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
 """Gestion des dossiers dans le stockage MSD PiKVM, sans toucher à OTG."""
-import fcntl
 import json
 import os
 import re
 import subprocess
 import sys
 from pathlib import Path
+
+sys.path.insert(0, '/usr/local/lib/pikvm-portable')
+import pikvm_transfer as transfer
 
 ROOT = Path('/var/lib/kvmd/msd')
 LUN = Path('/sys/kernel/config/usb_gadget/kvmd/functions/mass_storage.usb0/lun.0/file')
@@ -51,24 +53,21 @@ def safe_path(value, *, root_allowed=False):
 
 
 def run(args):
-    proc = subprocess.run(args, capture_output=True, text=True, timeout=30)
+    proc = subprocess.run(args, capture_output=True, text=True, timeout=30,
+                          pass_fds=tuple(sorted(transfer.LOCK_FDS)))
     if proc.returncode:
         raise RuntimeError((proc.stderr or proc.stdout).strip() or 'Commande échouée.')
 
 
 def transfer_active():
-    proc = subprocess.run(['/usr/local/bin/pikvm-usb-transfer', 'status'],
-                          capture_output=True, text=True, timeout=10)
-    if proc.returncode:
-        raise RuntimeError('Impossible de vérifier le transfert USB.')
-    lines = [line for line in proc.stdout.splitlines() if line.startswith('{')]
-    if not lines:
-        raise RuntimeError('Statut USB indisponible.')
-    data = json.loads(lines[-1])
-    return bool(data.get('drive', {}).get('transfer_active') or data.get('state') in ACTIVE_STATES)
+    data = transfer.observe()
+    if data['state'] == 'unknown':
+        raise RuntimeError('État matériel USB inconnu ; examiner le diagnostic')
+    return bool(data['drive']['transfer_active'] or data['busy'])
 
 
 def check_idle():
+    transfer.require_not_stopping()
     if not ROOT.is_dir():
         raise RuntimeError('Stockage MSD indisponible.')
     if LUN.read_text().strip():
@@ -79,8 +78,8 @@ def check_idle():
     # Ne jamais remonter RO pendant une écriture qui utilise cette partition.
     for base, dirs, files in os.walk(ROOT, followlinks=False):
         dirs[:] = [d for d in dirs if not d.startswith('.') and d != 'lost+found']
-        if any(name.startswith('.__') and (name.endswith('.incomplete') or name.endswith('.part')) for name in files):
-            raise RuntimeError('Importation incomplète ou en cours. Attends sa fin ou nettoie le fichier dans Drive.')
+        if any(name.startswith('.__') and name.endswith('.incomplete') for name in files):
+            raise RuntimeError('Upload natif incomplet ou en cours ; examiner Drive avant modification.')
 
 
 def directories():
@@ -145,11 +144,20 @@ def execute(action, data):
                 return {'path': source.relative_to(ROOT).as_posix()}
             if dest.exists():
                 raise FileExistsError('Une image portant ce nom existe déjà dans le dossier.')
-            source.rename(dest)
+            os.link(source, dest)  # no-clobber, even against a native writer
+            transfer.fsync_dir(dest.parent)
+            source.unlink()
+            transfer.fsync_dir(source.parent)
             result = {'path': dest.relative_to(ROOT).as_posix()}
         else:
             raise ValueError('Action inconnue.')
-        os.sync()
+        # Flush only directories changed by this operation. Global sync can wait
+        # on unrelated multi-GB transfers and make the API appear hung.
+        transfer.fsync_dir(ROOT)
+        if 'dest' in locals():
+            transfer.fsync_dir(dest.parent)
+        if 'path' in locals():
+            transfer.fsync_dir(path.parent)
         return result
     finally:
         # Le stockage doit retrouver son montage RO, même si une opération échoue.
@@ -164,8 +172,7 @@ def main():
     if action == 'list':
         result = execute(action, data)
     else:
-        with LOCK.open('w') as handle:
-            fcntl.flock(handle, fcntl.LOCK_EX)
+        with transfer.exclusive(LOCK):
             result = execute(action, data)
     print(json.dumps(result, ensure_ascii=False))
 

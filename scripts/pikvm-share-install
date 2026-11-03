@@ -64,8 +64,18 @@ def write_file(path, content, mode=0o644):
             os.fsync(handle.fileno())
         temporary.chmod(mode)
         temporary.replace(path)
+        sync_directory(path.parent)
     finally:
         temporary.unlink(missing_ok=True)
+
+
+def sync_directory(path):
+    if os.name != 'nt':
+        fd = os.open(path, os.O_RDONLY | os.O_DIRECTORY)
+        try:
+            os.fsync(fd)
+        finally:
+            os.close(fd)
 
 
 def helper_path():
@@ -108,11 +118,16 @@ def snapshot(paths):
             filename = str(number)
             shutil.copy2(path, folder / filename)
             (folder / filename).chmod(0o600)
+            with (folder / filename).open('r+b') as saved:
+                os.fsync(saved.fileno())
+            if digest(path) != digest(folder / filename):
+                raise RuntimeError('Source modifiée pendant la sauvegarde ; installation refusée.')
             entry.update(file=filename, mode=stat.S_IMODE(info.st_mode), uid=info.st_uid, gid=info.st_gid,
                          sha256=digest(folder / filename))
         entries.append(entry)
     manifest = {'version': 1, 'files': entries, 'service': service_state()}
     write_file(folder / 'manifest.json', json.dumps(manifest, indent=2).encode(), 0o600)
+    sync_directory(BACKUPS)
     return folder
 
 

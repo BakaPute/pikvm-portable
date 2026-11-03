@@ -770,7 +770,7 @@
         async function apiPost(path, payload = {}) {
             const res = await fetch(API + path, {
                 method: "POST",
-                headers: { "Content-Type": "application/json" },
+                headers: { "Content-Type": "application/json", "X-Pikvm-Share": "1" },
                 body: JSON.stringify(payload)
             });
             const data = await res.json();

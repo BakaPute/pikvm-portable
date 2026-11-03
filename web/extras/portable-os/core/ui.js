@@ -50,11 +50,14 @@ export async function dialog({title, message, fields = [], confirm = 'Confirmer'
                 [name, input.type === 'checkbox' ? input.checked : input.value])));
         }}, el('h2', {id: 'dialog-title'}, title), hint(message));
         for (const spec of fields) {
-            const input = el(spec.type === 'select' ? 'select' : 'input', {name: spec.name,
-                type: spec.type || 'text', required: spec.required !== false,
-                value: spec.value || '', autocomplete: spec.type === 'password' ? 'new-password' : 'off'});
-            if (spec.type === 'checkbox') input.checked = spec.value === true;
+            const select = spec.type === 'select';
+            const attributes = {name: spec.name, required: spec.required !== false,
+                autocomplete: spec.type === 'password' ? 'new-password' : 'off'};
+            if (!select) attributes.type = spec.type || 'text';
+            const input = el(select ? 'select' : 'input', attributes);
             if (spec.options) for (const option of spec.options) input.append(el('option', {value: option}, option || '/'));
+            if (spec.type === 'checkbox') input.checked = spec.value === true;
+            else input.value = spec.value ?? (select ? input.value : '');
             inputs[spec.name] = input; form.append(field(spec.label, input));
         }
         form.append(el('div', {class: 'dialog-actions'}, button('Annuler', () => close(null), 'quiet'),

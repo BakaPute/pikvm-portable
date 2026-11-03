@@ -94,7 +94,7 @@ La procédure finale sera :
     git clone https://github.com/BakaPute/pikvm-portable.git
     cd pikvm-portable
     chmod +x install.sh
-    ./install.sh
+    ./install.sh --initial-hardware-setup
 
 L'installateur sauvegardera les fichiers d'origine avant toute modification.
 
@@ -226,3 +226,16 @@ Pour sysfs sans `resource` sur le Zero 2 W : [RC8 corrigée, traduction Device T
 
 La candidate **0.2.0-rc.9** place la vidéo KVM en premier, puis les commandes et
 le panneau, sans comprimer la vidéo : [layout, tests, mise à jour et retour RC8](docs/portable-os-rc9.md).
+
+**RC9.1** corrige le dialogue de déplacement ISO :
+[correctif frontend, tests simulés et mise à jour depuis RC9](docs/portable-os-rc9.1.md).
+
+**RC10** prépare la fiabilisation du transfert : source conservée, copies vérifiées,
+journal de reprise, statut USB observé, API authentifiées et bornées, migration
+contrôlée. [Audit, tests, limites matérielles et déploiement/retour arrière](docs/portable-os-rc10-audit.md).
+
+Sur un Pi existant, utiliser l'installateur additif `install-portable-os.sh`, après
+autorisation. Le bootstrap `install.sh --initial-hardware-setup` configure le
+matériel et le démarrage : réservé à une installation initiale explicitement revue,
+jamais à une mise à jour RC. Il refuse désormais un appel sans option et n'effectue
+plus de mise à jour partielle automatique des paquets.

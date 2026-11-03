@@ -8,8 +8,20 @@ from pathlib import Path
 import tarfile
 
 ROOT = Path(__file__).resolve().parent.parent
-RELEASE = 'pikvm-portable-os-0.2.0-rc.9'
-FILES = ('install-portable-os.sh', 'systemd/pikvm-portable-api.service',
+RELEASE = 'pikvm-portable-os-0.2.0-rc.10'
+FILES = ('scripts/pikvm-hotspot', 'docs/performance/rc10-local.json', 'scripts/pikvm_transfer.py', 'scripts/pikvm-usb-transfer',
+         'scripts/pikvm-python-integrity.sh',
+         'scripts/pikvm-image-folders', 'scripts/wifi-wizard-api',
+         'scripts/pikvm-share-api',
+         'scripts/pikvm-portable-report', 'scripts/pikvm-storage-baselines.json',
+         'docs/portable-os-rc10-audit.md',
+         'web/share/js/usb-transfer.js', 'web/share/js/drive-folders.js', 'web/share/js/power-control.js',
+         'web/extras/image-manager/app.js', 'web/extras/image-manager/index.html',
+         'web/extras/wifi-wizard/index.html',
+         'kvmd-extras/wifi-wizard/nginx.ctx-server.conf',
+         'kvmd-extras/wifi-wizard/nginx.ctx-http.conf',
+         'kvmd-extras/image-manager/nginx.ctx-http.conf',
+         'kvmd-extras/image-manager/nginx.ctx-server.conf', 'install-portable-os.sh', 'systemd/pikvm-portable-api.service',
          'scripts/pikvm-portable-api', 'scripts/pikvm-portable-install',
          'scripts/pikvm-share-install', 'scripts/pikvm-portable-preflight.sh',
          'scripts/pikvm_preflight.py', 'docs/portable-os-rc6-preflight.md',
@@ -18,6 +30,7 @@ FILES = ('install-portable-os.sh', 'systemd/pikvm-portable-api.service',
          'docs/portable-os-rc8-gpio-profile.md',
          'docs/portable-os-rc8-sysfs.md',
          'docs/portable-os-rc9.md',
+         'docs/portable-os-rc9.1.md',
          'docs/performance/rc6-local.json', 'docs/performance/rc7-local.json',
          'scripts/pikvm-python-logging-repair.sh', 'scripts/pikvm-portable-diagnose.sh',
          'scripts/pikvm-share-windows-diagnose.ps1', 'scripts/pikvm-portable-package.py',
@@ -56,7 +69,8 @@ def build(output):
                 info.mode = 0o755 if name.startswith('scripts/') or name.endswith('.sh') else 0o644
                 archive.addfile(info, io.BytesIO(content))
     digest = hashlib.sha256(output.read_bytes()).hexdigest()
-    output.with_name(output.name + '.sha256').write_text(digest + '  ' + output.name + '\n')
+    output.with_name(output.name + '.sha256').write_text(digest + '  ' + output.name + '\n',
+                                                       encoding='utf-8', newline='\n')
     return digest
 
 

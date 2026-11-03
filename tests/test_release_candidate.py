@@ -1,5 +1,6 @@
 """RC gates, recovery contracts and installer readiness; no device access."""
 import io
+import hashlib
 import json
 from pathlib import Path
 import tempfile
@@ -22,6 +23,21 @@ class CandidateTests(unittest.TestCase):
             self.assertEqual(loader.build(first), loader.build(second))
             with tarfile.open(first) as archive:
                 names = archive.getnames()
+                prefix = loader.RELEASE + '/'
+                manifest = archive.extractfile(prefix + 'MANIFEST.sha256').read().decode()
+                entries = {name: checksum for checksum, name in
+                           (line.split('  ', 1) for line in manifest.splitlines())}
+                for entry in archive.getmembers():
+                    self.assertTrue(entry.isfile())
+                    self.assertTrue(entry.name.startswith(prefix))
+                    self.assertNotIn('..', Path(entry.name).parts)
+                    relative = entry.name[len(prefix):]
+                    if relative != 'MANIFEST.sha256':
+                        self.assertEqual(hashlib.sha256(archive.extractfile(entry).read()).hexdigest(), entries[relative])
+                for path in ('scripts/pikvm_transfer.py', 'scripts/wifi-wizard-api',
+                             'scripts/pikvm-share-api', 'scripts/pikvm-python-integrity.sh'):
+                    self.assertIn(path, entries)
+            self.assertNotIn(b'\r', first.with_name(first.name + '.sha256').read_bytes())
             self.assertTrue(any(name.endswith('/MANIFEST.sha256') for name in names))
             self.assertFalse(any('/private/' in name or name.endswith('.img') or '.git/' in name for name in names))
 

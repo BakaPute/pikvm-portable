@@ -256,19 +256,13 @@
             if (name && !state.storage?.images?.[name]?.complete) {
                 throw new Error("Image indisponible ou transfert incomplet.");
             }
-            // L'ancienne image de transfert ne doit jamais être sélectionnée.
-            try {
-                const response = await fetch("/extras/wifi-wizard/api/usb-transfer/status", {
-                    cache: "no-store", credentials: "same-origin",
-                });
-                if (response.ok) {
-                    const st = (await response.json()).transfer;
-                    if (st?.drive?.transfer_active || ["starting", "stopping", "importing", "preparing", "connected"].includes(st?.state)) {
-                        throw new Error("Le mode transfert USB est actif.");
-                    }
-                }
-            } catch (error) {
-                if (error.message === "Le mode transfert USB est actif.") throw error;
+            const response = await fetch('/extras/wifi-wizard/api/usb-transfer/status', {
+                cache: 'no-store', credentials: 'same-origin'
+            });
+            if (!response.ok) throw new Error('Statut USB indisponible : sélection refusée.');
+            const st = (await response.json()).transfer;
+            if (!st?.drive?.known || st.busy || st.drive.transfer_active) {
+                throw new Error('État USB inconnu ou transfert actif : sélection refusée.');
             }
             const cdrom = !name || name.toLowerCase().endsWith(".iso") ? "1" : "0";
             await api("/api/msd/set_params?" + new URLSearchParams({image: name, cdrom, rw: "0"}), {method: "POST"});

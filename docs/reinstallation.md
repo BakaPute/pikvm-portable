@@ -6,9 +6,11 @@ Installer une image PiKVM compatible Raspberry Pi Zero 2 W.
 
 Configurer le Wi-Fi afin d'obtenir un accès SSH.
 
-## 2. Mettre PiKVM à jour
+## 2. Vérifier la compatibilité
 
-Effectuer les mises à jour PiKVM avant d'installer les modifications de ce projet.
+Pour RC10, vérifier KVMD 4.213 et Python 3.14.7-1. Ne pas lancer de mise à jour
+globale ou partielle pour faire passer un précontrôle. Préparer séparément les
+dépendances officielles compatibles manquantes, après autorisation.
 
 ## 3. Cloner le dépôt
 
@@ -19,7 +21,13 @@ Effectuer les mises à jour PiKVM avant d'installer les modifications de ce proj
 ## 4. Installer
 
     chmod +x install.sh
-    ./install.sh
+    ./install.sh --initial-hardware-setup
+
+Cette commande configure GPIO17/18 et le démarrage sur une **nouvelle carte** ; elle
+exige une validation matérielle explicite. Elle ne doit jamais servir à mettre à
+jour le Pi actuel ni remplacer sa configuration GPIO18 `ip --` validée. Pour une
+mise à jour existante, suivre [la migration additive RC10](portable-os-rc10-audit.md).
+Le conteneur `.USB-TRANSFER.img`, SHARE et les ISO utilisateur restent à conserver.
 
 ## 5. Configurer le hotspot
 

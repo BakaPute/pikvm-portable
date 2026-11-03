@@ -90,7 +90,8 @@ class PreflightTests(unittest.TestCase):
     def test_all_original_checks_and_per_command_budgets_are_retained(self):
         journal=Mock();journal.phase.side_effect=lambda name:contextlib.nullcontext()
         outputs={'package-python':'python 3.14.7-1\n','package-kvmd':'kvmd 4.213-1\n',
-                 'logging-baseline':'a'*64,'logging-sha256':'a'*64+'  file'}
+                 'logging-baseline':'a'*64,'logging-sha256':'a'*64+'  file',
+                 'copyreg-baseline':'a'*64,'copyreg-sha256':'a'*64+'  file'}
         journal.step.side_effect=lambda name,args,timeout:outputs.get(name,'')
         with patch.object(checks.Path,'is_file',return_value=True),patch.object(checks.Path,'is_symlink',return_value=False):
             checks.compatibility(journal)
@@ -99,7 +100,7 @@ class PreflightTests(unittest.TestCase):
         self.assertEqual(commands['python-kvmd-imports'][1],15)
         self.assertEqual(commands['kvmd.service'],(['systemctl','is-active','--quiet','kvmd.service'],10))
         self.assertIn('nginx-syntax',commands);self.assertIn('kvmd-nginx.service',commands)
-        self.assertEqual(len(commands),9)
+        self.assertEqual(len(commands),11)
 
     def test_failed_check_never_continues_to_later_commands(self):
         journal=Mock();journal.step.side_effect=checks.PreflightError('blocked pacman')
@@ -107,7 +108,7 @@ class PreflightTests(unittest.TestCase):
         journal.step.assert_called_once()
 
     def test_import_drive_or_systemctl_timeout_stops_the_entire_gate(self):
-        order=['package-python','package-kvmd','logging-baseline','logging-sha256',
+        order=['package-python','package-kvmd','logging-baseline','logging-sha256','copyreg-baseline','copyreg-sha256',
                'python-kvmd-imports','drive1-read','nginx-syntax','kvmd.service','kvmd-nginx.service']
         for fault in ('python-kvmd-imports','drive1-read','kvmd.service'):
             with self.subTest(fault=fault):
@@ -115,7 +116,8 @@ class PreflightTests(unittest.TestCase):
                 def step(name,args,timeout):
                     if name==fault:raise checks.PreflightError('TIMEOUT '+name)
                     return {'package-python':'python 3.14.7-1','package-kvmd':'kvmd 4.213-1',
-                            'logging-baseline':'a'*64,'logging-sha256':'a'*64+'  file'}.get(name,'')
+                            'logging-baseline':'a'*64,'logging-sha256':'a'*64+'  file',
+                 'copyreg-baseline':'a'*64,'copyreg-sha256':'a'*64+'  file'}.get(name,'')
                 journal.step.side_effect=step
                 with patch.object(checks.Path,'is_file',return_value=True),patch.object(checks.Path,'is_symlink',return_value=False):
                     with self.assertRaisesRegex(checks.PreflightError,fault):checks.compatibility(journal)

@@ -83,6 +83,7 @@ class PortableInstallTests(unittest.TestCase):
             stack.enter_context(patch.object(portable, 'active', return_value=True))
             stack.enter_context(patch.object(portable, 'wait_ready'))
             stack.enter_context(patch.object(portable, 'wait_oled_ready'))
+            stack.enter_context(patch.object(portable, 'wait_wifi_ready'))
             stack.enter_context(patch.object(portable, 'file_map', return_value={target: (b'portable app', 0o644),
                 fallback: (b'independent fallback', 0o644), routes: (b'entry and legacy routes', 0o644),
                 oled_script: (b'new OLED mirror', 0o755)}))
@@ -125,13 +126,21 @@ class PortableNginxTests(unittest.TestCase):
                 text = source.read_text().replace('/etc/kvmd/nginx/', fixture.prefix.as_posix() + '/')
                 text = text.replace('/usr/share/kvmd/extras/portable-os/', extra.as_posix() + '/')
                 (extra / source.name).write_text(text)
+            legacy = []
+            for name in ('wifi-wizard', 'image-manager'):
+                directory = fixture.extras.parent / name
+                directory.mkdir()
+                legacy.append(directory)
+                for source in (ROOT / 'kvmd-extras' / name).glob('*.conf'):
+                    (directory / source.name).write_text(source.read_text().replace(
+                        '/etc/kvmd/nginx/', fixture.prefix.as_posix() + '/'))
             if os.name == 'nt':
                 # Windows cannot glob directories; explicit per-extension includes
                 # test their real coexistence. Linux uses the exact native globs.
                 for context in ('http', 'server'):
                     old = f'include "{fixture.extras.parent.as_posix()}/*/nginx.ctx-{context}.conf";'
                     new = '\n'.join(f'include "{path.as_posix()}/nginx.ctx-{context}.conf";'
-                                    for path in (fixture.extras, extra))
+                                    for path in (fixture.extras, extra, *legacy))
                     fixture.rendered = fixture.rendered.replace(old, new)
             def run(args):
                 if args[0] == 'kvmd-nginx-mkconf':

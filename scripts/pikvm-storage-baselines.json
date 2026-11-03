@@ -1,0 +1,34 @@
+{
+  "files": {
+    "scripts/pikvm-usb-transfer": "/usr/local/bin/pikvm-usb-transfer",
+    "scripts/pikvm-image-folders": "/usr/local/bin/pikvm-image-folders",
+    "scripts/wifi-wizard-api": "/usr/local/bin/wifi-wizard-api",
+    "web/share/js/usb-transfer.js": "/usr/share/kvmd/web/share/js/usb-transfer.js",
+    "web/share/js/drive-folders.js": "/usr/share/kvmd/web/share/js/drive-folders.js",
+    "web/extras/wifi-wizard/index.html": "/usr/share/kvmd/web/extras/wifi-wizard/index.html",
+    "kvmd-extras/wifi-wizard/nginx.ctx-server.conf": "/usr/share/kvmd/extras/wifi-wizard/nginx.ctx-server.conf",
+    "kvmd-extras/image-manager/nginx.ctx-server.conf": "/usr/share/kvmd/extras/image-manager/nginx.ctx-server.conf",
+    "web/share/js/power-control.js": "/usr/share/kvmd/web/share/js/power-control.js",
+    "web/extras/image-manager/app.js": "/usr/share/kvmd/web/extras/image-manager/app.js",
+    "web/extras/image-manager/index.html": "/usr/share/kvmd/web/extras/image-manager/index.html",
+    "kvmd-extras/wifi-wizard/nginx.ctx-http.conf": "/usr/share/kvmd/extras/wifi-wizard/nginx.ctx-http.conf",
+    "kvmd-extras/image-manager/nginx.ctx-http.conf": "/usr/share/kvmd/extras/image-manager/nginx.ctx-http.conf",
+    "scripts/pikvm-hotspot": "/usr/local/bin/pikvm-hotspot"
+  },
+  "baselines": {
+    "/usr/local/bin/pikvm-usb-transfer": "6edbd11966feb251acd9fa6a23c212033d49f14f52681dce1de881b0a6815b4a",
+    "/usr/local/bin/pikvm-image-folders": "878eedbe24ae997c87569819f3b596c764d072bb13f4e512588242f0f617f677",
+    "/usr/local/bin/wifi-wizard-api": "60f0de6f247c0bf20ee819bdfe523980f228f62d11f8c0da2846e4dee115f9b2",
+    "/usr/share/kvmd/web/share/js/usb-transfer.js": "54f9f1c195e5e19e5b461e71986e62125eedceabc05d69967a67815499e5e0b0",
+    "/usr/share/kvmd/web/share/js/drive-folders.js": "f564c129028156e13171124708f2173080ad5b111f41e271e0f6bfcb2c938109",
+    "/usr/share/kvmd/web/extras/wifi-wizard/index.html": "aae6eb23272d81c8fe841837e71afea8b5b2f97cda0d36c27ffa589c25b0e844",
+    "/usr/share/kvmd/extras/wifi-wizard/nginx.ctx-server.conf": "a8ba3b2ce1629a7eff4e2e832f1e429b9fa1e56d1bad7b78561e66593e8adbbd",
+    "/usr/share/kvmd/extras/image-manager/nginx.ctx-server.conf": "e3cdb25eb21663eec1fd92f25f1a2f90a575fe3e3adef407fcd102a4ddb6f033",
+    "/usr/share/kvmd/web/share/js/power-control.js": "6b4f9f9dbe572d4ef6e97cd230f5d9c4258d7d93ebacd076f2c0629de9a94b75",
+    "/usr/share/kvmd/web/extras/image-manager/app.js": "ae755b39da4e88dea7fd1444269a2576509faef52e5bcd091937b5369d79d5a4",
+    "/usr/share/kvmd/web/extras/image-manager/index.html": "d86488284d0fb4a8ab898460437b92535141cccfe432a4662d0adc5a9d66e0bc",
+    "/usr/share/kvmd/extras/wifi-wizard/nginx.ctx-http.conf": "76f3214956c7de293feaf309bdf6abf0971c0a965185385a2b139318c4f499c0",
+    "/usr/share/kvmd/extras/image-manager/nginx.ctx-http.conf": "11ecd74722f2dbd66f28305877d57f690d88513a025254e4ba09859b9a665367",
+    "/usr/local/bin/pikvm-hotspot": "e8365d31f8717f3a65e46eb952b84182550406edfe5618eda6e73d36e2f0841c"
+  }
+}

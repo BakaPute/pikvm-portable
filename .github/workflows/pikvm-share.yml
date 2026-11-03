@@ -24,6 +24,9 @@ jobs:
       - run: python -m unittest discover -s tests -v
         env:
           NGINX_BINARY: /usr/sbin/nginx
+      - run: python tests/transfer-endurance.py --cycles 64 --output private/rc10-endurance.json
+      - run: python -m py_compile scripts/pikvm_transfer.py scripts/pikvm-usb-transfer scripts/pikvm-image-folders scripts/wifi-wizard-api scripts/pikvm-portable-report
+      - run: bash -n scripts/pikvm-python-integrity.sh
       - run: python -m py_compile scripts/pikvm-share-api scripts/pikvm-share-install scripts/pikvm-share-remount
       - run: bash -n install.sh && bash -n install-share.sh && bash -n scripts/pikvm-share-diagnose.sh
       - run: node --check web/extras/pikvm-share/app.js
@@ -55,6 +58,8 @@ jobs:
           python -c "import urllib.request,time; time.sleep(1); assert urllib.request.urlopen('http://127.0.0.1:8765/extras/portable-os/').status == 200"
           node tests/portable-browser.cjs
           node tests/portable-kvm-layout.cjs
+          node tests/portable-dialogs.cjs
+          node tests/portable-transfer.cjs
       - uses: actions/upload-artifact@v4
         if: always()
         with:

@@ -1,0 +1,69 @@
+#!/usr/bin/env python3
+"""Passive bounded incident report to stdout; no credentials or volume changes.
+
+Run only on an authorized Pi. Output may contain filenames and kernel host data;
+review before sharing. No Wi-Fi configuration, auth cookies or service environment.
+"""
+import hashlib
+import json
+import os
+from pathlib import Path
+import subprocess
+import sys
+import time
+
+sys.path.insert(0, '/usr/local/lib/pikvm-portable')
+import pikvm_transfer as transfer
+
+
+def query(args, timeout=10):
+    try:
+        result = subprocess.run(args, stdin=subprocess.DEVNULL, capture_output=True,
+                                text=True, timeout=timeout)
+        return {'ok': result.returncode == 0, 'code': result.returncode,
+                'stdout': result.stdout[-24000:], 'stderr': result.stderr[-2000:]}
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        return {'ok': False, 'error': str(exc)}
+
+
+def report():
+    data = {'timestamp': time.time(), 'read_only': True, 'commands': {}, 'python_integrity': {}}
+    for name, args, timeout in (
+        ('packages', ['pacman', '-Q', 'python', 'kvmd'], 10),
+        ('python_package_integrity', ['pacman', '-Qkk', 'python'], 30),
+        ('memory', ['free', '-b'], 5),
+        ('mounts', ['findmnt', '-rn', '-o', 'TARGET,SOURCE,FSTYPE,OPTIONS'], 5),
+        ('loops', ['losetup', '--list', '--output', 'NAME,BACK-FILE,RO'], 5),
+        ('gpio17_read_only', ['pinctrl', 'get', '17'], 5),
+        ('gpio18_read_only', ['pinctrl', 'get', '18'], 5),
+        ('throttled', ['vcgencmd', 'get_throttled'], 5),
+        ('temperature', ['vcgencmd', 'measure_temp'], 5),
+        ('previous_kernel', ['journalctl', '-k', '-b', '-1', '-n', '100', '--no-pager'], 10),
+        ('current_kernel', ['journalctl', '-k', '-b', '0', '-n', '100', '--no-pager'], 10),
+        ('services', ['systemctl', 'show', 'kvmd', 'kvmd-nginx', 'pikvm-portable-api',
+            'wifi-wizard-api', 'pikvm-share-api', 'pikvm-oled-custom', 'pikvm-button-menu',
+            'pikvm-power-hold', 'pikvm-auto-shutdown', '-p', 'Id', '-p', 'ActiveState',
+            '-p', 'Result', '-p', 'NRestarts', '-p', 'WatchdogUSec', '--no-pager'], 10)):
+        data['commands'][name] = query(args, timeout)
+    for name in ('logging/__init__.py', 'copyreg.py'):
+        path = Path('/usr/lib/python3.14') / name
+        try:
+            samples = [hashlib.sha256(path.read_bytes()).hexdigest() for _ in range(3)]
+            data['python_integrity'][name] = {'sha256': samples, 'stable': len(set(samples)) == 1}
+        except OSError as exc:
+            data['python_integrity'][name] = {'error': str(exc)}
+    try:
+        data['boot_id'] = Path('/proc/sys/kernel/random/boot_id').read_text().strip()
+        data['uptime'] = Path('/proc/uptime').read_text().split()[0]
+        data['transfer'] = transfer.observe()
+        data['recovery'] = transfer.recovery_report()
+        data['images'] = [{'name': p.name, 'bytes': p.stat().st_size, 'links': p.stat().st_nlink}
+                          for p in transfer.ROOT.iterdir() if p.suffix.lower() in ('.iso', '.img', '.raw')
+                          and not p.name.startswith('.') and p.is_file() and not p.is_symlink()]
+    except (OSError, ValueError) as exc:
+        data['observation_error'] = str(exc)
+    return data
+
+
+if __name__ == '__main__':
+    print(json.dumps(report(), ensure_ascii=False, indent=2))

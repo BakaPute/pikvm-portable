@@ -1067,51 +1067,13 @@ def drive_connected():
 
 
 def usb_transfer_busy():
-
-    if not USB_TRANSFER_BIN.exists():
-        return False
-
+    from pikvm_transfer import observe
     try:
-
-        out = cmd(
-            [
-                str(USB_TRANSFER_BIN),
-                "status",
-            ],
-            3,
-        )
-
-        data = json.loads(out)
-
-        state = data.get(
-            "state",
-            "idle",
-        )
-
-        drive = data.get(
-            "drive",
-            {},
-        )
-
-        return (
-            bool(
-                drive.get(
-                    "transfer_active",
-                    False,
-                )
-            )
-            or state in {
-                "starting",
-                "connected",
-                "stopping",
-                "importing",
-                "preparing",
-            }
-        )
-
+        data = observe()
+        return bool(data['busy'] or data['drive']['transfer_active'] or data['state'] == 'unknown')
     except Exception:
-
-        return False
+        # Unknown transfer state must never permit deletion or connection.
+        return True
 
 
 def delete_image(path):
@@ -1944,6 +1906,12 @@ def restart_pikvm():
     if not INPUT.sensitive("power"):
         message("Action verrouillee", "Autoriser sur le Web", 0)
         return False
+    from pikvm_transfer import require_idle_for_power
+    try:
+        require_idle_for_power()
+    except Exception:
+        message("Stockage occupe", "Arret refuse", 1)
+        return False
     message(
         "RESTART PiKVM",
         "Services...",
@@ -1969,14 +1937,18 @@ def poweroff():
     if not INPUT.sensitive("power"):
         message("Action verrouillee", "Autoriser sur le Web", 0)
         return False
+    from pikvm_transfer import require_idle_for_power
     try:
-
-        Path(
-            "/run/pikvm-poweroff-requested"
-        ).write_text("1\n")
-
+        require_idle_for_power()
     except Exception:
-        pass
+        message("Stockage occupe", "Arret refuse", 1)
+        return False
+    try:
+        from pikvm_transfer import reserve_poweroff
+        reserve_poweroff()
+    except Exception:
+        message("Stockage occupe", "Arret refuse", 1)
+        return False
 
     message(
         "POWER OFF",

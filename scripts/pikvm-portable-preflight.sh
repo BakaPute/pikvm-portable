@@ -3,4 +3,5 @@
 set -euo pipefail
 export LC_ALL=C
 HERE="$(cd -- "$(dirname -- "$0")" && pwd)"
+bash "$HERE/pikvm-python-integrity.sh"
 exec /usr/bin/python3 -I -B "$HERE/pikvm_preflight.py"
