@@ -12,7 +12,7 @@ class PreferenceRollbackTests(unittest.TestCase):
     def test_rc11_snapshot_restore_is_byte_exact_lease_protected_and_idempotent(self):
         with tempfile.TemporaryDirectory() as directory:
             root=Path(directory);target=root/'pst/portable-os/settings.json';target.parent.mkdir(parents=True)
-            original=(ROOT/'tests/fixtures/rc11-settings.json').read_bytes();target.write_bytes(original)
+            original=(ROOT/'tests/fixtures/rc11-settings.json').read_bytes();target.write_bytes(original);target.chmod(0o600)
             backup=root/'backup';backup.mkdir();h=portable.helper()
             with patch.object(portable,'preferences_module',return_value=config),patch.object(config,'pst_path',return_value=target), \
                  patch.object(config,'pst_commit',side_effect=lambda writer:writer(target)) as lease:
