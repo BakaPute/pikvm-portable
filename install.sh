@@ -199,6 +199,10 @@ install -d -m 755 /usr/local/lib/pikvm-portable
 install -m 644 "$REPO/scripts/pikvm_transfer.py" /usr/local/lib/pikvm-portable/pikvm_transfer.py
 install -m 644 "$REPO/scripts/pikvm_oled.py" /usr/local/lib/pikvm-portable/pikvm_oled.py
 install -m 644 "$REPO/scripts/pikvm_gpio.py" /usr/local/lib/pikvm-portable/pikvm_gpio.py
+for module in pikvm_config.py pikvm_activity.py pikvm_oled_ui.py pikvm_oled_nav.py pikvm_oled_control.py pikvm_gestures.py pikvm_iso.py; do
+    sauvegarder "/usr/local/lib/pikvm-portable/$module"
+    install -m 644 "$REPO/scripts/$module" "/usr/local/lib/pikvm-portable/$module"
+done
 
 install -m 755 \
     "$REPO/scripts/pikvm-oled-custom" \

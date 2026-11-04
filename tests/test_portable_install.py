@@ -75,6 +75,9 @@ class PortableInstallTests(unittest.TestCase):
             run_mock = stack.enter_context(patch.object(h, 'run', side_effect=run))
             stack.enter_context(patch.object(h, 'service_state', side_effect=lambda: dict(state)))
             stack.enter_context(patch.object(h.os, 'chown', create=True))
+            preferences=__import__('pikvm_config');stack.enter_context(patch.object(portable,'preferences_module',return_value=preferences))
+            stack.enter_context(patch.object(preferences,'pst_path',return_value=root/'pst/portable-os/settings.json'))
+            stack.enter_context(patch.object(preferences,'pst_commit',side_effect=lambda writer:writer(preferences.pst_path())))
             stack.enter_context(patch.object(portable, 'policy_preflight', return_value=(b'', False)))
             stack.enter_context(patch.object(portable, 'oled_preflight'))
             stack.enter_context(patch.object(portable, 'oled_states', return_value={

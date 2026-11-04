@@ -53,7 +53,7 @@ const fs=require('node:fs');const path=require('node:path');
         await page.locator('[data-route="settings"]').click();await nav.getByRole('button',{name:'Sauvegarde et restauration',exact:true}).click();
         const download=page.waitForEvent('download');await page.getByRole('button',{name:'Exporter les préférences',exact:true}).click();
         const exported=await download;const buffer=fs.readFileSync(await exported.path());const data=JSON.parse(buffer.toString());
-        assert.equal(data.format,'pikvm-portable-settings');assert.equal(data.schema_version,1);assert.equal(data.values.oled_contrast,90);
+        assert.equal(data.format,'pikvm-portable-settings');assert.equal(data.schema_version,2);assert.equal(data.values.oled_contrast,90);
         assert.equal(data.values.idle_enabled,true);assert.ok(!/password|auth_token|psk/.test(buffer.toString()));
         const file=page.getByLabel('Importer une configuration',{exact:true});
         await file.setInputFiles({name:'bad.json',mimeType:'application/json',buffer:Buffer.from(JSON.stringify({...data,command:'reboot'}))});

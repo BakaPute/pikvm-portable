@@ -230,11 +230,9 @@ class GpioTests(unittest.TestCase):
         now[0]+=.81;self.assertFalse(button.poll(None));self.assertTrue(button.cancelled(token))
 
     def test_existing_press_debounce_rejects_a_single_high_sample(self):
-        now=[10.0];values=iter([True,False,False,False,False,False])
-        def sleep(delay):now[0]+=delay
-        with patch.object(menu,'button_down',side_effect=lambda:next(values,False)), \
-             patch.object(menu.time,'monotonic',side_effect=lambda:now[0]),patch.object(menu.time,'sleep',side_effect=sleep):
-            self.assertFalse(menu.wait_press_until(10.15))
+        from oled_nav_fixtures import Harness
+        h=Harness();h.nav.change('menu');h.step(True);h.step(False);h.wait(.6)
+        self.assertEqual(h.nav.index,0);self.assertIsNone(h.worker.task)
 
     def test_sampler_closes_device_after_thread_has_stopped(self):
         resource=Mock();reader=oled.ButtonReader(lambda:False,resource=resource)

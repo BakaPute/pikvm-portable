@@ -2,6 +2,10 @@
 
 Projet de PiKVM portable basé sur un Raspberry Pi Zero 2 W.
 
+Candidate Portable OS : [RC12 — OLED, gestes, navigation ISO et retour RC11](docs/portable-os-rc12.md).
+Les tests automatiques utilisent des images synthétiques ; suivre le précontrôle
+et la procédure de sauvegarde avant toute installation sur le Pi.
+
 L'objectif est de disposer d'un PiKVM autonome sur batterie avec :
 
 - alimentation par batterie 18650 ;

@@ -23,11 +23,12 @@ MAX_AGE = 15
 
 def button_status():
     try:
-        if BUTTON_HEARTBEAT.is_symlink() or BUTTON_HEARTBEAT.stat().st_size > 1024:
+        if BUTTON_HEARTBEAT.is_symlink() or BUTTON_HEARTBEAT.stat().st_size > 4096:
             return {'ready':False}
         value = json.loads(BUTTON_HEARTBEAT.read_text())
         age = time.monotonic() - value['monotonic']
-        return {**value, 'age_ms':round(age*1000,1), 'ready':SOCKET.is_socket() and 0 <= age <= .8}
+        poll_age=value.get('poll_age_ms')
+        return {**value, 'age_ms':round(age*1000,1), 'ready':SOCKET.is_socket() and 0 <= age <= .8 and type(poll_age) in (int,float) and 0<=poll_age<=800}
     except (OSError, ValueError, KeyError, TypeError):
         return {'ready':False}
 
@@ -325,6 +326,9 @@ class MirrorDevice:
         self.reported_physical = None
         self.last_id = None
         self.render_ms = 0
+        self.navigation_at = None
+        self.navigation_latency = None
+        self.navigation_event = None
         self.publish_ms = 0
         self.pixel_raw = None
         self.pixel_id = None
@@ -343,7 +347,9 @@ class MirrorDevice:
     def publish(self, image, force=False, raw=None):
         now = self.clock()
         physical = self.physical
-        if not force and physical == self.reported_physical and now - self.published < .25:
+        control = {key: value for key, value in self.context.items() if key != 'remaining'}
+        control_id = hashlib.sha256((self.source + json.dumps(control, sort_keys=True)).encode()).hexdigest()
+        if not force and control_id == getattr(self,'last_control',None) and physical == self.reported_physical and now - self.published < .25:
             return
         raw = image.tobytes() if raw is None else raw
         identity = hashlib.sha256(raw + json.dumps(self.context, sort_keys=True).encode() + self.source.encode()).hexdigest()
@@ -353,12 +359,15 @@ class MirrorDevice:
             self.pixel_raw = raw
             self.pixel_id = hashlib.sha256(raw).hexdigest()
             self.encoded_pixels = base64.b64encode(raw).decode()
-        control = {key: value for key, value in self.context.items() if key != 'remaining'}
-        control_id = hashlib.sha256((self.source + json.dumps(control, sort_keys=True)).encode()).hexdigest()
         data = {'width': 128, 'height': 64, 'format': '1bpp-msb', 'pixels': self.encoded_pixels, 'pixel_id': self.pixel_id,
                 'id': identity, 'control_id': control_id, 'source': self.source, 'context': self.context, 'physical': physical,
                 'monotonic': now, 'updated_at': time.time(),
-                'timing':{'render_ms':round(self.render_ms,2),'previous_publish_ms':round(self.publish_ms,2)}}
+                'timing':{'render_ms':round(self.render_ms,2),'previous_publish_ms':round(self.publish_ms,2),
+                          'navigation_ms':self.navigation_latency}}
+        if self.navigation_at!=self.navigation_event:
+            self.navigation_latency=round(max(0,now-self.navigation_at)*1000,2) if self.navigation_at is not None else None
+            self.navigation_event=self.navigation_at
+            data['timing']['navigation_ms']=self.navigation_latency
         started = time.perf_counter()
         private_directory(self.path.parent)
         temporary = self.path.with_name(f'.frame-{os.getpid()}.tmp')
@@ -367,6 +376,7 @@ class MirrorDevice:
             json.dump(data, file, separators=(',', ':'))
         os.replace(temporary, self.path)
         self.published, self.last_id = now, identity
+        self.last_control = control_id
         self.reported_physical = physical
         self.publish_ms = (time.perf_counter()-started)*1000
 
@@ -420,6 +430,7 @@ class LogicalButton:
         self.gesture_token = None
         self.last_rpc_ms = 0
         self.input_status = None
+        self.context_guard = None
 
     def publish_heartbeat(self):
         if self.heartbeat is None or self.clock() - self.last_heartbeat < .2:
@@ -495,6 +506,8 @@ class LogicalButton:
             raise OledError('Événement de bouton invalide.', 400)
         # File reads are outside the input lock, so a slow reader cannot stall polling.
         frame = self.frame_reader() if action == 'start' else None
+        if action == 'start' and self.context_guard and not self.context_guard(frame):
+            raise OledError('Navigation en cours d’actualisation. Réessayer.',409)
         with self.lock:
             self._expire()
             now, hold = self.clock(), self.hold
@@ -503,7 +516,8 @@ class LogicalButton:
                     self.early.pop(key)
             if action == 'start':
                 if (self.physical or self.pending or self.until or
-                        (hold and (hold['stopped'] is None or not hold['released'] or now - hold['stopped'] < .15))):
+                        (hold and (hold['stopped'] is None or not hold['released'] or now - hold['stopped'] <
+                                   (.04 if hold['owner']==owner and hold['control_id']==data['control_id'] else .15)))):
                     raise OledError('Le bouton est occupé.', 409)
                 if frame.get('control_id') != data['control_id']:
                     raise OledError('Le menu a changé. Réessayer sur le nouvel écran.', 409)
@@ -512,6 +526,8 @@ class LogicalButton:
                 allowed = ('power' if (context.get('screen') == 'menu' and context.get('selection') == 0) or context.get('screen') == 'rescue-power' else
                            'network' if context.get('screen') == 'rescue' else
                            'delete' if context.get('screen') == 'iso-confirm' else '')
+                if context.get('ui_version')==2:
+                    allowed={'power-confirm':'power','network-confirm':'network'}.get(context.get('screen'),'')
                 if permit not in ('', allowed):
                     raise OledError('Autorisation incompatible avec cet écran.', 403)
                 self.hold = {'id': gesture, 'owner': owner, 'started': now, 'stopped': None,

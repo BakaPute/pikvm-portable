@@ -21,9 +21,11 @@ MODE = 'detached'
 UPLOADS = {}
 OLED_PAGE = -1
 OLED_HOLDS = {}
+OLED_RC12 = None
 
 
 def oled_frame():
+    if OLED_RC12 is not None:return OLED_RC12.read()
     # Recorded from the real PIL renderers with mocked telemetry, never hardware.
     pixels = json.loads((Path(__file__).parent / 'fixtures/oled-frames.json').read_text())['frames'][OLED_PAGE + 1]
     return {'width': 128, 'height': 64, 'format': '1bpp-msb', 'pixels': pixels, 'pixel_id':hashlib.sha256(pixels.encode()).hexdigest(),
@@ -48,6 +50,8 @@ class Preview(SimpleHTTPRequestHandler):
 
     def do_GET(self):
         url = urlsplit(self.path)
+        if url.path=='/__test/oled-rc12' and OLED_RC12 is not None:
+            with OLED_RC12.lock:return self.reply({'screen':OLED_RC12.navigation.screen,'calls':OLED_RC12.backend.calls,'error':OLED_RC12.last_error})
         settings_reads={'settings':SETTINGS.describe,'settings/current':SETTINGS.configuration.read,
                         'settings/export':SETTINGS.export,'idle':SETTINGS.diagnostic,
                         'report':lambda:{'fixture':True,'settings':SETTINGS.export()},
@@ -111,7 +115,7 @@ class Preview(SimpleHTTPRequestHandler):
         return super().do_GET()
 
     def do_POST(self):
-        global MODE, OLED_PAGE
+        global MODE, OLED_PAGE, OLED_RC12
         url = urlsplit(self.path)
         config_action=url.path.removeprefix('/extras/portable-os/api/')
         if config_action in ('settings/apply','settings/reset','settings/import','settings/preview','activity','idle/simulate'):
@@ -128,13 +132,23 @@ class Preview(SimpleHTTPRequestHandler):
             except ConfigError as e:return self.reply({'ok':False,'error':str(e)},e.status)
         raw = self.rfile.read(int(self.headers.get('Content-Length', 0)))
         if url.path == '/__test/reset' and self.headers.get('X-Portable-Test') == '1':
+            if OLED_RC12 is not None:OLED_RC12.close();OLED_RC12=None
             MODE = 'detached'
             OLED_PAGE = -1
             OLED_HOLDS.clear()
             FILES.clear(); FILES['welcome.txt'] = b'Portable OS local test fixture'; UPLOADS.clear()
             return self.reply({'ok': True})
         data = json.loads(raw or b'{}') if self.headers.get('Content-Type') != 'application/octet-stream' else {}
+        if url.path=='/__test/oled-rc12' and self.headers.get('X-Portable-Test')=='1':
+            from oled_browser_fixture import Fixture
+            if OLED_RC12 is not None:OLED_RC12.close()
+            OLED_RC12=Fixture();return self.reply({'ok':True})
         if url.path == '/extras/portable-os/api/oled/button':
+            if OLED_RC12 is not None:
+                from pikvm_oled import OledError
+                if self.headers.get('X-Pikvm-Share')!='1':return self.reply({'ok':False,'error':'CSRF'},403)
+                try:return self.reply({'ok':True,'result':OLED_RC12.event(data)})
+                except OledError as error:return self.reply({'ok':False,'error':str(error)},error.status)
             ident=data.get('gesture_id'); action=data.get('action')
             if action=='start':
                 OLED_HOLDS.setdefault(ident, {'started':time.monotonic(),'ended':False})

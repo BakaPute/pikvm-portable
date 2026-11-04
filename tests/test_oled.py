@@ -179,29 +179,20 @@ module.main()
             self.assertEqual(base64.b64decode(oled.read_frame(path)['pixels']), image.tobytes())
 
     def test_real_status_and_menu_renderers_publish_same_frames(self):
+        from oled_nav_fixtures import Harness
         with tempfile.TemporaryDirectory() as directory:
-            path = Path(directory) / 'oled/frame.json'
-            physical = Mock()
-            device = oled.MirrorDevice('menu', path=path, factory=lambda: physical, background=False)
-            with patch.object(menu, 'DEVICE', device):
-                menu.draw_menu(0)
-                device.output._attempt()
-                first = oled.read_frame(path)
-                self.assertEqual(first['context']['selection'], 0)
-                self.assertEqual(base64.b64decode(first['pixels']), physical.display.call_args.args[0].tobytes())
-                device.published = float('-inf')
-                with patch.object(menu, 'current_ssid', return_value='Test network'), patch.object(menu, 'wifi_password', return_value='test only'):
-                    menu.draw_menu(1)
-                device.output._attempt()
-                second = oled.read_frame(path)
-                self.assertEqual(second['context']['selection'], 1)
-                self.assertNotEqual(first['pixels'], second['pixels'])
-            device.published = float('-inf')
-            with patch.object(status, 'battery', return_value=(82, 3.95)), patch.object(status, 'battery_charging', return_value=False), \
-                 patch.object(status, 'wifi', return_value=('Test network', -50)), patch.object(status, 'ip_address', return_value='192.0.2.1'):
-                status.page_main(device, 10)
-            device.output._attempt()
-            self.assertEqual(base64.b64decode(oled.read_frame(path)['pixels']), physical.display.call_args.args[0].tobytes())
+            physical=Mock();device=oled.MirrorDevice('menu',path=Path(directory)/'oled/frame.json',factory=lambda:physical,background=False)
+            h=Harness();h.nav.change('menu')
+            for selected in (0,1):
+                h.nav.index=selected;h.nav.revision+=1
+                status.display_navigation(device,h.nav.snapshot(),h.values,h.now)
+                device.output._attempt();frame=oled.read_frame(device.path)
+                self.assertEqual(frame['context']['selection'],selected)
+                self.assertEqual(base64.b64decode(frame['pixels']),physical.display.call_args.args[0].tobytes())
+            with patch.object(status,'battery',return_value=(82,3.95)),patch.object(status,'battery_charging',return_value=False),patch.object(status,'network_info',return_value={'ssid':None,'dbm':None,'ip':None}):
+                status.page_main(device,10)
+            device.output._attempt();device.publish(device.output.latest,force=True)
+            self.assertEqual(base64.b64decode(oled.read_frame(device.path)['pixels']),physical.display.call_args.args[0].tobytes())
 
     def test_stale_or_invalid_frame_is_offline(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -275,62 +266,28 @@ class InputTests(unittest.TestCase):
         self.assertEqual(error.exception.status, 429)
 
     def test_actual_menu_short_path_cycles_without_any_long_action(self):
-        now = [10.0]
-        button = oled.LogicalButton(clock=lambda: now[0], frame_reader=lambda: {'id': 'a' * 64})
-        selections = []
-        def draw(index, held=0):
-            if not selections or selections[-1] != index:
-                selections.append(index)
-                if len(selections) < 5:
-                    button.pending = event('a' * 64, now[0] + 1)
-        with contextlib.ExitStack() as stack:
-            stack.enter_context(patch.object(menu, 'INPUT', button))
-            stack.enter_context(patch.object(menu, 'physical_button_down', return_value=False))
-            stack.enter_context(patch.object(menu, 'get_device'))
-            stack.enter_context(patch.object(menu, 'draw_menu', side_effect=draw))
-            stack.enter_context(patch.object(menu.time, 'monotonic', side_effect=lambda: now[0]))
-            stack.enter_context(patch.object(menu.time, 'sleep', side_effect=lambda seconds: now.__setitem__(0, now[0] + seconds)))
-            commands = stack.enter_context(patch.object(menu.subprocess, 'run'))
-            dangerous = [stack.enter_context(patch.object(menu, name)) for name in
-                         ('poweroff', 'restart_pikvm', 'hotspot_toggle', 'run_iso_manager', 'delete_image')]
-            menu.run_menu()
-            self.assertEqual(selections, [0, 1, 2, 3, 0])
-            for operation in dangerous: operation.assert_not_called()
-            for call in commands.call_args_list:
-                self.assertEqual(call.args[0][0], 'systemctl')
-                self.assertEqual(call.args[0][-1], menu.OLED_SERVICE)
+        from oled_nav_fixtures import Harness
+        h=Harness();h.nav.change('menu')
+        with patch.object(menu.subprocess,'run') as run:
+            h.click();self.assertEqual(h.nav.index,1)
+            self.assertIsNone(h.worker.task);h.backend.sensitive.assert_not_called();run.assert_not_called()
 
     def test_sensitive_functions_have_secondary_origin_guard(self):
-        button = oled.LogicalButton(); button.origin = 'virtual'
-        with patch.object(menu, 'INPUT', button), patch.object(menu, 'message'), patch.object(menu.subprocess, 'run') as run, patch.object(menu.subprocess, 'Popen') as popen:
-            for function, args in ((menu.poweroff, ()), (menu.restart_pikvm, ()),
-                                   (menu.hotspot_toggle, (True,)), (menu.delete_image, (Path('/unused'),))):
-                result = function(*args)
-                self.assertTrue(result is False or (isinstance(result,tuple) and result[0] is False))
-            run.assert_not_called(); popen.assert_not_called()
+        from pikvm_gestures import Permit
+        backend=menu.Backend()
+        with patch.object(menu.subprocess,'run') as run,patch.object(menu.time,'monotonic',return_value=100):
+            for action,kind in [('shutdown','power'),('restart','power'),('hotspot','network')]:
+                with self.assertRaises(RuntimeError):backend.sensitive(action,Permit(kind,0))
+            run.assert_not_called()
+        self.assertFalse(hasattr(backend,'delete_image'))
 
     def test_short_cancels_real_iso_confirmation_and_leaves_rescue_power_without_shutdown(self):
-        for action in ('iso', 'rescue-power'):
-            with self.subTest(action=action), contextlib.ExitStack() as stack:
-                now = [10.0]
-                button = oled.LogicalButton(clock=lambda: now[0], frame_reader=lambda: {'id': 'a' * 64})
-                button.pending = event('a' * 64, 11)
-                stack.enter_context(patch.object(menu, 'INPUT', button))
-                stack.enter_context(patch.object(menu, 'physical_button_down', return_value=False))
-                stack.enter_context(patch.object(menu.time, 'monotonic', side_effect=lambda: now[0]))
-                stack.enter_context(patch.object(menu.time, 'sleep', side_effect=lambda seconds: now.__setitem__(0, now[0] + seconds)))
-                power = stack.enter_context(patch.object(menu, 'poweroff'))
-                restart = stack.enter_context(patch.object(menu, 'restart_pikvm'))
-                # Rendering stalls for ten seconds, greater than every hold threshold.
-                draw = lambda *args: now.__setitem__(0, now[0] + 10)
-                stack.enter_context(patch.object(menu, 'draw_iso_confirm', side_effect=draw))
-                stack.enter_context(patch.object(menu, 'draw_rescue_power', side_effect=draw))
-                stack.enter_context(patch.object(menu, 'HOTSPOT_STATE', Mock(exists=lambda: True)))
-                if action == 'iso':
-                    self.assertFalse(menu.confirm_delete(Path('fixture.iso')))
-                else:
-                    menu.run_rescue_power()
-                power.assert_not_called(); restart.assert_not_called()
+        from oled_nav_fixtures import Harness
+        for screen in ('iso-connect-confirm','iso-eject-confirm','power-confirm','network-confirm'):
+            h=Harness();h.nav.change(screen);h.nav.operation='shutdown'
+            h.gesture('hold',1.3)
+            self.assertIsNone(h.worker.task);h.backend.sensitive.assert_not_called();h.backend.connect.assert_not_called()
+        h=Harness();h.nav.change('power-confirm');h.gesture('single');self.assertEqual(h.nav.screen,'power')
 
     @unittest.skipUnless(hasattr(socket, 'AF_UNIX'), 'Unix sockets unavailable')
     def test_local_ipc_consumes_one_short_and_rejects_long_payload(self):

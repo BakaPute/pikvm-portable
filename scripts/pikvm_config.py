@@ -12,7 +12,7 @@ import threading
 import time
 import uuid
 
-VERSION = 1
+VERSION = 2
 MAX_BYTES = 16384
 CATEGORIES = ['Général', 'Inactivité et veille', 'Alimentation et batterie', 'OLED et écrans',
               'Bouton physique', 'Console KVM', 'USB et stockage', 'Réseau',
@@ -63,7 +63,24 @@ field('profile', 8, 'Profil applicatif', 'balanced', 'Économie : polling 15 s ;
 field('animations', 8, 'Animations de l’interface', True, 'Respecte également la préférence système de réduction des animations.')
 field('advanced_diagnostics', 11, 'Afficher les détails des diagnostics', False, 'Métadonnées techniques uniquement ; aucun secret ni commande libre.')
 
-PAGES = ('main', 'battery', 'system', 'transfer')
+RC11_FIELDS=frozenset(FIELDS)
+FIELDS['button_short']['default']='next'
+FIELDS['button_short']['description']='Clic simple après le délai de double clic. Les préférences RC11 enregistrées sont conservées.'
+FIELDS['button_menu_timeout']['description']='Retour sans action à expiration ; les confirmations sensibles restent distinctes.'
+field('button_double_ms',4,'Fenêtre du double clic (ms)',350,'Deux clics du même utilisateur, sur le même écran. Le clic simple attend cette fenêtre.',minimum=200,maximum=500)
+field('button_back_ms',4,'Appui retour (ms)',1200,'Revenir sans action sensible. Hors confirmation, 3 secondes ramènent à l’accueil.',minimum=800,maximum=2000)
+field('oled_style',3,'Style OLED','compact','Compact privilégie l’IP ; détaillé ajoute les observations vidéo.',choices={'compact':'Compact','detailed':'Détaillé'})
+field('oled_alignment',3,'Alignement des valeurs OLED','left','Alignement de l’IP et du pourcentage principal, dans des zones bornées.',choices={'left':'Gauche','right':'Droite'})
+field('oled_animations',3,'Défilements OLED',True,'Défilement des seuls textes trop longs ; aucun rafraîchissement animé d’une page immobile.')
+field('oled_scroll_speed',3,'Défilement OLED (pixels/seconde)',16,'Pas de 2 pixels, cadence plafonnée à 10 Hz. Pause aux extrémités.',minimum=8,maximum=32)
+field('oled_start',3,'Page OLED au démarrage','main','Page initiale de la rotation ; aucune ouverture de menu ni action USB.',choices={'main':'Accueil','battery':'Batterie','system':'Système','network':'Réseau','usb':'USB et lecteurs'})
+field('oled_show_ssid',3,'SSID sur la page d’accueil',True,'Le nom complet reste accessible sur la page Réseau.')
+field('oled_show_battery',3,'Pourcentage sur la page d’accueil',True,'La page Batterie et les alertes critiques restent disponibles.')
+field('oled_show_voltage',3,'Tension sur la page Batterie',True,'Mesure disponible uniquement ; aucune autonomie extrapolée.')
+field('oled_show_temperature',3,'Température sur la page Système',True,'Préférence d’affichage, sans modification du capteur ou de la ventilation.')
+FIELDS['oled_fixed']['choices'].update(network='Réseau',usb='USB et lecteurs')
+PAGES = ('main', 'battery', 'system', 'network', 'usb', 'transfer')
+RC11_PAGES=('main','battery','system','transfer')
 COMMANDS = ('msd-dropdown', 'share', 'atx-dropdown', 'shortcuts-dropdown', 'macro-dropdown', 'text-dropdown', 'system-dropdown')
 
 
@@ -75,8 +92,22 @@ class ConfigError(Exception):
 
 def defaults():
     return {**{key:copy.deepcopy(spec['default']) for key,spec in FIELDS.items()},
+            'iso_favorites':[], 'iso_recent':[],
             'oled_pages':[{'id':name, 'enabled':True, 'seconds':10} for name in PAGES],
             'kvm_order':list(COMMANDS), 'kvm_hidden':[]}
+
+
+def migrate_rc11(values):
+    if not isinstance(values,dict) or set(values)!=RC11_FIELDS|{'oled_pages','kvm_order','kvm_hidden'}:
+        raise ConfigError('Préférences RC11 inconnues ou incomplètes.')
+    pages=values.get('oled_pages')
+    if not isinstance(pages,list) or len(pages)!=4 or any(not isinstance(p,dict) or p.get('id') not in RC11_PAGES for p in pages) or {p['id'] for p in pages}!=set(RC11_PAGES):
+        raise ConfigError('Pages RC11 invalides.')
+    merged={**defaults(),**copy.deepcopy(values)}
+    # Preserve the user's existing rotation, ordering, visibility and durations.
+    merged['oled_pages'].extend({'id':name,'enabled':False,'seconds':10} for name in ('network','usb'))
+    merged['oled_start']=next((p['id'] for p in pages if p.get('enabled') and p['id']!='transfer'),'main')
+    return validate(merged)
 
 
 def validate(values):
@@ -94,6 +125,10 @@ def validate(values):
     path = values['iso_favorite']
     if len(path)>180 or '\\' in path or path.startswith('/') or (path and any(not p or p in ('.','..') or p.startswith('.') for p in path.split('/'))) or any(ord(c)<32 for c in path):
         raise ConfigError('Dossier favori relatif invalide.')
+    for key in ('iso_favorites','iso_recent'):
+        paths=values[key]
+        if not isinstance(paths,list) or len(paths)>12 or any(not isinstance(p,str) or not p or len(p)>512 or p.startswith('/') or '\\' in p or any(not part or part in ('.','..') or part.startswith('.') for part in p.split('/')) or any(ord(c)<32 for c in p) for p in paths) or len(set(paths))!=len(paths):
+            raise ConfigError('Favoris / historique ISO invalides.')
     if values['battery_critical'] >= values['battery_low']:
         raise ConfigError('Le seuil critique doit être inférieur au seuil d’avertissement.')
     if values['idle_shutdown_seconds'] <= values['idle_first_seconds'] or values['idle_warning_seconds'] >= values['idle_shutdown_seconds']:
@@ -108,6 +143,8 @@ def validate(values):
         raise ConfigError('Conserver au moins une page OLED ordinaire ; aucun doublon.')
     if not next(p['enabled'] for p in pages if p['id']==values['oled_fixed']):
         raise ConfigError('La page permanente doit être activée.')
+    if not next(p['enabled'] for p in pages if p['id']==values['oled_start']):
+        raise ConfigError('La page au démarrage doit être activée.')
     if not isinstance(values['kvm_order'],list) or any(type(v) is not str for v in values['kvm_order']) or sorted(values['kvm_order'])!=sorted(COMMANDS):
         raise ConfigError('Ordre des commandes KVM invalide.')
     if not isinstance(values['kvm_hidden'],list) or any(type(n) is not str or n not in COMMANDS for n in values['kvm_hidden']) or len(set(values['kvm_hidden']))!=len(values['kvm_hidden']):
@@ -167,13 +204,16 @@ class Store:
             if not isinstance(document,dict):raise ValueError()
             if type(document.get('schema_version')) is int and document['schema_version']==0 and set(document)=={'schema_version','theme'} and document['theme'] in ('dark','light'):
                 return dict(schema_version=VERSION,revision=0,values={**defaults(),'theme':document['theme']},history=[],healthy=True,migrated=True)
+            migrated=False
+            if type(document.get('schema_version')) is int and document['schema_version']==1:
+                document={**document,'schema_version':VERSION,'values':migrate_rc11(document['values'])};migrated=True
             if set(document)!={'schema_version','revision','values','history'} or type(document['schema_version']) is not int or document['schema_version']!=VERSION or type(document['revision']) is not int or document['revision']<0 or not isinstance(document['history'],list) or len(document['history'])>20:
                 raise ValueError()
             validate(document['values'])
             # History is a bounded, server-authored list of field names only.
             for item in document['history']:
                 if not isinstance(item,dict) or set(item)!={'at','keys'} or type(item['at']) not in (float,int) or not isinstance(item['keys'],list) or any(k not in defaults() for k in item['keys']):raise ValueError()
-            return {**document,'healthy':True}
+            return {**document,'healthy':True,**({'migrated_from':1} if migrated else {})}
         except (OSError,ValueError,TypeError,KeyError,ConfigError):
             return dict(schema_version=VERSION,revision='corrupt',values=defaults(),history=[],healthy=False,error='Préférences illisibles : valeurs sûres actives. Restauration explicite nécessaire.')
 
@@ -228,6 +268,24 @@ async def pst_write(make_client, writer, transient, sleep=None):
             await sleep(min(2,.1*2**attempt))
 
 
+def pst_commit(writer):
+    """Run one preference writer under the native PST lease, including rollback."""
+    import asyncio
+    async def commit():
+        from kvmd.apps import init
+        from kvmd.clients.pst import PstError
+        app=init(prog='pikvm-portable-settings')
+        def write(path):
+            target=pst_path()
+            if Path(path).resolve()!=target.parent.resolve():raise ConfigError('Correspondance PST incohérente.',503)
+            return writer(target)
+        return await pst_write(lambda:app.make_pst_client('portable-os','PiKVM-Portable-OS'),write,PstError)
+    try:
+        with WRITE_LOCK:return asyncio.run(commit())
+    except ConfigError:raise
+    except Exception:raise ConfigError('Écriture PST refusée ou indisponible ; aucune configuration système modifiée.',503) from None
+
+
 class Configuration:
     def __init__(self,path=None):
         self.override=path
@@ -240,21 +298,7 @@ class Configuration:
 
     def save(self,values,expected,confirmed=False,reset=False):
         if self.override is not None:return self.store().save(values,expected,confirmed,reset)
-        import asyncio  # Read-only OLED/button processes never import the PST stack.
-        async def commit():
-            # Native KVMD config resolves overridden PST sockets; no new dependency.
-            from kvmd.apps import init
-            from kvmd.clients.pst import PstError
-            app=init(prog='pikvm-portable-settings')
-            def write(path):
-                target=pst_path()
-                if Path(path).resolve()!=target.parent.resolve():raise ConfigError('Correspondance PST incohérente.',503)
-                return Store(target).save(values,expected,confirmed,reset)
-            return await pst_write(lambda:app.make_pst_client('portable-os','PiKVM-Portable-OS'),write,PstError)
-        try:
-            with WRITE_LOCK:return asyncio.run(commit())
-        except ConfigError:raise
-        except Exception:raise ConfigError('Écriture PST refusée ou indisponible ; aucune configuration système modifiée.',503) from None
+        return pst_commit(lambda target:Store(target).save(values,expected,confirmed,reset))
 
 
 class Reader:
@@ -273,9 +317,9 @@ class PageRotation:
     def __init__(self):self.current=None;self.started=0;self.signature=None;self.alert_until=0;self.alert_key=None;self.manual_until=0
     def choose(self,values,now,transfer=False,percent=None,request=None,critical_transfer=False):
         pages=[p for p in values['oled_pages'] if p['enabled'] and p['id']!='transfer']
-        signature=json.dumps([pages,values['oled_auto'],values['oled_fixed']],sort_keys=True)
+        signature=json.dumps([pages,values['oled_auto'],values['oled_fixed'],values['oled_start']],sort_keys=True)
         if signature!=self.signature or self.current not in [p['id'] for p in pages]:
-            self.current=pages[0]['id'];self.started=now;self.signature=signature
+            self.current=values['oled_start'];self.started=now;self.signature=signature
         if request:
             ids=[p['id'] for p in pages]
             self.current=ids[(ids.index(self.current)+1)%len(ids)] if request=='next' else request if request in ids else self.current
@@ -285,6 +329,7 @@ class PageRotation:
         if values['oled_auto'] and now-self.started>=duration:
             ids=[p['id'] for p in pages];self.current=ids[(ids.index(self.current)+1)%len(ids)];self.started=now
         elif not values['oled_auto'] and not request and now>=self.manual_until:self.current=values['oled_fixed']
+        duration=next(p['seconds'] for p in pages if p['id']==self.current)
         choices=[]
         if transfer and (critical_transfer or next(p['enabled'] for p in values['oled_pages'] if p['id']=='transfer')):choices.append((values['oled_transfer_priority'],'transfer'))
         if percent is not None and percent<=values['battery_low']:choices.append((values['oled_low_priority'],'battery'))

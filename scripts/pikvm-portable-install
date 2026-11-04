@@ -42,12 +42,16 @@ def oled_preflight():
     shared = LIB / 'pikvm_oled.py'
     if shared.exists() or shared.is_symlink():
         paths.append(('pikvm_oled.py', shared))
+    for name in ('pikvm_oled_ui.py','pikvm_oled_nav.py','pikvm_oled_control.py','pikvm_gestures.py','pikvm_iso.py'):
+        target=LIB/name
+        if target.exists() or target.is_symlink():paths.append((name,target))
     for name, installed in paths:
         if installed.is_symlink() or not installed.is_file():
             raise RuntimeError('Script OLED installé absent ou non ordinaire : ' + name)
         source = installed.read_bytes().replace(b'\r\n', b'\n')
         candidate = (REPO / 'scripts' / name).read_bytes().replace(b'\r\n', b'\n')
-        known = baseline[name] if isinstance(baseline[name], list) else [baseline[name]]
+        known = baseline.get(name,[])
+        known = known if isinstance(known,list) else [known]
         if source != candidate and hashlib.sha256(source).hexdigest() not in known:
             raise RuntimeError('Correctifs OLED locaux à examiner avant migration : ' + name)
     gpio = LIB / 'pikvm_gpio.py'
@@ -218,7 +222,7 @@ def file_map():
     result[LIB / 'pikvm_oled.py'] = ((REPO / 'scripts/pikvm_oled.py').read_bytes(), 0o644)
     result[LIB / 'pikvm_gpio.py'] = ((REPO / 'scripts/pikvm_gpio.py').read_bytes(), 0o644)
     result[LIB / 'pikvm_transfer.py'] = ((REPO / 'scripts/pikvm_transfer.py').read_bytes(), 0o644)
-    for name in ('pikvm_config.py','pikvm_settings.py','pikvm_activity.py'):
+    for name in ('pikvm_config.py','pikvm_settings.py','pikvm_activity.py','pikvm_oled_ui.py','pikvm_oled_nav.py','pikvm_oled_control.py','pikvm_gestures.py','pikvm_iso.py'):
         result[LIB / name] = ((REPO / 'scripts' / name).read_bytes(), 0o644)
     release=json.loads((REPO/'web/extras/portable-os/package.json').read_text())['version']
     result[LIB/'release.json']=(json.dumps({'version':release,'installed_at':time.time()}).encode(),0o600)
@@ -289,6 +293,39 @@ def navigation_preflight():
         raise RuntimeError('Contrat KVM 4.213 incompatible ; aucun fichier natif modifié.')
 
 
+def preferences_module():
+    return load('portable_preferences',REPO/'scripts/pikvm_config.py')
+
+
+def snapshot_preferences(h,backup):
+    config=preferences_module();target=config.pst_path()
+    if target.is_symlink() or target.parent.is_symlink():raise RuntimeError('Chemin des préférences interdit')
+    metadata={'target':str(target),'exists':target.exists()}
+    if metadata['exists']:
+        if not target.is_file() or target.stat().st_size>config.MAX_BYTES or not config.Store(target).read()['healthy']:
+            raise RuntimeError('Préférences invalides ; aucune migration ni interruption')
+        h.write_file(backup/'preferences.json',target.read_bytes(),0o600)
+        metadata['sha256']=h.digest(backup/'preferences.json')
+    return metadata
+
+
+def restore_preferences(h,backup,manifest):
+    metadata=manifest.get('portable_preferences')
+    if metadata is None:return  # Older snapshots predate preference migration.
+    config=preferences_module();target=config.pst_path()
+    if target.is_symlink() or target.parent.is_symlink():raise RuntimeError('Chemin des préférences interdit')
+    raw=(backup/'preferences.json').read_bytes() if metadata['exists'] else None
+    # Idempotent: do not acquire a lease for an unchanged document.
+    if (target.read_bytes() if target.exists() else None)==raw:return
+    if target.exists():
+        h.write_file(backup/'preferences-before-restore.json',target.read_bytes(),0o600)
+    def write(actual):
+        if actual!=target:raise RuntimeError('Cible PST modifiée')
+        if raw is None:actual.unlink(missing_ok=True)
+        else:h.write_file(actual,raw,0o600)
+    config.pst_commit(write)
+
+
 def verify_backup(h, backup):
     manifest = json.loads((backup / 'manifest.json').read_text())
     for entry in manifest['files']:
@@ -298,6 +335,13 @@ def verify_backup(h, backup):
                 raise RuntimeError('Chemin de sauvegarde interdit.')
             if h.digest(source) != entry['sha256']:
                 raise RuntimeError('Sauvegarde altérée ; aucun service arrêté.')
+    metadata=manifest.get('portable_preferences')
+    if metadata is not None:
+        if not isinstance(metadata,dict) or metadata.get('target')!=str(preferences_module().pst_path()) or type(metadata.get('exists')) is not bool:
+            raise RuntimeError('Métadonnées PST invalides ; aucun service arrêté')
+        source=backup/'preferences.json'
+        if metadata['exists'] and (source.is_symlink() or not source.is_file() or source.stat().st_size>16384 or h.digest(source)!=metadata.get('sha256')):
+            raise RuntimeError('Sauvegarde des préférences altérée ; aucun service arrêté')
     return manifest
 
 
@@ -437,6 +481,7 @@ def install(h):
     manifest['share_was_active'] = active(h, 'pikvm-share-api.service')
     manifest['oled_units'] = oled_states(h)
     manifest['wifi_was_active'] = active(h, 'wifi-wizard-api.service')
+    manifest['portable_preferences']=snapshot_preferences(h,backup)
     h.write_file(manifest_path, json.dumps(manifest, indent=2).encode(), 0o600)
     verify_backup(h, backup)  # Verify every saved byte before stopping any service.
     print('Sauvegarde : ' + str(backup), flush=True)
@@ -491,6 +536,7 @@ def restore(h, backup):
         h.run(['systemctl', 'stop', 'pikvm-share-api.service'])
     if h.service_state()['active']:
         h.run(['systemctl', 'stop', PORTABLE_SERVICE])
+    restore_preferences(h,backup,manifest)
     restart = h.restore_files(backup)
     h.reload_nginx()
     if manifest.get('wifi_was_active'):

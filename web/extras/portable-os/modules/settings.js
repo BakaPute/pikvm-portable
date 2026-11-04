@@ -2,7 +2,7 @@ import {el,button,card,hint,row,field,dialog,notify,table} from '../core/ui.js';
 import {saveTheme,getTheme} from '../core/preferences.js';
 import {unpackPixels} from './oled.js';
 
-const pageNames={main:'Accueil / réseau',battery:'Batterie',system:'Système / USB / HDMI',transfer:'Transfert USB (conditionnel)'};
+const pageNames={main:'Accueil / réseau',battery:'Batterie',system:'Système / USB / HDMI',network:'Réseau',usb:'USB et lecteurs',transfer:'Transfert USB (conditionnel)'};
 const commandNames={'msd-dropdown':'Lecteur ISO',share:'Clé USB','atx-dropdown':'ATX','shortcuts-dropdown':'Raccourcis','macro-dropdown':'Macros','text-dropdown':'Texte','system-dropdown':'Vidéo & HID'};
 const clone=value=>structuredClone(value);
 
@@ -24,11 +24,16 @@ export const settings={id:'settings',title:'Paramètres',subtitle:'Configuration
         function stopPreview(){previewEpoch++;clearTimeout(frameTimer);clearTimeout(draftTimer);frameController?.abort();draftController?.abort();frameController=draftController=null;}
         const preview=el('canvas',{width:128,height:64,class:'settings-oled','aria-label':'Aperçu OLED natif synchronisé'}),previewStatus=hint('');
         const draftPreview=el('canvas',{width:128,height:64,class:'settings-oled','aria-label':'Aperçu OLED du brouillon'}),draftStatus=hint('');
+        const previewPage=el('select',{'aria-label':'Page OLED à prévisualiser',onchange:()=>refreshDraft()},
+            ...Object.entries({...pageNames,'menu-menu':'Menu principal','menu-power':'Menu alimentation','menu-wifi':'Menu Wi-Fi',
+                'menu-network':'Menu secours','menu-iso-root':'Lecteur ISO','menu-iso':'Dossiers ISO','menu-iso-action':'Actions ISO','menu-iso-info':'Informations ISO',
+                'menu-iso-connect-confirm':'Confirmation connexion','menu-iso-eject-confirm':'Confirmation éjection','menu-power-confirm':'Confirmation alimentation',
+                'menu-network-confirm':'Confirmation hotspot','menu-working':'Opération en cours'}).map(([value,label])=>el('option',{value},label)));
         async function refreshDraft(){
             if(!live||selected!==3||search.value||document.hidden)return;
             const epoch=previewEpoch;draftController?.abort();draftController=new AbortController();
             try{
-                const page=draft.oled_auto?draft.oled_pages.find(p=>p.enabled&&p.id!=='transfer')?.id:draft.oled_fixed;
+                const page=previewPage.value;
                 const {result}=await api.request('/extras/portable-os/api/settings/preview',{method:'POST',body:{values:draft,page},signal:draftController.signal,timeout:4000});
                 if(!live||epoch!==previewEpoch)return;
                 draftPreview.getContext('2d').putImageData(new ImageData(unpackPixels(result.pixels),128,64),0,0);draftStatus.textContent=result.message;
@@ -106,7 +111,7 @@ export const settings={id:'settings',title:'Paramètres',subtitle:'Configuration
                 clearTimeout(diagnosticTimer);
             }),'quiet'),hint(limits.power),hint(limits.presence)));refreshIdle();}
             if(selected===2)content.append(card('Mesures et limites',hint(limits.battery),el('a',{href:'#power',class:'button'},'Batterie et alimentation')));
-            if(selected===3){content.append(oledPages(),card('Aperçu du brouillon · données d’exemple',draftPreview,draftStatus),card('Miroir natif en direct',preview,previewStatus,hint(limits.oled)));refreshPreview();refreshDraft();}
+            if(selected===3){content.append(oledPages(),card('Aperçu du brouillon · données d’exemple',field('Page de l’aperçu',previewPage),draftPreview,draftStatus),card('Miroir natif en direct',preview,previewStatus,hint(limits.oled)));refreshPreview();refreshDraft();}
             if(selected===4)content.append(card('Protections matérielles conservées',hint(limits.button),hint('GPIO18 : lecture optimisée RC8 inchangée. GPIO17 n’est jamais configurable.')));
             if(selected===5)content.append(kvmCommands(),hint(limits.kvm),el('a',{href:'#kvm',class:'button'},'Ouvrir la console KVM'));
             if(selected===6)content.append(card('Lecteurs et intégrité',hint(limits.storage),el('a',{href:'#images',class:'button'},'Images & Drive 0'),el('a',{href:'#share',class:'button'},'PIKVM-SHARE'),el('a',{href:'#tools',class:'button'},'Diagnostic USB')));

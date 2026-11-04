@@ -125,8 +125,11 @@ class ConfigurationTests(unittest.TestCase):
 
 class OledPreferenceTests(unittest.TestCase):
     def test_disabled_pages_order_and_individual_duration(self):
-        values=config.defaults();values['oled_pages']=[values['oled_pages'][1],values['oled_pages'][0],values['oled_pages'][2],values['oled_pages'][3]]
-        values['oled_pages'][0]['seconds']=5;values['oled_pages'][2]['enabled']=False
+        values=config.defaults();values['oled_pages'][0],values['oled_pages'][1]=values['oled_pages'][1],values['oled_pages'][0]
+        values['oled_start']='battery'
+        values['oled_pages'][0]['seconds']=5
+        for page in values['oled_pages']:
+            if page['id'] in ('system','network','usb'):page['enabled']=False
         rotation=config.PageRotation();self.assertEqual(rotation.choose(values,0)[0],'battery')
         self.assertEqual(rotation.choose(values,4)[0],'battery');self.assertEqual(rotation.choose(values,5)[0],'main')
         self.assertEqual(rotation.choose(values,15)[0],'battery')
@@ -142,6 +145,8 @@ class OledPreferenceTests(unittest.TestCase):
 
     def test_permanent_page_and_logical_next_request(self):
         values=config.defaults();values.update(oled_auto=False,oled_fixed='system')
+        for page in values['oled_pages']:
+            if page['id'] in ('network','usb'):page['enabled']=False
         rotation=config.PageRotation();self.assertEqual(rotation.choose(values,0)[0],'system')
         self.assertEqual(rotation.choose(values,100,request='next')[0],'main')
         self.assertEqual(rotation.choose(values,105)[0],'main')
@@ -159,26 +164,21 @@ class OledPreferenceTests(unittest.TestCase):
             physical.contrast.assert_called_with(42)
 
     def test_button_customization_does_not_change_gesture_or_gpio_reader(self):
-        menu=script('pikvm-button-menu')
-        values=config.defaults();values['button_menu_timeout']=25
-        with patch.object(menu.CONFIG,'get',return_value=values):self.assertEqual(menu.menu_timeout(0),25)
-        self.assertEqual((menu.POWER_RESTART,menu.POWER_OFF,menu.ISO_CONFIRM),(2.,5.,3.))
-        source=(Path(__file__).resolve().parents[1]/'scripts/pikvm_gpio.py').read_text()
-        self.assertNotIn('pinctrl set',source)
+        from oled_nav_fixtures import Harness
+        h=Harness();h.values['button_menu_timeout']=25;h.nav.change('menu');h.now+=24;h.nav.tick()
+        self.assertEqual(h.nav.screen,'menu');h.now+=2;h.nav.tick();self.assertEqual(h.nav.screen,'status')
+        from pikvm_gpio import pinctrl_sample
+        from test_oled import menu
+        self.assertIs(menu.pinctrl_sample,pinctrl_sample)
 
     def test_status_short_customization_long_menu_and_cancelled_gpio(self):
-        class EndLoop(Exception):pass
-        def sleep(delay):
-            if delay==.2:raise EndLoop()
-        for held,cancelled,opens in ((.2,False,False),(2.,False,True),(5.,True,False)):
-            menu=script('pikvm-button-menu');values=config.defaults();values['button_short']='battery'
-            with patch.object(menu,'button_down',side_effect=[True,False]),patch.object(menu.HOTSPOT_STATE.__class__,'exists',return_value=False), \
-                 patch.object(menu.CONFIG,'get',return_value=values),patch.object(menu,'INPUT',SimpleNamespace(start=lambda:(),duration=lambda _:held,cancelled=lambda _:cancelled)), \
-                 patch.object(menu,'run_menu') as open_menu,patch.object(menu,'activity_event') as event, \
-                 patch.object(menu.time,'sleep',side_effect=sleep):
-                with self.assertRaises(EndLoop):menu.button_loop()
-                self.assertEqual(open_menu.called,opens)
-                self.assertEqual(event.called,not cancelled and not opens)
+        from oled_nav_fixtures import Harness
+        for action in ('menu','battery','next'):
+            h=Harness();h.values['button_short']=action;h.click()
+            if action=='menu':self.assertEqual(h.nav.screen,'menu')
+            else:h.backend.status_page.assert_called_with(action)
+            h=Harness();h.values['button_short']=action;h.step(True);h.wait(.1,True);h.step(None);h.wait(.5)
+            h.backend.status_page.assert_not_called();self.assertEqual(h.nav.screen,'status')
 
 
 class PstHandoverTests(unittest.TestCase):

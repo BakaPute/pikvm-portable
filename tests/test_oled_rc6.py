@@ -17,7 +17,7 @@ class ControllerTests(unittest.TestCase):
             with patch.object(oled,'BUTTON_HEARTBEAT',path),patch.object(oled,'SOCKET',Mock(is_socket=lambda:True)), \
                  patch.object(oled.time,'monotonic',return_value=now[0]):
                 status=oled.button_status()
-                self.assertTrue(status['ready']);self.assertEqual(status['poll_age_ms'],90000)
+                self.assertFalse(status['ready']);self.assertEqual(status['poll_age_ms'],90000)
 
     def test_five_second_hold_survives_missing_frames_with_real_keep_renewals(self):
         now=[10.0];frame={'control_id':'b'*64,'context':{'screen':'menu','selection':1}}

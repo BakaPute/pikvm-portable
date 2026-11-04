@@ -56,6 +56,7 @@ function createPanel(host, context) {
     }
     function capability(data) {
         const c=data?.context||{};
+        if(c.ui_version===2)return ({'power-confirm':'power','network-confirm':'network'})[c.screen]||'';
         if ((c.screen==='menu'&&c.selection===0)||c.screen==='rescue-power') return 'power';
         if (c.screen==='rescue') return 'network';
         if (c.screen==='iso-confirm') return 'delete';
@@ -79,7 +80,7 @@ function createPanel(host, context) {
             if(armedControl!==result.control_id) {arm.checked=false;armedControl=null;}
             frame=result;
             screen.disabled=false;
-            if(!input.active) text(status,'Appuyer ou maintenir · Échap annule');
+            if(!input.active) text(status,result.context?.ui_version===2?'1 avancer · 2 ouvrir · maintien retour':'Appuyer ou maintenir · Échap annule');
             // Controller health is diagnostic; a valid image never changes the
             // interaction state or flashes a warning during renderer handoff.
             text(freshness,'');

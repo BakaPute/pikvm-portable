@@ -10,9 +10,11 @@ import time
 
 import sys
 sys.path.insert(0, "/usr/local/lib/pikvm-portable")
-from pikvm_oled import MirrorDevice, canvas, AsyncCache
+from pikvm_oled import MirrorDevice, AsyncCache, button_status
+from pikvm_oled_nav import NavigationReader, render_navigation
 from pikvm_config import READER as CONFIG, PageRotation
 from pikvm_activity import latest, RUNTIME
+from pikvm_oled_ui import render_status, render_message, render_idle
 
 
 OLED_ADDR = 0x3C
@@ -92,7 +94,7 @@ def battery_charging():
     rate = battery_charge_rate()
 
     if rate is None:
-        return False
+        return None
 
     return rate > 0.5
 
@@ -101,27 +103,24 @@ def battery_charging():
 # Wi-Fi
 # ------------------------------------------------------------
 
+def network_info():
+    rc,out=cmd(['iw','dev','wlan0','link'])
+    connected=None if rc!=0 else False if 'Not connected' in out else True if 'Connected to ' in out else None
+    ssid=signal=None
+    if rc==0:
+        for line in out.splitlines():
+            line=line.strip()
+            if line.startswith('SSID:'):ssid=line.split(':',1)[1].strip()
+            elif line.startswith('signal:'):
+                match=re.search(r'(-?\d+)',line)
+                if match:signal=int(match.group(1))
+    rc,address=cmd(['ip','-4','-o','addr','show','dev','wlan0'])
+    match=re.search(r'inet\s+([0-9.]+)',address) if rc==0 else None
+    return {'connected':connected,'ssid':ssid,'dbm':signal,'ip':match.group(1) if match else None}
+
+
 def wifi():
-    rc, out = cmd(["iw", "dev", "wlan0", "link"])
-
-    if rc != 0 or "Not connected" in out:
-        return None, None
-
-    ssid = None
-    signal = None
-
-    for line in out.splitlines():
-        line = line.strip()
-
-        if line.startswith("SSID:"):
-            ssid = line.split(":", 1)[1].strip()
-
-        elif line.startswith("signal:"):
-            m = re.search(r"(-?\d+)", line)
-            if m:
-                signal = int(m.group(1))
-
-    return ssid, signal
+    data=network_info();return data['ssid'],data['dbm']
 
 
 def wifi_level(dbm):
@@ -141,20 +140,7 @@ def wifi_level(dbm):
 
 
 def ip_address():
-    rc, out = cmd([
-        "ip", "-4", "-o",
-        "addr", "show", "dev", "wlan0"
-    ])
-
-    if rc != 0:
-        return "-"
-
-    m = re.search(r"inet\s+([0-9.]+)", out)
-
-    if m:
-        return m.group(1)
-
-    return "-"
+    return network_info()['ip'] or '-'
 
 
 # ------------------------------------------------------------
@@ -227,7 +213,7 @@ def hdmi_state():
         if out:
             return "ON"
 
-    return "OFF"
+    return "?"
 
 
 # ------------------------------------------------------------
@@ -387,327 +373,118 @@ def uptime():
         return "?"
 
 
-# ------------------------------------------------------------
-# Dessins
-# ------------------------------------------------------------
-
-def draw_wifi_bars(draw, x, y, level):
-    heights = [4, 7, 10, 13, 16]
-
-    for i, h in enumerate(heights):
-        x1 = x + i * 6
-        y1 = y + 16 - h
-        x2 = x1 + 4
-        y2 = y + 16
-
-        if i < level:
-            draw.rectangle((x1, y1, x2, y2), fill="white")
-        else:
-            draw.rectangle((x1, y1, x2, y2), outline="white")
+def memory_info():
+    try:
+        with open('/proc/meminfo') as source:
+            values={line.split(':',1)[0]:int(line.split(':',1)[1].split()[0]) for line in source if line.startswith(('MemTotal:','MemAvailable:'))}
+        total=values['MemTotal'];available=values['MemAvailable']
+        return {'percent':round(100*(total-available)/total),'available_mb':available//1024}
+    except (OSError,ValueError,KeyError,ZeroDivisionError):return {'percent':None,'available_mb':None}
 
 
-def draw_battery_bar(draw, x, y, width, height, soc):
-    draw.rectangle(
-        (x, y, x + width, y + height),
-        outline="white"
-    )
-
-    inner = width - 4
-
-    fill_width = int(inner * soc / 100)
-
-    if fill_width > 0:
-        draw.rectangle(
-            (
-                x + 2,
-                y + 2,
-                x + 2 + fill_width,
-                y + height - 2
-            ),
-            fill="white"
-        )
+def kvm_state():
+    _,state=cmd(['systemctl','is-active','kvmd.service'])
+    return True if state=='active' else False if state in ('inactive','failed') else None
 
 
-# ------------------------------------------------------------
-# Pages
-# ------------------------------------------------------------
-
-def page_main(device, remaining):
-    soc, voltage = battery()
-    charging = battery_charging()
-    ssid, dbm = wifi()
-    ip = ip_address() if CONFIG.get()['oled_show_ip'] else '-'
-    level = wifi_level(dbm)
-
-    if soc is None:
-        soc_text = "--%"
-        voltage_text = "--.--V"
-    else:
-        soc_text = f"CHG {soc:.0f}%" if charging else f"{soc:.0f}%"
-        voltage_text = f"{voltage:.2f}V"
-
-    ssid_text = ssid if ssid else "WiFi disconnected"
-
-    if len(ssid_text) > 16:
-        ssid_text = ssid_text[:16]
-
-    with canvas(device) as draw:
-        draw.text((0, 0), "PiKVM", fill="white")
-        draw.text((108, 0), f"{remaining}s", fill="white")
-
-        draw.text(
-            (0, 14),
-            f"IP {ip}",
-            fill="white"
-        )
-
-        draw.text(
-            (0, 29),
-            ssid_text,
-            fill="white"
-        )
-
-        draw_wifi_bars(
-            draw,
-            98,
-            27,
-            level
-        )
-
-        draw.text(
-            (0, 48),
-            f"BAT {soc_text}  {voltage_text}",
-            fill="white"
-        )
+def drive_info():
+    result={}
+    for index in (0,1):
+        try:
+            base=f'/sys/kernel/config/usb_gadget/kvmd/functions/mass_storage.usb{index}/lun.0'
+            with open(base+'/file') as file:attached=file.read().strip()
+            with open(base+'/cdrom') as file:cdrom=file.read().strip()
+            if cdrom not in ('0','1'):raise ValueError()
+            result[str(index)]={'known':True,'attached':bool(attached),'cdrom':cdrom=='1'}
+        except (OSError,ValueError):result[str(index)]={'known':False}
+    return result
 
 
-def page_battery(device, remaining):
-    soc, voltage = battery()
-    charging = battery_charging()
-
-    if soc is None:
-        soc = 0
-        soc_text = "--.- %"
-        voltage_text = "--.--- V"
-    else:
-        soc_text = f"{soc:.1f} %"
-        voltage_text = f"{voltage:.3f} V"
-
-    with canvas(device) as draw:
-        if charging:
-            title = "Charging"
-        elif soc >= 100:
-            title = "Full"
-        else:
-            title = "Battery"
-
-        draw.text((0, 0), title, fill="white")
-        draw.text((108, 0), f"{remaining}s", fill="white")
-
-        draw.text(
-            (0, 17),
-            soc_text,
-            fill="white"
-        )
-
-        draw.text(
-            (69, 17),
-            voltage_text,
-            fill="white"
-        )
-
-        draw_battery_bar(
-            draw,
-            2,
-            39,
-            120,
-            17,
-            soc
-        )
+ANIMATED=False
+PAGE_STARTED=0
 
 
-def page_system(device, remaining):
-    usb = usb_state()
-    hdmi = hdmi_state()
-    temp = cpu_temp()
-    usage = cpu_usage()
-    up = uptime()
-
-    if temp is None:
-        temp_text = "--C"
-    else:
-        temp_text = f"{temp:.0f}C"
-
-    if usage is None:
-        usage_text = "--%"
-    else:
-        usage_text = f"{usage:.0f}%"
-
-    with canvas(device) as draw:
-        draw.text(
-            (0, 0),
-            "System",
-            fill="white"
-        )
-
-        draw.text(
-            (108, 0),
-            f"{remaining}s",
-            fill="white"
-        )
-
-        draw.text(
-            (0, 13),
-            f"USB  {usb}",
-            fill="white"
-        )
-
-        draw.text(
-            (0, 26),
-            f"HDMI {hdmi}",
-            fill="white"
-        )
-
-        draw.text(
-            (0, 39),
-            f"CPU  {usage_text}  {temp_text}",
-            fill="white"
-        )
-
-        draw.text(
-            (0, 52),
-            f"UP   {up}",
-            fill="white"
-        )
+def show_status(device,page,data,remaining):
+    global ANIMATED
+    started=time.perf_counter()
+    rendered=render_status(page,data,CONFIG.get(),remaining,max(0,time.monotonic()-PAGE_STARTED))
+    ANIMATED=rendered.animated
+    device.render_ms=(time.perf_counter()-started)*1000
+    device.display(rendered.image)
 
 
-def page_usb_transfer(device, remaining):
-    info = transfer_info()
-
-    state = info.get(
-        "state",
-        "idle"
-    )
-
-    free = msd_free_space()
-
-    if free is None:
-        free_text = "Libre --.-G"
-    else:
-        free_text = (
-            f"Libre {free:.1f}G"
-        )
-
-    line1 = ""
-    line2 = ""
-
-    if info.get("connected"):
-        line1 = "Connecte au PC"
-        line2 = "Copie des fichiers"
-
-    elif state == "importing":
-        percent = info.get(
-            "percent"
-        )
-
-        done = info.get(
-            "done",
-            0
-        )
-
-        total = info.get(
-            "total",
-            0
-        )
-
-        if percent is None:
-            percent_text = "--%"
-        else:
-            percent_text = (
-                f"{percent:.0f}%"
-            )
-
-        line1 = (
-            f"Import {percent_text}"
-        )
-
-        if total:
-            line1 += (
-                f" {done}/{total}"
-            )
-
-        line2 = info.get(
-            "current",
-            ""
-        )
-
-    elif state == "starting":
-        line1 = "Activation..."
-        line2 = "Transfert USB"
-
-    elif state == "stopping":
-        line1 = "Deconnexion..."
-        line2 = "Transfert USB"
-
-    elif state == "preparing":
-        line1 = "Preparation..."
-        line2 = "Disque transfert"
-
-    else:
-        line1 = "Transfert USB"
-        line2 = state[:20]
+def page_main(device,remaining):
+    percent,voltage=battery();ssid,dbm=wifi()
+    show_status(device,'main',{'percent':percent,'voltage':voltage,'charging':battery_charging(),
+        'ssid':ssid,'dbm':dbm,'ip':ip_address(),'usb':usb_state(),'kvm':kvm_state(),'hdmi':hdmi_state()},remaining)
 
 
-    if len(line2) > 20:
-        line2 = line2[:20]
+def page_battery(device,remaining):
+    percent,voltage=battery()
+    show_status(device,'battery',{'percent':percent,'voltage':voltage,'charging':battery_charging()},remaining)
 
-    with canvas(device) as draw:
-        draw.text(
-            (0, 0),
-            "Transfert USB",
-            fill="white"
-        )
 
-        draw.text(
-            (108, 0),
-            f"{remaining}s",
-            fill="white"
-        )
+def page_system(device,remaining):
+    memory=memory_info()
+    show_status(device,'system',{'cpu':cpu_usage(),'temperature':cpu_temp(),'uptime':uptime(),
+        'ram':memory['percent'],'available_mb':memory['available_mb']},remaining)
 
-        draw.text(
-            (0, 17),
-            line1,
-            fill="white"
-        )
 
-        draw.text(
-            (0, 32),
-            line2,
-            fill="white"
-        )
+def page_network(device,remaining):
+    show_status(device,'network',network_info(),remaining)
 
-        draw.text(
-            (0, 49),
-            free_text,
-            fill="white"
-        )
+
+def page_usb(device,remaining):
+    show_status(device,'usb',{'drives':drive_info(),'usb':usb_state()},remaining)
+
+
+def page_usb_transfer(device,remaining):
+    show_status(device,'transfer',{**transfer_info(),'free':msd_free_space()},remaining)
 
 
 # ------------------------------------------------------------
 # Main
 # ------------------------------------------------------------
 
+def display_navigation(device,model,values,now,notice=''):
+    if not model or model['context']['screen']=='status':return False
+    context=model['context'];revision=context['navigation_id']
+    if getattr(device,'menu_revision',None)!=revision:
+        device.menu_revision=revision;device.menu_started=now;device.menu_animated=True
+    phase=now-device.menu_started
+    animation=int(phase*min(10,values['oled_scroll_speed']/2)) if device.menu_animated and values['oled_animations'] and values['animations'] else 0
+    key=(revision,model['held'],model['remaining'],CONFIG.revision,animation,notice)
+    device.source='menu';device.set_context(**context);device.navigation_at=model['event_at']
+    if key!=getattr(device,'menu_render_key',None):
+        began=time.perf_counter()
+        try:surface=render_navigation(model,values,phase)
+        except Exception as error:
+            if model['context']['screen']!='qr':raise
+            # Preserve the navigation context, so a virtual short can leave an
+            # unavailable QR/menu instead of trapping the remote user.
+            surface=render_message('Affichage indisponible',[type(error).__name__,'Clic ou maintien : retour'],values,'Le bouton reste disponible')
+        if notice:
+            surface.draw.rectangle((0,54,127,63),fill=0);surface.footer(notice)
+        device.menu_animated=surface.animated;device.render_ms=(time.perf_counter()-began)*1000
+        device.display(surface.image);device.menu_render_key=key
+    else:device.refresh()
+    return True
+
 def main():
+    global PAGE_STARTED
     cache = AsyncCache()
-    defaults = {'battery':(None,None), 'battery_charging':False, 'wifi':(None,None), 'ip_address':'-',
+    defaults = {'battery':(None,None), 'battery_charging':None,
                 'usb_state':'?', 'hdmi_state':'?', 'cpu_temp':None, 'cpu_usage':None,
-                'transfer_info':{}, 'msd_free_space':None, 'uptime':'?'}
+                'transfer_info':{}, 'msd_free_space':None, 'uptime':'?',
+                'memory_info':{'percent':None,'available_mb':None},'kvm_state':None,'drive_info':{}}
     for name, default in defaults.items():
-        globals()[name] = cache.wrap(globals()[name], default, interval=1)
+        globals()[name] = cache.wrap(globals()[name], default, interval=5 if name in ('kvm_state','hdmi_state','drive_info') else 1)
+    globals()['network_info']=cache.wrap(network_info,{'connected':None,'ssid':None,'dbm':None,'ip':None},interval=2)
     device = MirrorDevice("status")
+    navigation=NavigationReader()
 
     rotation=PageRotation()
-    renderers={'main':page_main,'battery':page_battery,'system':page_system,'transfer':page_usb_transfer}
+    renderers={'main':page_main,'battery':page_battery,'system':page_system,'network':page_network,'usb':page_usb,'transfer':page_usb_transfer}
     last_render=None
     last_request=0
 
@@ -716,8 +493,14 @@ def main():
             now = time.monotonic()
 
             values=CONFIG.get()
-            transfer=transfer_info()
-            percent,_=battery()
+            transfer=transfer_info();percent,_=battery()
+            notice=f'Batterie critique {percent:.0f}%' if percent is not None and percent<=values['battery_critical'] else 'Erreur transfert USB' if transfer.get('state')=='error' else ''
+            model=navigation.read(button_status())
+            if display_navigation(device,model,values,now,notice):
+                last_render=None
+                time.sleep(REFRESH)
+                continue
+            device.source='status';device.navigation_at=model.get('event_at') if model else None
             request=latest('button')
             command=None
             if request and request['monotonic']>last_request:
@@ -734,30 +517,20 @@ def main():
             idle_action=idle.get('action','none')
             # Critical battery and transfer information always override blanking.
             if urgent or transfer.get('active') or (percent is not None and percent<=values['battery_low']):idle_action='none'
-            device.set_context(screen='status',page='page_'+page,remaining=remaining,idle=idle_action)
-            render_key=(page,remaining,cache.revision,CONFIG.revision,idle_action)
+            device.set_context(**{**(model['context'] if model else {}),'screen':'status','page':'page_'+page,'remaining':remaining,'idle':idle_action})
+            if page!=getattr(device,'last_page',None):PAGE_STARTED=now;device.last_page=page
+            animation=int((now-PAGE_STARTED)*min(10,values['oled_scroll_speed']/2)) if ANIMATED and values['oled_animations'] and values['animations'] else 0
+            render_key=(page,remaining,cache.revision,CONFIG.revision,idle_action,animation)
             if render_key!=last_render:
                 if idle_action in ('off','screen'):
-                    with canvas(device) as draw:
-                        if idle_action=='screen':draw.text((0,24),'PiKVM inactif',fill='white')
-                else:renderers[page](device,remaining)
+                    device.display(render_idle(idle_action,values).image)
+                else:renderers[page](device,remaining if values['oled_auto'] else None)
                 last_render=render_key
             else:device.refresh()
 
         except Exception as e:
-            device.set_context(screen='error', error_type=type(e).__name__)
-            with canvas(device) as draw:
-                draw.text(
-                    (0, 0),
-                    "OLED ERROR",
-                    fill="white"
-                )
-
-                draw.text(
-                    (0, 18),
-                    str(e)[:20],
-                    fill="white"
-                )
+            device.set_context(screen='error',error_type=type(e).__name__)
+            device.display(render_message('Erreur OLED',[type(e).__name__,'Télémétrie indisponible'],CONFIG.get(),help_text='Nouvelle tentative automatique').image)
 
         time.sleep(REFRESH)
 

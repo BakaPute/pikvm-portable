@@ -1,0 +1,86 @@
+{
+  "schema_version": 1,
+  "revision": 7,
+  "values": {
+    "theme": "light",
+    "idle_enabled": false,
+    "idle_first_seconds": 300,
+    "idle_shutdown_seconds": 1800,
+    "idle_warning_seconds": 60,
+    "idle_action": "none",
+    "activity_web": true,
+    "activity_keyboard": true,
+    "activity_mouse": true,
+    "activity_terminal": true,
+    "activity_button": true,
+    "activity_menu": true,
+    "activity_transfer": true,
+    "activity_storage": true,
+    "inhibit_ssh": true,
+    "inhibit_kvm": true,
+    "battery_low": 20,
+    "battery_critical": 10,
+    "battery_notifications": true,
+    "oled_rotation": "0",
+    "oled_contrast": 160,
+    "oled_auto": true,
+    "oled_fixed": "main",
+    "oled_low_priority": 2,
+    "oled_transfer_priority": 1,
+    "oled_alert_seconds": 5,
+    "oled_show_ip": true,
+    "button_short": "menu",
+    "button_menu_timeout": 10,
+    "kvm_default_panel": "none",
+    "kvm_fit": "contain",
+    "kvm_fullscreen": "console",
+    "iso_sort": "name",
+    "iso_favorite": "",
+    "network_notifications": true,
+    "dashboard_ip": true,
+    "profile": "balanced",
+    "animations": true,
+    "advanced_diagnostics": false,
+    "oled_pages": [
+      {
+        "id": "battery",
+        "enabled": true,
+        "seconds": 5
+      },
+      {
+        "id": "main",
+        "enabled": true,
+        "seconds": 15
+      },
+      {
+        "id": "system",
+        "enabled": false,
+        "seconds": 8
+      },
+      {
+        "id": "transfer",
+        "enabled": true,
+        "seconds": 7
+      }
+    ],
+    "kvm_order": [
+      "msd-dropdown",
+      "share",
+      "atx-dropdown",
+      "shortcuts-dropdown",
+      "macro-dropdown",
+      "text-dropdown",
+      "system-dropdown"
+    ],
+    "kvm_hidden": []
+  },
+  "history": [
+    {
+      "at": 1000,
+      "keys": [
+        "theme",
+        "oled_pages"
+      ]
+    }
+  ]
+}

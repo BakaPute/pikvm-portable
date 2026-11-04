@@ -94,40 +94,25 @@ class HoldTests(unittest.TestCase):
         self.assertTrue(self.button.sensitive('power'))
 
     def test_cancelled_real_menu_does_not_advance_selection(self):
-        self.make();self.button.remote(self.start)
-        selections=[]
-        def draw(index,held=0):
-            selections.append(index)
-            if self.button.hold and self.button.hold['consumed']:
-                self.update('cancel')
-        with patch.object(menu,'INPUT',self.button),patch.object(menu,'physical_button_down',return_value=False), \
-             patch.object(menu,'get_device'),patch.object(menu,'draw_menu',side_effect=draw), \
-             patch.object(menu.time,'monotonic',side_effect=lambda:self.now), \
-             patch.object(menu.time,'sleep',side_effect=lambda delay:setattr(self,'now',self.now+delay)), \
-             patch.object(menu.subprocess,'run'):
-            menu.run_menu()
-        self.assertEqual(set(selections),{0})
+        from oled_nav_fixtures import Harness
+        h=Harness();h.nav.change('menu');h.step(True);h.wait(.1,True);h.step(None);h.wait(.5)
+        self.assertEqual(h.nav.index,0);self.assertIsNone(h.worker.task)
 
     def test_five_second_hold_reaches_existing_power_menu_threshold(self):
-        self.make({'screen':'menu','selection':0});self.button.remote({**self.start,'permit':'power'})
-        def sleep(delay):
-            self.now+=delay
-            self.update('keep')
-        with patch.object(menu,'INPUT',self.button),patch.object(menu,'physical_button_down',return_value=False), \
-             patch.object(menu,'get_device'),patch.object(menu,'draw_menu'), \
-             patch.object(menu.time,'monotonic',side_effect=lambda:self.now),patch.object(menu.time,'sleep',side_effect=sleep), \
-             patch.object(menu.subprocess,'run'),patch.object(menu,'poweroff') as power:
-            menu.run_menu()
-            power.assert_called_once()
-        self.assertGreaterEqual(self.button.duration(self.button.start()),5)
+        from oled_nav_fixtures import Harness
+        h=Harness();h.nav.change('power-confirm');h.nav.operation='shutdown';h.hold(5)
+        self.assertEqual(h.nav.screen,'working');h.finish();h.backend.sensitive.assert_called_once()
+        h=Harness();h.nav.change('menu');h.hold(5);self.assertIsNone(h.worker.task)
 
 
 class FluidityTests(unittest.TestCase):
     def test_iso_counter_uses_display_cache_without_scanning_the_disk_in_draw(self):
-        with patch.object(menu,'DISPLAY_IMAGES',Mock(return_value=None)), \
-             patch.object(menu,'image_files',side_effect=AssertionError('disk scan in render')), \
-             patch.object(menu,'usb_transfer_busy',return_value=False),patch.object(menu,'get_device'),patch.object(menu,'show'):
-            menu.draw_iso_page()
+        from oled_nav_fixtures import Harness
+        from pikvm_oled_nav import render_navigation
+        h=Harness();h.nav.change('iso');h.nav.entries=[{'kind':'file','name':'test.iso'}]
+        with patch.object(menu.subprocess,'run',side_effect=AssertionError('command in renderer')):
+            self.assertEqual(render_navigation(h.nav.snapshot(),h.values).image.size,(128,64))
+        h.backend.library.assert_not_called()
 
     def test_native_countdown_keeps_each_second_while_telemetry_blocks_four_seconds(self):
         harness='''

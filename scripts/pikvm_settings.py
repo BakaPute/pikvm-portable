@@ -10,7 +10,7 @@ import base64
 import importlib.machinery
 import importlib.util
 from types import SimpleNamespace
-from pikvm_config import Configuration, ConfigError, FIELDS, CATEGORIES, defaults, validate, IdleEngine, pst_path
+from pikvm_config import Configuration, ConfigError, FIELDS, CATEGORIES, defaults, validate, IdleEngine, pst_path, VERSION, migrate_rc11
 from pikvm_activity import latest, RUNTIME
 from pikvm_config import atomic
 
@@ -19,8 +19,8 @@ LIMITATIONS = {
     'power':'Extinction réelle non activable : validation distincte des inhibiteurs et de la chaîne d’arrêt nécessaire. Simulation disponible.',
     'battery':'MAX17048 : pourcentage estimé. Une charge positive ne prouve pas une alimentation externe ; délais batterie/secteur distincts indisponibles.',
     'presence':'SSH : aucune mesure fiable des frappes. Clients KVM externes, HDMI, présence réseau et utilisateur authentifié ne sont pas déduits comme activité.',
-    'oled':'Pages existantes : accueil/réseau, batterie, système/USB/HDMI et transfert. Pas de déplacement libre de pixels ni nouvelle page coûteuse. Aperçu natif disponible.',
-    'button':'Seul l’appui court hors menu est personnalisable. Un maintien de 2 s ouvre toujours le menu. Gestes sensibles et bail virtuel de 800 ms conservés ; pas de double-clic ni association libre.',
+    'oled':'Un seul framebuffer 128×64 : pages, menus et miroir. Le matériel absent est recherché sans bloquer le rendu. Les valeurs inconnues restent signalées.',
+    'button':'Clic suivant, double clic ouvrir, maintien retour, 3 s accueil hors confirmation. Dans la confirmation : 2 s relancer KVM, 5 s arrêter ou changer le hotspot. Bail Web 800 ms et autorisation dédiée conservés.',
     'storage':'Pas d’attachement automatique, changement de montage, préférence d’intégrité désactivable ou suppression automatique. Les protections existantes restent obligatoires.',
     'kvm':'Capture manuelle uniquement. Macros/raccourcis restent dans les contrôles KVMD natifs ; aucun éditeur parallèle.',
     'security':'Authentification KVMD et CSRF obligatoires. Aucun réglage de rôles, GPIO, shell, tension, fréquence CPU ou swap.',
@@ -73,7 +73,7 @@ class Settings:
             if not path.is_symlink() and path.stat().st_size<1024:installed=json.loads(path.read_text(encoding='utf-8')).get('installed_at')
         except (OSError,ValueError,AttributeError):pass
         return {**document,'fields':FIELDS,'categories':CATEGORIES,'defaults':defaults(),'limitations':LIMITATIONS,
-                'release':'0.2.0-rc.11','installed_at':installed,'restart_required':[],
+                'release':'0.2.0-rc.12','installed_at':installed,'restart_required':[],
                 'persistence':'PST KVMD : bail natif en écriture, jamais de remount racine ou MSD'}
 
     def apply(self,data,reset=False):
@@ -87,11 +87,18 @@ class Settings:
         return result
 
     def preview(self,data):
-        if not isinstance(data,dict) or set(data)!={'values','page'} or data['page'] not in ('main','battery','system','transfer'):
+        menus=('menu','power','wifi','network','iso-root','iso','iso-action','iso-info','iso-connect-confirm','iso-eject-confirm','power-confirm','network-confirm','working')
+        if not isinstance(data,dict) or set(data)!={'values','page'} or data['page'] not in ('main','battery','system','network','usb','transfer',*('menu-'+name for name in menus)):
             raise ConfigError('Aperçu OLED invalide.')
         values=validate(data['values'])
         if not self.preview_lock.acquire(blocking=False):raise ConfigError('Aperçu déjà en cours.',423)
         try:
+            if data['page'].startswith('menu-'):
+                from pikvm_oled_nav import preview_navigation
+                from pikvm_oled import prepare_frame
+                image=prepare_frame(preview_navigation(data['page'][5:],values).image,values)
+                return {'width':128,'height':64,'format':'1bpp-msb','pixels':base64.b64encode(image.tobytes()).decode(),
+                        'synthetic':True,'message':'Menu natif avec données d’exemple ; aucune action exécutée.'}
             if self.preview_module is None:
                 source=Path('/usr/local/bin/pikvm-oled-custom')
                 if not source.is_file():source=Path(__file__).with_name('pikvm-oled-custom')
@@ -101,14 +108,18 @@ class Settings:
                 demo={'battery':(42,3.75),'battery_charging':False,'wifi':('Exemple Wi-Fi',-55),
                       'ip_address':'192.0.2.1','usb_state':'OK','hdmi_state':'1920x1080',
                       'cpu_temp':43,'cpu_usage':12,'uptime':'1h 20m',
+                      'memory_info':{'percent':62,'available_mb':148},'kvm_state':True,
+                      'network_info':{'connected':True,'ssid':'Exemple Wi-Fi','dbm':-55,'ip':'192.0.2.1'},
+                      'drive_info':{'0':{'known':True,'attached':True,'cdrom':True},'1':{'known':True,'attached':False,'cdrom':False}},
                       'transfer_info':{'active':True,'state':'importing','percent':50,'done':1,'total':2,'current':'Exemple.iso'},'msd_free_space':8}
                 for name,value in demo.items():setattr(self.preview_module,name,lambda value=value:value)
             self.preview_module.CONFIG=SimpleNamespace(get=lambda:values)
+            self.preview_module.PAGE_STARTED=time.monotonic()
             captured=[]
             device=SimpleNamespace(mode='1',size=(128,64),display=lambda image:captured.append(image))
             seconds=next(p['seconds'] for p in values['oled_pages'] if p['id']==data['page'])
             renderer=getattr(self.preview_module,'page_'+('usb_transfer' if data['page']=='transfer' else data['page']))
-            renderer(device,seconds)
+            renderer(device,seconds if values['oled_auto'] else None)
             from pikvm_oled import prepare_frame
             image=prepare_frame(captured[0],values)
             return {'width':128,'height':64,'format':'1bpp-msb','pixels':base64.b64encode(image.tobytes()).decode(),
@@ -118,7 +129,7 @@ class Settings:
     def export(self):
         document=self.configuration.read()
         if not document['healthy']:raise ConfigError('Configuration non exportable : valeurs sûres de secours actives.',409)
-        return {'format':'pikvm-portable-settings','schema_version':1,'values':document['values']}
+        return {'format':'pikvm-portable-settings','schema_version':VERSION,'values':document['values']}
 
     def integrity(self):
         try:
@@ -138,10 +149,11 @@ class Settings:
     def import_config(self,data):
         if not isinstance(data,dict) or set(data)!={'expected_revision','confirmed','config'}:raise ConfigError('Import invalide.')
         document=data['config']
-        if not isinstance(document,dict) or set(document)!={'format','schema_version','values'} or document['format']!='pikvm-portable-settings' or type(document['schema_version']) is not int or document['schema_version']!=1:
+        if not isinstance(document,dict) or set(document)!={'format','schema_version','values'} or document['format']!='pikvm-portable-settings' or type(document['schema_version']) is not int or document['schema_version'] not in (1,VERSION):
             raise ConfigError('Format ou version d’import non pris en charge.')
         if data['confirmed'] is not True:raise ConfigError('Confirmation d’import requise.',409)
-        return self.apply({**{k:data[k] for k in ('expected_revision','confirmed')},'values':document['values']})
+        imported=migrate_rc11(document['values']) if document['schema_version']==1 else document['values']
+        return self.apply({**{k:data[k] for k in ('expected_revision','confirmed')},'values':imported})
 
     def activity(self,data):
         if not isinstance(data,dict) or set(data)!={'source'}:raise ConfigError('Activité invalide.')
