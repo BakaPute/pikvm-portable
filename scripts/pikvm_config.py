@@ -207,6 +207,27 @@ class Store:
                 return self.read()
 
 
+async def pst_write(make_client, writer, transient, sleep=None):
+    """Reacquire a refused lease during PST's RO/RW handover, never write denied.
+
+    KVMD 4.213 PstClient raises on a storage/write_allowed=False event. A new
+    session may see the previous session's RO transition. Only pre-yield refusals
+    are retried; after entering the writer, errors are final (commit may exist).
+    """
+    if sleep is None:
+        import asyncio
+        sleep=asyncio.sleep
+    for attempt in range(7):
+        entered=False
+        try:
+            async with make_client().writable() as path:
+                entered=True
+                return writer(Path(path))
+        except transient:
+            if entered or attempt==6:raise
+            await sleep(min(2,.1*2**attempt))
+
+
 class Configuration:
     def __init__(self,path=None):
         self.override=path
@@ -223,12 +244,15 @@ class Configuration:
         async def commit():
             # Native KVMD config resolves overridden PST sockets; no new dependency.
             from kvmd.apps import init
+            from kvmd.clients.pst import PstError
             app=init(prog='pikvm-portable-settings')
-            async with app.make_pst_client('portable-os','PiKVM-Portable-OS').writable() as path:
+            def write(path):
                 target=pst_path()
                 if Path(path).resolve()!=target.parent.resolve():raise ConfigError('Correspondance PST incohérente.',503)
                 return Store(target).save(values,expected,confirmed,reset)
-        try:return asyncio.run(commit())
+            return await pst_write(lambda:app.make_pst_client('portable-os','PiKVM-Portable-OS'),write,PstError)
+        try:
+            with WRITE_LOCK:return asyncio.run(commit())
         except ConfigError:raise
         except Exception:raise ConfigError('Écriture PST refusée ou indisponible ; aucune configuration système modifiée.',503) from None
 

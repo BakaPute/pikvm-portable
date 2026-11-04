@@ -88,6 +88,12 @@ native et son socket effectif. Aucun remount racine ou MSD. Références primair
 [résolution fstab](https://github.com/pikvm/kvmd/blob/v4.213/kvmd/fstab.py).
 
 Écriture temporaire exclusive, fsync, remplacement atomique et fsync du répertoire.
+Le test réel a révélé qu’un bail natif suivant immédiatement la fermeture d’un
+autre peut recevoir l’ancien événement RO `write_allowed=False`. RC11 sérialise
+ses transactions et reprend un nouveau bail au maximum sept fois avec attente
+bornée (0,1 à 2 s), uniquement **avant** l’entrée dans l’écrivain. Aucun refus
+n’autorise une écriture ; une erreur après entrée dans l’écrivain n’est jamais
+rejouée automatiquement. Un refus persistant reste une erreur 503.
 Pas d’écriture si les valeurs ne changent pas ; seuls les boutons explicites
 enregistrent. Historique limité à 20 entrées et à 16 Kio avec le document complet.
 Métadonnées d’activité et d’inactivité uniquement en tmpfs. Les lecteurs OLED/bouton

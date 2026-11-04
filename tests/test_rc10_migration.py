@@ -93,7 +93,8 @@ LOCAL_FIX = 'unchanged'
 
     def test_low_space_refuses_update_before_stopping_or_snapshotting(self):
         helper = portable.helper()
-        with patch.object(portable, 'oled_preflight'), \
+        with tempfile.TemporaryDirectory() as directory, patch.object(helper,'BACKUPS',Path(directory)/'backups'), \
+             patch.object(portable, 'oled_preflight'), \
              patch.object(portable, 'policy_preflight', return_value=(b'', False)), \
              patch.object(portable.shutil, 'disk_usage', return_value=SimpleNamespace(free=0)), \
              patch.object(helper, 'snapshot') as snapshot, patch.object(helper, 'run') as commands:

@@ -1,5 +1,7 @@
 """RC11 policy, persistence and authenticated API. Synthetic files only."""
 import base64
+import asyncio
+import contextlib
 import copy
 import json
 from pathlib import Path
@@ -165,15 +167,54 @@ class OledPreferenceTests(unittest.TestCase):
         self.assertNotIn('pinctrl set',source)
 
     def test_status_short_customization_long_menu_and_cancelled_gpio(self):
+        class EndLoop(Exception):pass
+        def sleep(delay):
+            if delay==.2:raise EndLoop()
         for held,cancelled,opens in ((.2,False,False),(2.,False,True),(5.,True,False)):
             menu=script('pikvm-button-menu');values=config.defaults();values['button_short']='battery'
             with patch.object(menu,'button_down',side_effect=[True,False]),patch.object(menu.HOTSPOT_STATE.__class__,'exists',return_value=False), \
                  patch.object(menu.CONFIG,'get',return_value=values),patch.object(menu,'INPUT',SimpleNamespace(start=lambda:(),duration=lambda _:held,cancelled=lambda _:cancelled)), \
                  patch.object(menu,'run_menu') as open_menu,patch.object(menu,'activity_event') as event, \
-                 patch.object(menu.time,'sleep',side_effect=lambda delay:(_ for _ in ()).throw(StopIteration()) if delay==.2 else None):
-                with self.assertRaises(StopIteration):menu.button_loop()
+                 patch.object(menu.time,'sleep',side_effect=sleep):
+                with self.assertRaises(EndLoop):menu.button_loop()
                 self.assertEqual(open_menu.called,opens)
                 self.assertEqual(event.called,not cancelled and not opens)
+
+
+class PstHandoverTests(unittest.TestCase):
+    def make_client(self,failures,after_yield=False):
+        calls=[]
+        class Refused(Exception):pass
+        @contextlib.asynccontextmanager
+        async def writable():
+            calls.append(True)
+            if len(calls)<=failures:raise Refused('Write is not allowed')
+            yield '/synthetic/pst/portable-os'
+            if after_yield:raise Refused('Lease lost after writer')
+        return lambda:SimpleNamespace(writable=writable),Refused,calls
+
+    def test_ro_transition_is_reacquired_before_any_writer_runs(self):
+        factory,refused,calls=self.make_client(2);writer=Mock(return_value='saved');delays=[]
+        async def sleep(delay):delays.append(delay)
+        result=asyncio.run(config.pst_write(factory,writer,refused,sleep))
+        self.assertEqual(result,'saved');self.assertEqual(len(calls),3);writer.assert_called_once();self.assertEqual(delays,[.1,.2])
+
+    def test_persistent_denial_is_bounded_and_fail_closed(self):
+        factory,refused,calls=self.make_client(100);writer=Mock()
+        async def sleep(_):pass
+        with self.assertRaises(refused):asyncio.run(config.pst_write(factory,writer,refused,sleep))
+        self.assertEqual(len(calls),7);writer.assert_not_called()
+
+    def test_error_after_writer_never_replays_a_potential_commit(self):
+        factory,refused,calls=self.make_client(0,after_yield=True);writer=Mock()
+        with self.assertRaises(refused):asyncio.run(config.pst_write(factory,writer,refused))
+        self.assertEqual(len(calls),1);writer.assert_called_once()
+
+    def test_validation_or_io_errors_are_not_retried(self):
+        for error in (config.ConfigError('path mismatch'),OSError('synthetic write failure')):
+            factory,refused,calls=self.make_client(0);writer=Mock(side_effect=error)
+            with self.assertRaises(type(error)):asyncio.run(config.pst_write(factory,writer,refused))
+            self.assertEqual(len(calls),1)
 
 
 class IdlePolicyTests(unittest.TestCase):
