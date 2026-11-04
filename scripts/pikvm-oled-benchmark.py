@@ -7,7 +7,9 @@ from pathlib import Path
 import statistics
 import sys
 import time
-sys.path.insert(0,'/usr/local/lib/pikvm-portable')
+here=Path(__file__).resolve().parent
+# A staged candidate must measure its own renderer, even while RC11 is installed.
+sys.path.insert(0,str(here) if (here/'pikvm_config.py').is_file() else '/usr/local/lib/pikvm-portable')
 from pikvm_config import defaults,PAGES
 from pikvm_oled_ui import render_status,font
 from pikvm_oled_nav import preview_navigation

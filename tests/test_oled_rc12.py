@@ -129,6 +129,15 @@ class MigrationTests(unittest.TestCase):
 
 
 class ProducerTests(unittest.TestCase):
+    def test_staged_benchmark_ignores_an_old_module_on_pythonpath(self):
+        import os,subprocess
+        with tempfile.TemporaryDirectory() as directory:
+            path=Path(directory)/'pikvm_config.py';path.write_text("raise RuntimeError('old installed RC11 must not be imported')",encoding='utf-8')
+            env={**os.environ,'PYTHONPATH':directory}
+            result=subprocess.run([sys.executable,'-B',str(ROOT/'scripts/pikvm-oled-benchmark.py'),'--iterations','1'],env=env,capture_output=True,text=True,timeout=15)
+            self.assertEqual(result.returncode,0,result.stderr)
+            self.assertIn('iso-action',json.loads(result.stdout)['scenes'])
+
     def test_status_pixels_match_the_optional_device_and_web_frame_exactly(self):
         status=script('pikvm-oled-custom')
         with tempfile.TemporaryDirectory() as directory:
