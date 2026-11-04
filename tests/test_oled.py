@@ -45,7 +45,7 @@ class FrameTests(unittest.TestCase):
     def test_ssd1306_configuration_is_exactly_i2c_3c_128_by_64(self):
         serial, device = Mock(), Mock()
         with patch.dict(sys.modules, {'luma.core.interface.serial': Mock(i2c=serial),
-                                      'luma.oled.device': Mock(ssd1306=device)}):
+                                      'luma.oled.device': Mock(ssd1306=device),'luma.core.device':Mock()}):
             self.assertIs(oled.physical_device(), device.return_value)
         serial.assert_called_once_with(port=1, address=0x3C)
         device.assert_called_once_with(serial.return_value, width=128, height=64)

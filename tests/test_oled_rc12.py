@@ -129,6 +129,30 @@ class MigrationTests(unittest.TestCase):
 
 
 class ProducerTests(unittest.TestCase):
+    def test_absent_luma_init_closes_every_bus_and_does_not_retain_atexit_closures(self):
+        import gc,weakref
+        registry=Mock();core=SimpleNamespace(atexit=registry);buses=[];references=[]
+        class Partial:
+            def cleanup(self):pass
+        def serial(**_):
+            bus=Mock();buses.append(bus);return bus
+        def absent(*args,**kwargs):
+            device=Partial();references.append(weakref.ref(device))
+            core.atexit.register(lambda:device.cleanup())
+            raise OSError('SSD1306 absent')
+        with patch.dict(sys.modules,{'luma.core.interface.serial':Mock(i2c=serial),'luma.oled.device':Mock(ssd1306=absent),'luma.core.device':core}):
+            for _ in range(100):
+                with self.assertRaises(OSError):oled.physical_device()
+        gc.collect();self.assertTrue(all(ref() is None for ref in references))
+        self.assertIs(core.atexit,registry);registry.register.assert_not_called()
+        for bus in buses:bus.cleanup.assert_called_once()
+
+    def test_disconnect_closes_the_owned_bus_in_the_worker(self):
+        physical=Mock();physical.display.side_effect=OSError('disconnected')
+        output=oled.PhysicalOutput(lambda:physical,background=False)
+        output.offer(Image.new('1',(128,64)));output._attempt()
+        physical._portable_release.assert_called_once();self.assertIsNone(output.device)
+
     def test_staged_benchmark_ignores_an_old_module_on_pythonpath(self):
         import os,subprocess
         with tempfile.TemporaryDirectory() as directory:

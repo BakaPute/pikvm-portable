@@ -1,5 +1,6 @@
 """Shared OLED framebuffer, asynchronous telemetry and leased logical input."""
 import base64
+import importlib
 import contextlib
 import hashlib
 import json
@@ -212,7 +213,28 @@ def physical_device():
     # Optional and lazy: a missing luma package or display never stops the mirror.
     from luma.core.interface.serial import i2c
     from luma.oled.device import ssd1306
-    return ssd1306(i2c(port=1, address=0x3C), width=128, height=64)
+    core=importlib.import_module('luma.core.device')
+    registry=core.atexit;owner=threading.get_ident()
+    class OwnedExit:
+        def register(self,callback,*args,**kwargs):
+            # luma registers a closure holding self BEFORE initialization. Even
+            # unregister(self.cleanup) cannot remove that closure. This worker
+            # owns its lifetime; registrations from other threads still delegate.
+            if threading.get_ident()==owner:return callback
+            return registry.register(callback,*args,**kwargs)
+        def __getattr__(self,name):return getattr(registry,name)
+    serial=None;core.atexit=OwnedExit()
+    try:
+        serial=i2c(port=1,address=0x3C)
+        device=ssd1306(serial,width=128,height=64)
+        device._portable_release=serial.cleanup  # Bus close only; no GPIO or blanking command.
+        return device
+    except BaseException:
+        try:
+            if serial is not None:serial.cleanup()
+        except Exception:pass
+        raise
+    finally:core.atexit=registry
 
 
 class PhysicalOutput:
@@ -280,23 +302,31 @@ class PhysicalOutput:
         except Exception:
             # Keep the failed object alive until OUTSIDE the condition: driver
             # finalizers may themselves access I2C or block during cleanup.
-            failed_device = self.device
-            self.device = None
+            failed_device,self.device = self.device,None
             self.applied_contrast = None
             with self.condition:
                 self.state = 'disconnected'
                 self.retry_at = self.clock() + 30
-            del failed_device
+            self._release(failed_device)
         return True
 
+    @staticmethod
+    def _release(device):
+        release=getattr(device,'_portable_release',None)
+        if callable(release):
+            try:release()
+            except Exception:pass
+
     def _run(self):
-        while True:
-            if not self._attempt():
-                with self.condition:
-                    if self.closed:
-                        return
-                    # New frames wake this wait. A frozen screen also retries.
-                    self.condition.wait(timeout=.5)
+        try:
+            while True:
+                if not self._attempt():
+                    with self.condition:
+                        if self.closed:return
+                        # New frames wake this wait. A frozen screen also retries.
+                        self.condition.wait(timeout=.5)
+        finally:
+            self._release(self.device);self.device=None
 
     def close(self):
         with self.condition:
@@ -305,6 +335,8 @@ class PhysicalOutput:
         # Do not wait on a blocked I2C call or blank a screen owned by the menu.
         if self.thread is not None:
             self.thread.join(timeout=.1)
+        elif not self.background:
+            self._release(self.device);self.device=None
 
 
 def prepare_frame(image, values):

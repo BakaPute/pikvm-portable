@@ -12,6 +12,9 @@ Un seul processus (`pikvm-oled-custom`) produit le framebuffer monochrome
 rotation comprise, est envoyé au worker SSD1306 et au miroir Web. L’absence
 du périphérique I2C 0x3C n’arrête pas le rendu ; reconnexion asynchrone toutes
 les 30 secondes. Le canvas Web conserve un agrandissement sans interpolation.
+Les bus I2C sont fermés après échec d’initialisation/déconnexion. Les hooks de
+sortie luma du seul worker OLED sont remplacés par cette gestion explicite :
+une initialisation échouée ne conserve pas un écran partiel jusqu’à l’arrêt.
 
 Le processus bouton publie uniquement un petit modèle de navigation en mémoire
 volatile. Il ne dessine plus et n’arrête/redémarre plus le service OLED pour
