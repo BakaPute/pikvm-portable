@@ -188,6 +188,13 @@ progress { display:block; width:100%; margin:12px 0; accent-color:var(--accent);
 .workspace-footer { display:flex; justify-content:space-between; gap:16px; border-top:1px solid var(--line); padding-top:18px; margin-top:30px; color:var(--faint); font-size:10px; }
 .skip-link { position:fixed; top:-100px; left:15px; z-index:99; background:var(--surface); padding:12px; }
 .skip-link:focus { top:10px; }
+.kvm-native-dialog [data-native-id="pkdf-panel"] { display:grid; gap:12px; min-width:0; }
+.kvm-native-dialog [data-native-id="pkdf-crumbs"] { display:flex; flex-wrap:wrap; align-items:center; gap:6px; }
+.kvm-native-dialog [data-native-id="pkdf-items"] { display:grid; gap:6px; }
+.kvm-native-dialog [data-native-id="pkdf-items"]>button { display:flex; align-items:center; width:100%; gap:10px; text-align:left; min-height:44px; }
+.kvm-native-dialog .pkdf-name { flex:1; min-width:0; overflow-wrap:anywhere; }
+.kvm-native-dialog .pkdf-meta { color:var(--muted); font-size:12px; }
+.kvm-native-dialog .pkdf-current { border-color:var(--accent); }
 .menu-toggle { display:none; }
 [hidden] { display:none !important; }
 @media (max-width:1200px) { .stats { grid-template-columns:repeat(2,minmax(0,1fr)); } .dashboard-grid { grid-template-columns:1fr; } .preview { min-height:330px; } .stack { display:grid; grid-template-columns:1fr 1fr; gap:20px; } .stack .card { margin:0; } }

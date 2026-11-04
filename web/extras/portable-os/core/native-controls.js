@@ -4,6 +4,7 @@ import {el} from './ui.js';
 // Source nodes, listeners and window-manager ownership never leave the iframe.
 export function projectControls(source, {activate, enabled=()=>true, allowed=()=>true, rootVisible=true}={}) {
     const nodes=new WeakMap();let serial=0;
+    const radioGroup='native-radio-'+Math.random().toString(36).slice(2)+'-';
     const win=source.ownerDocument.defaultView;
     const blocked=node=>!allowed()||node.disabled||node.readOnly||!!node.closest('.feature-disabled')||(!enabled()&&!node.closest('.window-header,[data-wm-window-close]')&&
         !!node.closest('#keyboard-window,#mouse-window,[data-keyboard-shortcut],#hid-recorder-play,#hid-recorder-record,#hid-pak-button'));
@@ -20,6 +21,8 @@ export function projectControls(source, {activate, enabled=()=>true, allowed=()=
         target.className=['input','textarea','select'].includes(tag)?'native-field':
             tag==='button'?'quiet':tag==='table'?'native-fields':tag==='div'?'native-group':'';
         if(node.id)target.dataset.nativeId=node.id;
+        for(const name of ['pkdf-name','pkdf-icon','pkdf-meta','pkdf-current'])
+            if(node.classList.contains(name))target.classList.add(name);
         if(led){target.dataset.nativeLed='gray';target.setAttribute('role','status');}
         if(keypad)target.dataset.nativeKey=node.getAttribute('data-keypad-code');
         if(node.classList.contains('keypad-row'))target.classList.add('native-keys');
@@ -31,7 +34,12 @@ export function projectControls(source, {activate, enabled=()=>true, allowed=()=
             target.id='native-proxy-'+(++serial)+'-'+Math.random().toString(36).slice(2,7);
             const label=Array.from(node.labels||[],n=>n.textContent.trim()).filter(Boolean).join(' ')||node.closest('tr')?.querySelector('td')?.textContent.trim();
             target.setAttribute('aria-label',node.getAttribute('aria-label')||(keypad?node.textContent.trim():'')||label||node.title||node.textContent.trim()||node.name||node.id||tag);
-            if(tag==='input')target.type=node.type;
+            if(tag==='input'){
+                target.type=node.type;
+                // Keep native radio exclusivity without joining another projected
+                // panel's groups. Native names/values and callbacks stay untouched.
+                if(node.type==='radio'&&node.name)target.name=radioGroup+node.name;
+            }
             if(tag==='button') {
                 target.type='button';
                 let down=false;

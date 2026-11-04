@@ -34,7 +34,7 @@ export function nativeFrameModule({id, title, subtitle, icon, source}) {
                         if (id === 'kvm') {
                             adapter = adaptKvm(frame, fullscreen, size=>{
                                 wrapper.style.setProperty('--kvm-ratio',`${size.width} / ${size.height}`);
-                            });
+                            }, context);
                             frame.after(adapter.controls,adapter.panel);
                         }
                         frame.style.visibility = 'visible'; frame.style.display = 'block';

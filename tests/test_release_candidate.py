@@ -35,11 +35,16 @@ class CandidateTests(unittest.TestCase):
                     if relative != 'MANIFEST.sha256':
                         self.assertEqual(hashlib.sha256(archive.extractfile(entry).read()).hexdigest(), entries[relative])
                 for path in ('scripts/pikvm_transfer.py', 'scripts/wifi-wizard-api',
-                             'scripts/pikvm-share-api', 'scripts/pikvm-python-integrity.sh'):
+                             'scripts/pikvm-share-api', 'scripts/pikvm-python-integrity.sh',
+                             'web/extras/portable-os/core/kvm-share-panel.js',
+                             'web/extras/portable-os/core/kvm-adapter.js'):
                     self.assertIn(path, entries)
+                version = json.loads((ROOT / 'web/extras/portable-os/package.json').read_text())['version']
+                self.assertEqual(loader.RELEASE, 'pikvm-portable-os-' + version)
             self.assertNotIn(b'\r', first.with_name(first.name + '.sha256').read_bytes())
             self.assertTrue(any(name.endswith('/MANIFEST.sha256') for name in names))
             self.assertFalse(any('/private/' in name or name.endswith('.img') or '.git/' in name for name in names))
+            self.assertFalse(any('/tests/' in name for name in names), 'Native browser fixtures must stay off the Pi')
 
     def test_unauthenticated_success_is_never_considered_ready(self):
         connection = Mock()

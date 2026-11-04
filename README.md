@@ -237,6 +237,10 @@ contrôlée. [Audit, tests, limites matérielles et déploiement/retour arrière
 **RC10.1** allège le précontrôle et diagnostique les attentes sous pression mémoire :
 [sondes, délais conditionnels, tests et mise à jour](docs/portable-os-rc10.1.md).
 
+**RC10.2** corrige le navigateur ISO dans la console native et ajoute le panneau
+« Clé USB » en lecture seule. [Candidate, tests KVMD 4.213 sur données simulées,
+validation matérielle encore requise et mise à jour/retour arrière](docs/portable-os-rc10.2.md).
+
 Sur un Pi existant, utiliser l'installateur additif `install-portable-os.sh`, après
 autorisation. Le bootstrap `install.sh --initial-hardware-setup` configure le
 matériel et le démarrage : réservé à une installation initiale explicitement revue,

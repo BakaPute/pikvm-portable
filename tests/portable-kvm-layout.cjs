@@ -27,20 +27,25 @@ const fs=require('node:fs');
             assert.ok(controls.y>=first.y+first.height-1,'Controls must be below video');
             assert.ok(Math.abs(first.width/first.height-16/9)<.01,'Actual stream ratio must be preserved');
             assert.equal(await kvm.locator('.kvm-subpanel').isVisible(),false);
-            const names=['Drive 0','ATX','Raccourcis','Macros','Texte','Vidéo & HID'];
+            const names=['Lecteur ISO','Clé USB','ATX','Raccourcis','Macros','Texte','Vidéo & HID'];
             for(let cycle=0;cycle<3;cycle++){
                 for(const title of names){
                     const button=kvm.getByRole('button',{name:title,exact:true});
                     await button.click();await assertSize();
                     assert.equal(await button.getAttribute('aria-expanded'),'true');
                     assert.equal(await kvm.locator('.kvm-controls button[aria-expanded=true]').count(),1);
-                    const bar=await kvm.locator('.kvm-controls').boundingBox(),panel=await kvm.locator('.kvm-subpanel').boundingBox();
-                    assert.ok(panel.y>=bar.y+bar.height-1,'Panel must be below controls');
+                    // Sample both rectangles in the same layout frame: async SHARE
+                    // telemetry can change document height between protocol calls.
+                    const {bar,panel}=await kvm.evaluate(node=>{
+                        const rect=selector=>{const r=node.querySelector(selector).getBoundingClientRect();return {y:r.y,height:r.height};};
+                        return {bar:rect('.kvm-controls'),panel:rect('.kvm-subpanel')};
+                    });
+                    assert.ok(panel.y>=bar.y+bar.height-1,`${name}/${title}: panel below controls ${JSON.stringify({bar,panel})}`);
                 }
                 await kvm.getByRole('button',{name:'Vidéo & HID',exact:true}).click();
                 assert.equal(await kvm.locator('.kvm-subpanel').isVisible(),false);await assertSize();
             }
-            const drive=kvm.getByRole('button',{name:'Drive 0',exact:true});await drive.hover();
+            const drive=kvm.getByRole('button',{name:'Lecteur ISO',exact:true});await drive.hover();
             const beforeScroll=await page.evaluate(()=>scrollY);await drive.click();
             assert.ok(Math.abs(await page.evaluate(()=>scrollY)-beforeScroll)<1,'Opening must not impose scrolling');
             assert.equal(await kvm.locator('.native-notice td[rowspan="2"]').count(),1,'Preserve native table spans');

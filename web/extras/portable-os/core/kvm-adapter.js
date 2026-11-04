@@ -2,11 +2,12 @@ import {el, button} from './ui.js';
 import {releaseNativeInput} from './native-bridge.js';
 import {projectControls} from './native-controls.js';
 import {streamSize} from './stream-size.js';
+import {sharePanel} from './kvm-share-panel.js';
 export const nativeMenus = Object.freeze({
-    'msd-dropdown':'Drive 0','atx-dropdown':'ATX','shortcuts-dropdown':'Raccourcis',
+    'msd-dropdown':'Lecteur ISO','atx-dropdown':'ATX','shortcuts-dropdown':'Raccourcis',
     'macro-dropdown':'Macros','text-dropdown':'Texte','system-dropdown':'Vidéo & HID',
 });
-export function adaptKvm(frame, fullscreen, onSize=()=>{}) {
+export function adaptKvm(frame, fullscreen, onSize=()=>{}, context) {
     const doc=frame.contentDocument,win=frame.contentWindow,stream=doc.getElementById('stream-window');
     if(['navbar','stream-window','hid-mute-switch',...Object.keys(nativeMenus)].some(id=>!doc.getElementById(id))||
         !stream.querySelector('[data-wm-window-set-full-tab]')||
@@ -29,6 +30,13 @@ export function adaptKvm(frame, fullscreen, onSize=()=>{}) {
     const close=button('Fermer',()=>closePanel(),'quiet');
     panel.append(el('div',{class:'row'},heading,close),body);
     const toolbarButtons=[];
+    const usb=sharePanel(context);
+    const usbControl=button('Clé USB',()=>{
+        if(selectedMenu==='share'&&!panel.hidden){closePanel();return;}
+        closePanel();releaseNativeInput(frame);selectedMenu='share';
+        heading.textContent='Clé USB · PIKVM-SHARE';body.replaceChildren(usb.root);panel.hidden=false;
+        usb.open();syncSelected();
+    },'quiet',{'data-kvm-menu':'share','aria-expanded':'false','aria-controls':'kvm-control-panel'});
     function activate(node){
         if(!active)return true;
         if(node.hasAttribute('data-wm-window-close')){node.click();closePanel();return true;}
@@ -42,6 +50,7 @@ export function adaptKvm(frame, fullscreen, onSize=()=>{}) {
     }
     function openPanel(node,title){
         if(!active)return;
+        usb.close();
         releaseNativeInput(frame);
         if(source!==node&&source?.classList.contains('window')&&!source.classList.contains('hidden'))source.querySelector('[data-wm-window-close]')?.click();
         source=node;projection=projectControls(node,{activate,enabled:captured,allowed:()=>active});
@@ -49,11 +58,13 @@ export function adaptKvm(frame, fullscreen, onSize=()=>{}) {
         syncSelected();
     }
     function closePanel(){
+        usb.close();
         if(source?.classList.contains('window')&&!source.classList.contains('hidden'))source.querySelector('[data-wm-window-close]')?.click();
         source=null;projection=null;selectedMenu=null;body.replaceChildren();panel.hidden=true;
         syncSelected();
     }
-    function syncSelected(){for(const [control,native]of toolbarButtons)control.setAttribute('aria-expanded',String(!panel.hidden&&selectedMenu===native.id));}
+    function syncSelected(){for(const [control,native]of toolbarButtons)control.setAttribute('aria-expanded',String(!panel.hidden&&selectedMenu===native.id));
+        usbControl.setAttribute('aria-expanded',String(!panel.hidden&&selectedMenu==='share'));}
     for(const [id,title] of Object.entries(nativeMenus)){
         const native=doc.getElementById(id);
         const control=button(title,()=>{
@@ -62,6 +73,7 @@ export function adaptKvm(frame, fullscreen, onSize=()=>{}) {
             selectedMenu=id;openPanel(native.querySelector('.menu'),title);
         },'quiet',{'data-kvm-menu':id,'aria-expanded':'false','aria-controls':'kvm-control-panel'});
         controls.append(control);toolbarButtons.push([control,native]);
+        if(id==='msd-dropdown')controls.append(usbControl);
     }
     function setEnabled(value,focus=false){
         if(!value){const stop=doc.getElementById('hid-recorder-stop');if(stop&&!stop.disabled)stop.click();}
@@ -89,17 +101,27 @@ export function adaptKvm(frame, fullscreen, onSize=()=>{}) {
         if(event.code==='Escape'&&event.ctrlKey&&event.shiftKey){event.preventDefault();event.stopImmediatePropagation();setEnabled(false);toggle.focus();}
     },true);
     const openedWindows=new WeakSet();
+    function closeNativeModal(){
+        const chooser=doc.getElementById('pkdf-panel');if(chooser)chooser.hidden=true;
+        nativeModal?.querySelector('[data-x-wm-modal-cancel]')?.click();
+    }
     function syncModal(){
-        const current=Array.from(doc.querySelectorAll('.modal')).find(node=>!node.classList.contains('hidden'));
+        // The folder browser is owned by the native page, but its overlay lives
+        // outside #msd-menu (and is hidden by the embedded KVM stylesheet).
+        // Project only this known widget; keep its listeners and API guards native.
+        const chooser=doc.querySelector('#pkdf-overlay:not([hidden]) > #pkdf-panel:not([hidden])');
+        const current=active?(Array.from(doc.querySelectorAll('.modal')).find(node=>!node.classList.contains('hidden'))||chooser):null;
         if(parentModal&&(!current||current!==nativeModal||!current.isConnected)){
             parentModal.close();parentModal.remove();parentModal=null;modalProjection=null;nativeModal=null;
         }
         if(current&&!parentModal&&!document.querySelector('dialog[open]')){
+            const choosing=current===chooser;
+            const cancel=()=>{if(choosing)current.hidden=true;else current.querySelector('[data-x-wm-modal-cancel]')?.click();};
             nativeModal=current;
             modalProjection=projectControls(current,{activate,enabled:captured,allowed:()=>active});
-            parentModal=el('dialog',{class:'kvm-native-dialog','aria-label':'Confirmation KVMD',oncancel:event=>{
-                event.preventDefault();current.querySelector('[data-x-wm-modal-cancel]')?.click();
-            }},modalProjection.root);
+            parentModal=el('dialog',{class:'kvm-native-dialog','aria-label':choosing?'Choisir une image ISO':'Confirmation KVMD',oncancel:event=>{
+                event.preventDefault();cancel();
+            }},...(choosing?[el('div',{class:'row'},el('h2',{},'Choisir une image ISO'),button('Fermer le sélecteur',cancel,'quiet'))]:[]),modalProjection.root);
             document.getElementById('dialogs').append(parentModal);parentModal.showModal();
         }
         modalProjection?.sync();
@@ -110,6 +132,7 @@ export function adaptKvm(frame, fullscreen, onSize=()=>{}) {
         leds.forEach(binding=>binding.sync());
         toggle.textContent=captured()?'Désactiver clavier / souris':'Activer clavier / souris';
         toggle.setAttribute('aria-pressed',String(captured()));toggle.disabled=!active;
+        usbControl.disabled=!active;
         for(const [control,native]of toolbarButtons)control.disabled=!active||native.classList.contains('feature-disabled');
         for(const node of doc.querySelectorAll('.window:not(#stream-window):not(#stream-ocr-window)')){
             if(node.classList.contains('hidden')){openedWindows.delete(node);continue;}
@@ -136,9 +159,9 @@ export function adaptKvm(frame, fullscreen, onSize=()=>{}) {
     });
     schedule();
     return {controls,panel,enable:()=>setEnabled(true,true),
-        suspend(){setEnabled(false);active=false;clearInterval(interval);interval=null;closePanel();nativeModal?.querySelector('[data-x-wm-modal-cancel]')?.click();sync();},
+        suspend(){setEnabled(false);active=false;clearInterval(interval);interval=null;closePanel();closeNativeModal();sync();},
         resume(){active=true;schedule();sync();},
         destroy(){setEnabled(false);active=false;clearInterval(interval);listeners.forEach(fn=>fn());closePanel();
-            nativeModal?.querySelector('[data-x-wm-modal-cancel]')?.click();parentModal?.close();parentModal?.remove();controls.remove();panel.remove();},
+            closeNativeModal();parentModal?.close();parentModal?.remove();controls.remove();panel.remove();},
     };
 }
