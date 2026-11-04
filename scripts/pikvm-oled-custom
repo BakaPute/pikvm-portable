@@ -11,6 +11,8 @@ import time
 import sys
 sys.path.insert(0, "/usr/local/lib/pikvm-portable")
 from pikvm_oled import MirrorDevice, canvas, AsyncCache
+from pikvm_config import READER as CONFIG, PageRotation
+from pikvm_activity import latest, RUNTIME
 
 
 OLED_ADDR = 0x3C
@@ -434,7 +436,7 @@ def page_main(device, remaining):
     soc, voltage = battery()
     charging = battery_charging()
     ssid, dbm = wifi()
-    ip = ip_address()
+    ip = ip_address() if CONFIG.get()['oled_show_ip'] else '-'
     level = wifi_level(dbm)
 
     if soc is None:
@@ -704,98 +706,43 @@ def main():
         globals()[name] = cache.wrap(globals()[name], default, interval=1)
     device = MirrorDevice("status")
 
-    base_pages = [
-        page_main,
-        page_battery,
-        page_system
-    ]
-
-    page = 0
-    last_page = time.monotonic()
-    last_transfer_phase = None
-    last_render = None
+    rotation=PageRotation()
+    renderers={'main':page_main,'battery':page_battery,'system':page_system,'transfer':page_usb_transfer}
+    last_render=None
+    last_request=0
 
     while True:
         try:
             now = time.monotonic()
 
-            transfer = transfer_info()
-
-            transfer_active = bool(
-                transfer.get("active")
-            )
-
-            transfer_phase = (
-                transfer.get("state")
-                if transfer_active
-                else None
-            )
-
-            pages = list(
-                base_pages
-            )
-
-            if transfer_active:
-                pages.append(
-                    page_usb_transfer
-                )
-
-            # Affiche immédiatement la page USB
-            # lorsqu'un transfert ou un import commence.
-            if (
-                transfer_active
-                and transfer_phase
-                != last_transfer_phase
-            ):
-                page = len(base_pages)
-                last_page = now
-
-            # Dès que le transfert/import est terminé,
-            # la quatrième page disparaît.
-            elif (
-                not transfer_active
-                and page >= len(base_pages)
-            ):
-                page = 0
-                last_page = now
-
-            if now - last_page >= PAGE_DURATION:
-                page = (
-                    page + 1
-                ) % len(pages)
-
-                last_page = now
-
-            if page >= len(pages):
-                page = 0
-                last_page = now
-
-            elapsed = (
-                now - last_page
-            )
-
-            remaining = max(
-                1,
-                int(
-                    PAGE_DURATION
-                    - elapsed
-                    + 0.999
-                )
-            )
-
-            device.set_context(screen="status", page=pages[page].__name__, remaining=remaining)
-            # Countdown ticks still run every second. Async results trigger an
-            # extra draw at the next 100ms loop, without polling inactive readers.
-            render_key = (pages[page], remaining, cache.revision)
-            if render_key != last_render:
-                pages[page](device, remaining)
-                last_render = render_key
-            else:
-                device.refresh()
-
-            last_transfer_phase = (
-                transfer_phase
-            )
+            values=CONFIG.get()
+            transfer=transfer_info()
+            percent,_=battery()
+            request=latest('button')
+            command=None
+            if request and request['monotonic']>last_request:
+                last_request=request['monotonic'];command=request.get('request')
+            urgent=transfer.get('state') in ('importing','preparing','starting','stopping','error')
+            page,remaining=rotation.choose(values,now,bool(transfer.get('active')),percent,command,critical_transfer=urgent)
+            idle={}
+            try:
+                path=RUNTIME/'idle.json'
+                if not path.is_symlink() and path.stat().st_size<4096:
+                    idle=json.loads(path.read_text())
+                    if not 0<=now-idle.get('monotonic',0)<=15:idle={}
+            except (OSError,ValueError,TypeError):pass
+            idle_action=idle.get('action','none')
+            # Critical battery and transfer information always override blanking.
+            if urgent or transfer.get('active') or (percent is not None and percent<=values['battery_low']):idle_action='none'
+            device.set_context(screen='status',page='page_'+page,remaining=remaining,idle=idle_action)
+            render_key=(page,remaining,cache.revision,CONFIG.revision,idle_action)
+            if render_key!=last_render:
+                if idle_action in ('off','screen'):
+                    with canvas(device) as draw:
+                        if idle_action=='screen':draw.text((0,24),'PiKVM inactif',fill='white')
+                else:renderers[page](device,remaining)
+                last_render=render_key
+            else:device.refresh()
 
         except Exception as e:
             device.set_context(screen='error', error_type=type(e).__name__)

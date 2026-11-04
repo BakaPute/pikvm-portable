@@ -3,6 +3,7 @@ import {releaseNativeInput} from './native-bridge.js';
 import {projectControls} from './native-controls.js';
 import {streamSize} from './stream-size.js';
 import {sharePanel} from './kvm-share-panel.js';
+import {activity,values} from './configuration.js';
 export const nativeMenus = Object.freeze({
     'msd-dropdown':'Lecteur ISO','atx-dropdown':'ATX','shortcuts-dropdown':'Raccourcis',
     'macro-dropdown':'Macros','text-dropdown':'Texte','system-dropdown':'Vidéo & HID',
@@ -14,7 +15,7 @@ export function adaptKvm(frame, fullscreen, onSize=()=>{}, context) {
         Object.keys(nativeMenus).some(id=>!doc.getElementById(id).querySelector('.menu')))
         throw new Error('Structure KVM incompatible : adaptation interrompue. Ouvrir le KVM de secours.');
     let enabled=false,active=true,projection,source,modalProjection,nativeModal,parentModal;
-    let selectedMenu=null,lastSize='';
+    let selectedMenu=null,lastSize='',lastPresence=0;
     const listeners=[];
     const on=(target,type,fn,options)=>{target.addEventListener(type,fn,options);listeners.push(()=>target.removeEventListener(type,fn,options));};
     const mute=doc.getElementById('hid-mute-switch');
@@ -127,6 +128,7 @@ export function adaptKvm(frame, fullscreen, onSize=()=>{}, context) {
         modalProjection?.sync();
     }
     function sync(){
+        if(context&&active&&!document.hidden&&Date.now()-lastPresence>=10000){lastPresence=Date.now();activity(context,'kvm_presence');}
         const size=streamSize(doc);
         if(size&&`${size.width}x${size.height}`!==lastSize){lastSize=`${size.width}x${size.height}`;onSize(size);}
         leds.forEach(binding=>binding.sync());
@@ -158,10 +160,22 @@ export function adaptKvm(frame, fullscreen, onSize=()=>{}, context) {
         schedule();
     });
     schedule();
+    let preferenceKey='';
+    let initialApplied=false;
+    const configure=()=>{
+        const config=values(context.store),key=JSON.stringify([config.kvm_order,config.kvm_hidden,config.kvm_fit]);
+        if(key===preferenceKey)return;preferenceKey=key;
+        for(const id of config.kvm_order||[]){const control=controls.querySelector(`[data-kvm-menu="${id}"]`);if(control){control.hidden=(config.kvm_hidden||[]).includes(id);controls.append(control);}}
+        for(const node of doc.querySelectorAll('#stream-image,#stream-video,#stream-canvas'))node.style.setProperty('object-fit',config.kvm_fit==='cover'?'cover':'contain','important');
+        if(!initialApplied&&config.kvm_default_panel){initialApplied=true;
+            if(config.kvm_default_panel!=='none')controls.querySelector(`[data-kvm-menu="${config.kvm_default_panel}"]`)?.click();}
+    };
+    const unsubscribe=context?.store.subscribe(configure);
+    if(context)configure();
     return {controls,panel,enable:()=>setEnabled(true,true),
         suspend(){setEnabled(false);active=false;clearInterval(interval);interval=null;closePanel();closeNativeModal();sync();},
         resume(){active=true;schedule();sync();},
-        destroy(){setEnabled(false);active=false;clearInterval(interval);listeners.forEach(fn=>fn());closePanel();
+        destroy(){setEnabled(false);active=false;clearInterval(interval);unsubscribe?.();listeners.forEach(fn=>fn());closePanel();
             closeNativeModal();parentModal?.close();parentModal?.remove();controls.remove();panel.remove();},
     };
 }

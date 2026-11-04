@@ -1,0 +1,266 @@
+"""RC11 policy, persistence and authenticated API. Synthetic files only."""
+import base64
+import copy
+import json
+from pathlib import Path
+import sys
+import tempfile
+import threading
+from types import SimpleNamespace
+import unittest
+from unittest.mock import patch,Mock
+
+sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'scripts'))
+import pikvm_config as config
+from pikvm_settings import Settings
+import test_portable_os as integration
+from test_oled import script
+import pikvm_oled as oled
+from PIL import Image
+
+
+class ConfigurationTests(unittest.TestCase):
+    def setUp(self):
+        self.temp=tempfile.TemporaryDirectory();self.addCleanup(self.temp.cleanup)
+        self.path=Path(self.temp.name)/'settings.json';self.store=config.Store(self.path)
+
+    def write_private(self,value):
+        self.path.write_text(value);self.path.chmod(0o600)
+
+    def test_defaults_and_both_numeric_boundaries(self):
+        self.assertFalse(config.defaults()['idle_enabled'])
+        config.validate(config.defaults())
+        for key,spec in config.FIELDS.items():
+            if spec['minimum'] is None:continue
+            for number in (spec['minimum']-1,spec['maximum']+1,True,1.1,'2'):
+                values=config.defaults();values[key]=number
+                with self.subTest(key=key,value=number),self.assertRaises(config.ConfigError):config.validate(values)
+
+    def test_strict_schema_rejects_unknown_commands_and_paths(self):
+        for key,value in [('gpio17',False),('shell','reboot'),('theme','pink'),('iso_favorite','../escape'),('iso_favorite','/root'),('iso_favorite','a//b'),('kvm_order',['share']),('oled_pages',[]),('kvm_hidden',['poweroff'])]:
+            values=config.defaults();values[key]=value
+            with self.subTest(key=key),self.assertRaises(config.ConfigError):config.validate(values)
+
+    def test_duplicate_pages_and_all_disabled_and_thresholds(self):
+        for mutate in (lambda v:v['oled_pages'].__setitem__(1,copy.deepcopy(v['oled_pages'][0])),
+                       lambda v:[p.update(enabled=False) for p in v['oled_pages']],
+                       lambda v:v.update(battery_low=10,battery_critical=20),
+                       lambda v:v.update(idle_first_seconds=3600,idle_shutdown_seconds=60)):
+            values=config.defaults();mutate(values)
+            with self.assertRaises(config.ConfigError):config.validate(values)
+
+    def test_noop_and_history_are_bounded_and_revision_checked(self):
+        values=config.defaults();first=self.store.save(values,0)
+        self.assertEqual(first['revision'],0);self.assertFalse(self.path.exists())
+        for i in range(25):
+            values['oled_contrast']=i
+            result=self.store.save(values,i)
+        self.assertEqual(result['revision'],25);self.assertEqual(len(result['history']),20)
+        with self.assertRaises(config.ConfigError):self.store.save(values,0)
+        self.assertNotIn('password',self.path.read_text())
+
+    def test_repeated_full_resets_cannot_grow_beyond_reader_limit(self):
+        for i in range(30):
+            result=self.store.save(config.defaults(),i,True,reset=True)
+            self.assertTrue(result['healthy']);self.assertLessEqual(self.path.stat().st_size,config.MAX_BYTES)
+
+    def test_sensitive_changes_and_reset_need_confirmation(self):
+        values=config.defaults();values['idle_enabled']=True
+        with self.assertRaises(config.ConfigError):self.store.save(values,0)
+        self.store.save(values,0,True)
+        self.assertTrue(self.store.read()['values']['idle_enabled'])
+        self.store.save(config.defaults(),1,True,reset=True)
+        self.assertFalse(self.store.read()['values']['idle_enabled'])
+
+    def test_interrupted_write_preserves_previous_file_and_cleans_temp(self):
+        values=config.defaults();values['theme']='light';self.store.save(values,0)
+        before=self.path.read_bytes();values['theme']='dark'
+        with patch.object(config.os,'replace',side_effect=OSError('synthetic interruption')):
+            with self.assertRaises(OSError):self.store.save(values,1)
+        self.assertEqual(before,self.path.read_bytes());self.assertFalse(list(self.path.parent.glob('.settings-*')))
+
+    def test_corruption_uses_safe_defaults_and_explicit_recovery(self):
+        for raw in ('{broken','[]','{"schema_version":999}',json.dumps({'schema_version':1,'values':{'shell':'shutdown'}})):
+            self.write_private(raw)
+            document=self.store.read();self.assertFalse(document['healthy']);self.assertFalse(document['values']['idle_enabled'])
+            with self.assertRaises(config.ConfigError):self.store.save(config.defaults(),'corrupt')
+        self.store.save(config.defaults(),'corrupt',True,reset=True)
+        self.assertTrue(self.store.read()['healthy'])
+
+    def test_safe_migration_and_future_schema_rejection(self):
+        self.write_private('{"schema_version":0,"theme":"light"}')
+        self.assertEqual(self.store.read()['values']['theme'],'light');self.assertFalse(self.store.read()['values']['idle_enabled'])
+        self.store.save(self.store.read()['values'],0)
+        self.write_private('{"schema_version":0,"theme":"light","command":"anything"}')
+        self.assertFalse(self.store.read()['healthy'])
+
+    def test_concurrent_instances_only_one_revision_wins(self):
+        barrier=threading.Barrier(8);results=[]
+        def writer(i):
+            values=config.defaults();values['oled_contrast']=i
+            barrier.wait()
+            try:config.Store(self.path).save(values,0);results.append('ok')
+            except config.ConfigError:results.append('conflict')
+        threads=[threading.Thread(target=writer,args=(i,)) for i in range(8)]
+        for t in threads:t.start()
+        for t in threads:t.join(5)
+        self.assertEqual(results.count('ok'),1);self.assertEqual(results.count('conflict'),7)
+
+    def test_pst_root_resolves_from_fstab_without_assuming_msd_path(self):
+        fstab=Path(self.temp.name)/'fstab';fstab.write_text('LABEL=PST /var/lib/kvmd/pst ext4 ro,X-kvmd.pst-root=/var/lib/kvmd/pst/data 0 0\n')
+        self.assertEqual(config.pst_path(fstab),Path('/var/lib/kvmd/pst/data/portable-os/settings.json'))
+        fstab.write_text('LABEL=PIPST /var/lib/kvmd/pst ext4 ro,X-kvmd.pst-user=kvmd-pst 0 2\n')
+        self.assertEqual(config.pst_path(fstab),Path('/var/lib/kvmd/pst/portable-os/settings.json'))
+        fstab.write_text('LABEL=MSD /var/lib/kvmd/msd ext4 rw 0 0\n')
+        with self.assertRaises(config.ConfigError):config.pst_path(fstab)
+
+    def test_production_write_requires_pst_and_never_falls_back_to_root(self):
+        with patch.object(config,'pst_path',side_effect=config.ConfigError('PST absent',503)):
+            doc=config.Configuration().read();self.assertFalse(doc['healthy'])
+        with patch.dict(sys.modules,{'kvmd.apps':None}):
+            with self.assertRaises(config.ConfigError):config.Configuration().save(config.defaults(),0,True,True)
+
+
+class OledPreferenceTests(unittest.TestCase):
+    def test_disabled_pages_order_and_individual_duration(self):
+        values=config.defaults();values['oled_pages']=[values['oled_pages'][1],values['oled_pages'][0],values['oled_pages'][2],values['oled_pages'][3]]
+        values['oled_pages'][0]['seconds']=5;values['oled_pages'][2]['enabled']=False
+        rotation=config.PageRotation();self.assertEqual(rotation.choose(values,0)[0],'battery')
+        self.assertEqual(rotation.choose(values,4)[0],'battery');self.assertEqual(rotation.choose(values,5)[0],'main')
+        self.assertEqual(rotation.choose(values,15)[0],'battery')
+
+    def test_conditional_alert_priorities_return_and_critical_cannot_hide(self):
+        values=config.defaults();values['oled_pages'][-1]['enabled']=False
+        rotation=config.PageRotation()
+        self.assertEqual(rotation.choose(values,0,True,15,critical_transfer=True)[0],'transfer')
+        self.assertEqual(rotation.choose(values,6,True,50)[0],'main')
+        self.assertEqual(rotation.choose(values,7,True,5)[0],'battery')
+        values['oled_transfer_priority']=5;values['oled_low_priority']=1
+        self.assertEqual(config.PageRotation().choose(values,0,True,15)[0],'battery')
+
+    def test_permanent_page_and_logical_next_request(self):
+        values=config.defaults();values.update(oled_auto=False,oled_fixed='system')
+        rotation=config.PageRotation();self.assertEqual(rotation.choose(values,0)[0],'system')
+        self.assertEqual(rotation.choose(values,100,request='next')[0],'main')
+        self.assertEqual(rotation.choose(values,105)[0],'main')
+        self.assertEqual(rotation.choose(values,111)[0],'system')
+
+    def test_rotation_exact_pixels_and_contrast_in_async_physical_output(self):
+        with tempfile.TemporaryDirectory() as directory:
+            physical=Mock();device=oled.MirrorDevice('status',path=Path(directory)/'oled/frame.json',factory=lambda:physical,background=False)
+            image=Image.new('1',(128,64));image.putpixel((0,0),255)
+            values=config.defaults();values.update(oled_rotation='180',oled_contrast=42)
+            with patch.object(oled.READER,'get',return_value=values):device.display(image)
+            device.output._attempt()
+            result=oled.read_frame(device.path);raw=base64.b64decode(result['pixels'])
+            self.assertEqual(raw,physical.display.call_args.args[0].tobytes());self.assertTrue(raw[-1]&1)
+            physical.contrast.assert_called_with(42)
+
+    def test_button_customization_does_not_change_gesture_or_gpio_reader(self):
+        menu=script('pikvm-button-menu')
+        values=config.defaults();values['button_menu_timeout']=25
+        with patch.object(menu.CONFIG,'get',return_value=values):self.assertEqual(menu.menu_timeout(0),25)
+        self.assertEqual((menu.POWER_RESTART,menu.POWER_OFF,menu.ISO_CONFIRM),(2.,5.,3.))
+        source=(Path(__file__).resolve().parents[1]/'scripts/pikvm_gpio.py').read_text()
+        self.assertNotIn('pinctrl set',source)
+
+    def test_status_short_customization_long_menu_and_cancelled_gpio(self):
+        for held,cancelled,opens in ((.2,False,False),(2.,False,True),(5.,True,False)):
+            menu=script('pikvm-button-menu');values=config.defaults();values['button_short']='battery'
+            with patch.object(menu,'button_down',side_effect=[True,False]),patch.object(menu.HOTSPOT_STATE.__class__,'exists',return_value=False), \
+                 patch.object(menu.CONFIG,'get',return_value=values),patch.object(menu,'INPUT',SimpleNamespace(start=lambda:(),duration=lambda _:held,cancelled=lambda _:cancelled)), \
+                 patch.object(menu,'run_menu') as open_menu,patch.object(menu,'activity_event') as event, \
+                 patch.object(menu.time,'sleep',side_effect=lambda delay:(_ for _ in ()).throw(StopIteration()) if delay==.2 else None):
+                with self.assertRaises(StopIteration):menu.button_loop()
+                self.assertEqual(open_menu.called,opens)
+                self.assertEqual(event.called,not cancelled and not opens)
+
+
+class IdlePolicyTests(unittest.TestCase):
+    def setUp(self):
+        self.now=0;self.engine=config.IdleEngine(clock=lambda:self.now);self.values=config.defaults();self.values['idle_enabled']=True
+        self.safe=dict.fromkeys(('drive0','drive1','transfer','share','storage','install','ssh'),False)
+
+    def test_multiple_activity_sources_and_disabled_sources(self):
+        self.now=200;self.engine.activity('web',self.values);self.now=250
+        self.assertEqual(self.engine.evaluate(self.values,self.safe)['elapsed'],50)
+        self.values['activity_mouse']=False;self.engine.activity('mouse',self.values)
+        self.assertEqual(self.engine.evaluate(self.values,self.safe)['source'],'web')
+        self.engine.activity('button',self.values);self.assertEqual(self.engine.evaluate(self.values,self.safe)['elapsed'],0)
+        with self.assertRaises(config.ConfigError):self.engine.activity('ssh_keystroke',self.values)
+
+    def test_critical_inhibitors_cannot_be_disabled_and_unknown_is_blocked(self):
+        self.now=2000
+        for key in self.safe:
+            for value in (True,None):
+                result=self.engine.evaluate(self.values,{**self.safe,key:value})
+                self.assertTrue(result['inhibitors']);self.assertFalse(result['shutdown_allowed']);self.assertFalse(result['simulation_would_allow'])
+
+    def test_safe_simulation_never_executes_shutdown(self):
+        self.now=2000;result=self.engine.evaluate(self.values,self.safe)
+        self.assertTrue(result['simulation_would_allow']);self.assertFalse(result['shutdown_allowed'])
+        self.assertIn('non activable',result['reason'])
+
+    def test_kvm_presence_lease_is_separate_from_activity(self):
+        self.now=1700;self.engine.presence();self.now=1710
+        result=self.engine.evaluate(self.values,self.safe)
+        self.assertEqual(result['elapsed'],1710);self.assertTrue(result['inhibitors'])
+        self.now=1730;self.assertFalse(self.engine.evaluate(self.values,self.safe)['inhibitors'])
+
+    def test_warning_first_action_and_service_restart_are_safe(self):
+        self.values['idle_action']='off';self.now=1750
+        result=self.engine.evaluate(self.values,self.safe);self.assertTrue(result['warning']);self.assertEqual(result['action'],'off')
+        restarted=config.IdleEngine(clock=lambda:self.now);self.assertEqual(restarted.evaluate(self.values,self.safe)['elapsed'],0)
+        self.values['idle_enabled']=False;self.assertEqual(self.engine.evaluate(self.values,self.safe)['action'],'none')
+
+
+class ConfigApiTests(unittest.TestCase):
+    cleanup=integration.IntegrationAuthTests.cleanup
+    request=integration.IntegrationAuthTests.request
+    def setUp(self):
+        integration.IntegrationAuthTests.setUp(self)
+        self.temp=tempfile.TemporaryDirectory();self.addCleanup(self.temp.cleanup)
+        self.server.backend.settings=Settings(self.server.backend,Path(self.temp.name)/'settings.json')
+
+    def test_all_new_routes_require_authentication_and_csrf(self):
+        for route in ('settings','settings/current','settings/export','idle','report','integrity'):
+            self.assertEqual(self.request(route,auth=False),401)
+        for route in ('settings/apply','settings/reset','settings/import','activity','idle/simulate'):
+            self.assertEqual(self.request(route,{},auth=False),401);self.assertEqual(self.request(route,{},csrf=False),403)
+
+    def test_strict_valid_apply_and_conflict(self):
+        self.assertEqual(self.request('settings'),200)
+        values=config.defaults();values['theme']='light'
+        payload={'values':values,'expected_revision':0,'confirmed':False}
+        self.assertEqual(self.request('settings/apply',payload),200)
+        self.assertEqual(self.request('settings/apply',payload),409)
+        self.assertEqual(self.request('settings/apply',{**payload,'shell':'reboot'}),400)
+
+    def test_import_export_and_secret_fields_are_rejected(self):
+        settings=self.server.backend.settings;document=settings.export()
+        self.assertEqual(set(document),{'format','schema_version','values'})
+        self.assertEqual(self.request('settings/export'),200)
+        document['values']['password']='secret'
+        self.assertEqual(self.request('settings/import',{'expected_revision':0,'confirmed':True,'config':document}),400)
+
+    def test_preview_uses_real_renderers_without_hardware_or_persistence(self):
+        settings=self.server.backend.settings
+        for page in config.PAGES:
+            frame=settings.preview({'values':config.defaults(),'page':page})
+            self.assertEqual(len(base64.b64decode(frame['pixels'])),1024);self.assertTrue(frame['synthetic'])
+        self.assertFalse(settings.configuration.store().path.exists())
+        values=config.defaults();values['oled_rotation']='180'
+        normal=settings.preview({'values':config.defaults(),'page':'main'})
+        rotated=settings.preview({'values':values,'page':'main'})
+        self.assertNotEqual(normal['pixels'],rotated['pixels'])
+        self.assertEqual(self.request('settings/preview',{'values':values,'page':'main'},csrf=False),403)
+
+    def test_simulation_and_unknown_activity_do_not_trigger_commands(self):
+        with patch.object(integration.api,'run') as command:
+            self.assertEqual(self.request('idle/simulate',{'elapsed':2000,'evidence':dict.fromkeys(('drive0','drive1','transfer','share','storage','install','ssh'),False)}),200)
+            self.assertEqual(self.request('activity',{'source':'keyboard'}),200)
+            self.assertEqual(self.request('activity',{'source':'ssh'}),400)
+        command.assert_not_called()
+
+
+if __name__=='__main__':unittest.main()

@@ -13,6 +13,8 @@ import sys
 sys.path.insert(0, "/usr/local/lib/pikvm-portable")
 from pikvm_oled import MirrorDevice, LogicalButton, AsyncCache, ButtonReader
 from pikvm_gpio import pinctrl_sample, select_reader
+from pikvm_config import READER as CONFIG
+from pikvm_activity import event as activity_event
 
 
 BUTTON = 18
@@ -124,10 +126,17 @@ def wait_press_until(deadline):
 
 
 INPUT = LogicalButton()
+LAST_BUTTON_STATE = False
 
 
 def button_down():
-    return INPUT.poll(physical_button_down())
+    global LAST_BUTTON_STATE
+    down=INPUT.poll(physical_button_down())
+    if down and not LAST_BUTTON_STATE:
+        activity_event('button')
+        if DEVICE is not None and DEVICE.context.get('screen') not in ('status',None):activity_event('menu')
+    LAST_BUTTON_STATE=down
+    return down
 
 
 def get_device():
@@ -2361,7 +2370,7 @@ def menu_timeout(index):
     if index == 3:
         return ISO_PAGE_TIMEOUT
 
-    return MENU_TIMEOUT
+    return CONFIG.get()['button_menu_timeout']
 
 
 def run_menu():
@@ -2706,10 +2715,17 @@ def button_loop():
         # ====================================================
 
         if button_down():
-
-            wait_release()
-
-            run_menu()
+            token=INPUT.start()
+            while button_down():time.sleep(0.04)
+            held=INPUT.duration(token)
+            cancelled=INPUT.cancelled(token)
+            time.sleep(0.06)
+            action=CONFIG.get()['button_short']
+            if not cancelled:
+                # A 2s hold always opens the existing menu. Power still requires
+                # its separate gesture; uncertain GPIO or an expired lease cancels.
+                if action=='menu' or held>=2:run_menu()
+                else:activity_event('button',request=action)
 
 
             time.sleep(0.2)

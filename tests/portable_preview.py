@@ -4,10 +4,18 @@ from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 import json
 import hashlib
 import time
+import sys
+import tempfile
+from types import SimpleNamespace
 from pathlib import Path
 from urllib.parse import parse_qs, urlsplit, unquote
 
 ROOT = Path(__file__).resolve().parents[1] / 'web'
+sys.path.insert(0,str(ROOT.parent/'scripts'))
+from pikvm_settings import Settings
+from pikvm_config import ConfigError
+SETTINGS_TEMP=tempfile.TemporaryDirectory(prefix='portable-settings-fixture-')
+SETTINGS=Settings(SimpleNamespace(usb=lambda:{'drives':{}},share_lease=lambda:None),Path(SETTINGS_TEMP.name)/'settings.json')
 FILES = {'welcome.txt': b'Portable OS local test fixture'}
 MODE = 'detached'
 UPLOADS = {}
@@ -40,6 +48,13 @@ class Preview(SimpleHTTPRequestHandler):
 
     def do_GET(self):
         url = urlsplit(self.path)
+        settings_reads={'settings':SETTINGS.describe,'settings/current':SETTINGS.configuration.read,
+                        'settings/export':SETTINGS.export,'idle':SETTINGS.diagnostic,
+                        'report':lambda:{'fixture':True,'settings':SETTINGS.export()},
+                        'integrity':lambda:{'valid':True,'scope':'Simulation uniquement'}}
+        route=url.path.removeprefix('/extras/portable-os/api/')
+        if route in settings_reads:
+            return self.reply({'ok':True,'result':settings_reads[route]()})
         if url.path == '/__test/remote-desktop.svg':
             payload=(Path(__file__).parent/'fixtures/remote-desktop.svg').read_bytes()
             self.send_response(200);self.send_header('Content-Type','image/svg+xml');self.send_header('Content-Length',str(len(payload)));self.end_headers();self.wfile.write(payload);return
@@ -98,6 +113,19 @@ class Preview(SimpleHTTPRequestHandler):
     def do_POST(self):
         global MODE, OLED_PAGE
         url = urlsplit(self.path)
+        config_action=url.path.removeprefix('/extras/portable-os/api/')
+        if config_action in ('settings/apply','settings/reset','settings/import','settings/preview','activity','idle/simulate'):
+            try:
+                data=json.loads(self.rfile.read(int(self.headers.get('Content-Length','0'))))
+                if self.headers.get('X-Pikvm-Share')!='1':return self.reply({'ok':False,'error':'CSRF'},403)
+                if config_action=='settings/apply':result=SETTINGS.apply(data)
+                elif config_action=='settings/reset':result=SETTINGS.apply(data,reset=True)
+                elif config_action=='settings/import':result=SETTINGS.import_config(data)
+                elif config_action=='settings/preview':result=SETTINGS.preview(data)
+                elif config_action=='activity':result=SETTINGS.activity(data)
+                else:result=SETTINGS.diagnostic(data)
+                return self.reply({'ok':True,'result':result})
+            except ConfigError as e:return self.reply({'ok':False,'error':str(e)},e.status)
         raw = self.rfile.read(int(self.headers.get('Content-Length', 0)))
         if url.path == '/__test/reset' and self.headers.get('X-Portable-Test') == '1':
             MODE = 'detached'

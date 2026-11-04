@@ -30,6 +30,7 @@ def script(name):
     spec = importlib.util.spec_from_loader(loader.name, loader)
     result = importlib.util.module_from_spec(spec)
     loader.exec_module(result)
+    if hasattr(result,'activity_event'):result.activity_event=Mock()  # Never publish synthetic gestures to live tmpfs.
     return result
 
 

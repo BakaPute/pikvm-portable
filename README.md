@@ -241,6 +241,11 @@ contrôlée. [Audit, tests, limites matérielles et déploiement/retour arrière
 « Clé USB » en lecture seule. [Candidate, tests KVMD 4.213 sur données simulées,
 validation matérielle encore requise et mise à jour/retour arrière](docs/portable-os-rc10.2.md).
 
+**RC11** ajoute le centre de configuration partagé : douze catégories, préférences
+validées sur PST, pages OLED, aperçu natif des brouillons, personnalisation sûre
+du bouton et de la console, diagnostics et export/import. L’arrêt automatique
+reste indisponible en dehors de la simulation. [Capacités, limites et migration](docs/portable-os-rc11.md).
+
 Sur un Pi existant, utiliser l'installateur additif `install-portable-os.sh`, après
 autorisation. Le bootstrap `install.sh --initial-hardware-setup` configure le
 matériel et le démarrage : réservé à une installation initiale explicitement revue,

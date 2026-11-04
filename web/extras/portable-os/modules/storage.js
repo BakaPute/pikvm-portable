@@ -6,7 +6,7 @@ export function storageModule(shareMode) {
         subtitle: shareMode ? 'Drive 1 · Fichiers de la clé USB virtuelle' : 'Bibliothèque ISO / IMG / RAW · Lecteur natif',
         icon: shareMode ? 'usb' : 'storage', group: 'STOCKAGE & USB', mount(outlet, ctx) {
         const {api, store, action} = ctx;
-        let folder = '', live = true, currentItems = [], uploadCancel = false, activeXhr = null;
+        let folder = shareMode?'':store.get('settings')?.values?.iso_favorite||'', live = true, currentItems = [], uploadCancel = false, activeXhr = null;
         const state = el('div', {class: 'device-state'}), space = el('span', {class: 'muted'}),
             crumbs = el('nav', {class: 'crumbs', 'aria-label': 'Dossier actuel'}), list = el('div');
         const transferLabel = el('span'), progress = el('progress', {max: 100, value: 0});
@@ -112,12 +112,15 @@ export function storageModule(shareMode) {
                 const msd = store.get('msd'), folders = await api.folders('list');
                 const prefix = folder ? folder + '/' : '';
                 currentItems = visibleImages(msd).filter(([name]) => name.startsWith(prefix) && !name.slice(prefix.length).includes('/'))
-                    .map(([path, item]) => ({name: path.slice(prefix.length), path, directory: false, size: item.size}));
+                    .map(([path, item]) => ({name: path.slice(prefix.length), path, directory: false, size: item.size, mod_ts:item.mod_ts}));
                 currentItems.unshift(...folders.folders.filter(path => path.startsWith(prefix) && !path.slice(prefix.length).includes('/'))
                     .map(path => ({name: path.slice(prefix.length), path, directory: true})));
                 const part = msd?.storage?.parts?.[''];
                 if (live) space.textContent = part ? `${bytes(part.free)} disponibles / ${bytes(part.size)}` : 'Stockage natif indisponible';
             }
+            const order=store.get('settings')?.values?.iso_sort||'name';
+            if(!shareMode)currentItems.sort((a,b)=>Number(b.directory)-Number(a.directory)||
+                (order==='size'?(b.size||0)-(a.size||0):order==='date'?(b.mod_ts||0)-(a.mod_ts||0):0)||a.name.localeCompare(b.name,'fr'));
             render();
         }
         async function uploadShare(file) {

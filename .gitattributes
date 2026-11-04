@@ -17,3 +17,6 @@ scripts/wifi-wizard-api text eol=lf
 scripts/pikvm-hotspot text eol=lf
 # Keep the upstream test corpus byte-stable across Windows and Linux checkouts.
 tests/fixtures/kvmd-4.213/** text eol=lf
+scripts/pikvm_config.py text eol=lf
+scripts/pikvm_settings.py text eol=lf
+scripts/pikvm_activity.py text eol=lf

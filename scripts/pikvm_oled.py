@@ -12,6 +12,7 @@ import struct
 import threading
 import time
 from collections import OrderedDict
+from pikvm_config import READER
 
 RUNTIME = Path('/run/pikvm-oled')
 FRAME = RUNTIME / 'frame.json'
@@ -231,15 +232,18 @@ class PhysicalOutput:
         self.state = 'disconnected'
         self.closed = False
         self.thread = None
+        self.contrast = 160
+        self.applied_contrast = None
 
-    def offer(self, image, raw=None):
+    def offer(self, image, raw=None, contrast=160):
         raw = image.tobytes() if raw is None else raw
         with self.condition:
             if self.closed:
                 return
-            if raw == self.raw:
+            if raw == self.raw and contrast == self.contrast:
                 return  # Keep reconnect worker alive; no duplicate Pillow copy/I2C write.
             self.raw = raw
+            self.contrast = contrast
             self.latest = image.copy()
             self.generation += 1
             if self.background and self.thread is None:
@@ -265,6 +269,10 @@ class PhysicalOutput:
                 if self.closed:
                     return False
                 image, generation = self.latest, self.generation
+                contrast = self.contrast
+            if self.applied_contrast != contrast and callable(getattr(self.device,'contrast',None)):
+                self.device.contrast(contrast)
+                self.applied_contrast = contrast
             self.device.display(image)
             with self.condition:
                 self.sent, self.state = generation, 'connected'
@@ -273,6 +281,7 @@ class PhysicalOutput:
             # finalizers may themselves access I2C or block during cleanup.
             failed_device = self.device
             self.device = None
+            self.applied_contrast = None
             with self.condition:
                 self.state = 'disconnected'
                 self.retry_at = self.clock() + 30
@@ -295,6 +304,13 @@ class PhysicalOutput:
         # Do not wait on a blocked I2C call or blank a screen owned by the menu.
         if self.thread is not None:
             self.thread.join(timeout=.1)
+
+
+def prepare_frame(image, values):
+    if values['oled_rotation']=='180':
+        from PIL import Image
+        return image.transpose(Image.Transpose.ROTATE_180)
+    return image
 
 
 class MirrorDevice:
@@ -357,9 +373,11 @@ class MirrorDevice:
     def display(self, image):
         if image.size != self.size or image.mode != self.mode:
             raise ValueError('Framebuffer OLED attendu : 128×64 monochrome.')
+        values=READER.get()
+        image=prepare_frame(image,values)
         raw = image.tobytes()
         self.publish(image, raw=raw)
-        self.output.offer(image, raw=raw)  # Non-blocking, bounded latest-frame slot.
+        self.output.offer(image, raw=raw, contrast=values['oled_contrast'])  # Bounded, non-blocking.
 
     def refresh(self):
         # Status producer heartbeat / physical state without redrawing Pillow.

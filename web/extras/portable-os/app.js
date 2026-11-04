@@ -1,5 +1,6 @@
 import {routes} from '../../legacy/routes.js';
 import {openOled} from './modules/oled.js';
+import {bindActivity,applyAppearance} from './core/configuration.js';
 import {Store} from './core/state.js';
 import {Client, Poller} from './core/api.js';
 import {el, icon, notify, guarded} from './core/ui.js';
@@ -8,7 +9,7 @@ import {createModules} from './modules/index.js';
 import {getTheme} from './core/preferences.js';
 
 document.getElementById('fallback-link').href = routes.legacy;
-const store = new Store(), api = new Client(store), poller = new Poller(api, store);
+const store = new Store(), api = new Client(store), poller = new Poller(api, store,{configuration:true});
 document.documentElement.dataset.theme = getTheme();
 const modules = createModules();
 const context = {api, store, poller, notify, action: async work => {
@@ -18,6 +19,7 @@ const context = {api, store, poller, notify, action: async work => {
     try { return await guarded(work); } finally { store.update({operation: false}); }
 }};
 const nav = document.getElementById('navigation');
+bindActivity(document,context,'web');applyAppearance(store);
 document.getElementById('device-oled').onclick = () => openOled(context);
 let group;
 for (const module of modules) {

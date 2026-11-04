@@ -88,13 +88,24 @@ class SystemBackend:
         self.cached = None
         self.updated = 0
         self.lock = threading.Lock()
+        self.settings = None
+        try:
+            from pikvm_settings import Settings
+            self.settings = Settings(self)
+        except Exception:
+            pass  # Settings must never disable the existing diagnostic/OLED API.
+
+    def share_lease(self):
+        # Absence of a lease does not establish that SHARE has no pending writer.
+        lease=share.LinuxBackend().lease_read()
+        return True if lease else None
 
     def services(self):
         with self.lock:
             if self.cached is not None and time.monotonic() - self.updated < 5:
                 return self.cached
             output = run(['systemctl', 'show', '--no-pager',
-                          '--property=Id,ActiveState,SubState,UnitFileState,Result', *UNITS])
+                          '--property=Id,ActiveState,SubState,UnitFileState,Result,NRestarts,ExecMainStartTimestamp', *UNITS])
             result = {}
             for block in output.strip().split('\n\n'):
                 fields = dict(line.split('=', 1) for line in block.splitlines() if '=' in line)
@@ -132,7 +143,8 @@ class SystemBackend:
             services = {'available': False, 'items': {}}
         uptime = read('/proc/uptime')
         temp = read('/sys/class/thermal/thermal_zone0/temp')
-        return {'system': {'hostname': platform.node(), 'kernel': platform.release(),
+        from pikvm_settings import resources
+        return {'resources':resources(), 'system': {'hostname': platform.node(), 'kernel': platform.release(),
                            'python': platform.python_version(),
                            'uptime': float(uptime.split()[0]) if uptime else None,
                            'temperature': float(temp) / 1000 if temp else None},
@@ -172,7 +184,25 @@ class Handler(share.Handler):
             url = urlsplit(self.path)
             route = url.path.removeprefix('/extras/portable-os/api/')
             backend = self.server.backend
-            if not post and route == 'status':
+            if route.startswith('settings') or route in ('activity','idle','idle/simulate','report','integrity'):
+                from pikvm_config import ConfigError
+                settings=backend.settings
+                if settings is None:raise share.ShareError('Service de configuration indisponible ; fonctions existantes préservées.',503)
+                if not post and route=='settings':result=settings.describe()
+                elif not post and route=='settings/current':
+                    result=settings.configuration.read()
+                elif not post and route=='settings/export':result=settings.export()
+                elif post and route=='settings/apply':result=settings.apply(self.body())
+                elif post and route=='settings/reset':result=settings.apply(self.body(),reset=True)
+                elif post and route=='settings/import':result=settings.import_config(self.body())
+                elif post and route=='settings/preview':result=settings.preview(self.body())
+                elif post and route=='activity':result=settings.activity(self.body())
+                elif not post and route=='idle':result=settings.diagnostic()
+                elif post and route=='idle/simulate':result=settings.diagnostic(self.body())
+                elif not post and route=='report':result={'status':backend.status(),'idle':settings.diagnostic(),'settings':settings.export(),'release':'0.2.0-rc.11'}
+                elif not post and route=='integrity':result=settings.integrity()
+                else:raise share.ShareError('Route introuvable.',404)
+            elif not post and route == 'status':
                 result = backend.status()
             elif not post and route == 'usb':
                 result = backend.usb()
@@ -215,15 +245,19 @@ class Handler(share.Handler):
             self.reply(exc.status, {'ok': False, 'error': str(exc)})
         except (ValueError, UnicodeError):
             self.reply(400, {'ok': False, 'error': 'Requête invalide.'})
-        except Exception:
-            self.reply(503, {'ok': False, 'error': 'Information système indisponible.'})
+        except Exception as exc:
+            from pikvm_config import ConfigError
+            self.reply(exc.status if isinstance(exc,ConfigError) else 503,
+                       {'ok': False, 'error': str(exc) if isinstance(exc,ConfigError) else 'Information système indisponible.'})
 
 
 def main():
     with share.Server(('127.0.0.1', 9878), Handler) as server:
         server.backend = SystemBackend()
+        if server.backend.settings:server.backend.settings.start()
         server.action_lock = threading.Lock()
         def stop(*_args):
+            if server.backend.settings:server.backend.settings.close()
             threading.Thread(target=server.shutdown, daemon=True).start()
         signal.signal(signal.SIGTERM, stop)
         signal.signal(signal.SIGINT, stop)

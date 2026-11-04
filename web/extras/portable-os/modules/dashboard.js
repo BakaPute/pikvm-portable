@@ -15,7 +15,7 @@ export const dashboard = {id: 'dashboard', title: 'Vue d’ensemble', subtitle: 
             const battery = store.get('battery'), network = store.get('network'), system = store.get('system'), share = store.get('share'), msd = store.get('msd');
             const metrics = [
                 ['battery', 'BATTERIE', battery ? `${battery.percent} %` : '—', battery?.voltage ? `${battery.voltage} V · MAX17048` : 'Mesure indisponible'],
-                ['wifi', 'RÉSEAU', network?.ssid || '—', network?.ip || 'Connexion non confirmée'],
+                ['wifi', 'RÉSEAU', network?.ssid || '—', store.get('settings')?.values?.dashboard_ip===false?'Adresse IP masquée':network?.ip || 'Connexion non confirmée'],
                 ['usb', 'PIKVM-SHARE', shareModes[share?.mode] || '—', usbEvidence(store.get('usb'))],
                 ['activity', 'SYSTÈME', system?.system?.temperature != null ? `${system.system.temperature.toFixed(1)} °C` : '—', system?.system?.hostname || 'Informations indisponibles']];
             stats.replaceChildren(...metrics.map(([symbol, label, value, detail]) => el('section', {class: 'metric'},

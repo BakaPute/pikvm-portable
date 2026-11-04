@@ -63,7 +63,7 @@ export class Client {
 }
 
 export class Poller {
-    constructor(client, store) { this.client = client; this.store = store; this.pending = false; this.timer = null; this.running = false; this.epoch = 0; }
+    constructor(client, store, {configuration=false}={}) { this.client = client; this.store = store; this.configuration=configuration; this.pending = false; this.timer = null; this.running = false; this.epoch = 0; }
     async refresh() {
         if (this.pending || this.store.data.session === 'expired') return;
         this.pending = true;
@@ -71,6 +71,7 @@ export class Poller {
             network: () => this.client.wifi('status').then(data => data.status),
             battery: () => this.client.wifi('battery').then(data => data.battery),
             system: () => this.client.system('status'), usb: () => this.client.system('usb')};
+        if(this.configuration){reads.settings=()=>this.client.system('settings/current');reads.idle=()=>this.client.system('idle');}
         await Promise.allSettled(Object.entries(reads).map(async ([name, read]) => {
             try { this.store.resource(name, await read()); }
             catch (error) { this.store.resource(name, null, error.message); }
@@ -84,7 +85,8 @@ export class Poller {
         const tick = async () => {
             await this.refresh();
             if (this.running && this.epoch===epoch && this.store.data.session !== 'expired')
-                this.timer = setTimeout(tick, document.hidden ? 45000 : 8000);
+                this.timer = setTimeout(tick, document.hidden ? 45000 :
+                    this.store.get('idle')?.action==='economy'?15000:({economy:15000,balanced:8000,responsive:5000}[this.store.get('settings')?.values?.profile]||8000));
         };
         tick();
     }

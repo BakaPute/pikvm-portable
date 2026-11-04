@@ -195,6 +195,17 @@ progress { display:block; width:100%; margin:12px 0; accent-color:var(--accent);
 .kvm-native-dialog .pkdf-name { flex:1; min-width:0; overflow-wrap:anywhere; }
 .kvm-native-dialog .pkdf-meta { color:var(--muted); font-size:12px; }
 .kvm-native-dialog .pkdf-current { border-color:var(--accent); }
+.settings-layout { display:grid; grid-template-columns:minmax(180px,240px) minmax(0,1fr);gap:20px;align-items:start; }
+.settings-categories { display:grid;gap:6px;position:sticky;top:20px; }
+.settings-categories button { white-space:normal;justify-content:flex-start;text-align:left; }
+.settings-categories [aria-current=page] { background:var(--accent-bg);border-color:var(--accent); }
+.settings-content { min-width:0; }
+.settings-page { display:flex;align-items:center;flex-wrap:wrap;gap:12px;padding:12px 0;border-bottom:1px solid var(--line); }
+.settings-page .field { min-width:120px;flex:1; }
+.settings-page input[type=number] { width:100px; }
+.settings-oled { width:min(100%,512px);aspect-ratio:2;image-rendering:pixelated;background:#050a09;display:block; }
+.reduce-animations * { animation:none!important;transition:none!important;scroll-behavior:auto!important; }
+@media(max-width:800px){.settings-layout{grid-template-columns:1fr}.settings-categories{position:static;grid-template-columns:repeat(2,minmax(0,1fr))}.settings-page{align-items:flex-start}}
 .menu-toggle { display:none; }
 [hidden] { display:none !important; }
 @media (max-width:1200px) { .stats { grid-template-columns:repeat(2,minmax(0,1fr)); } .dashboard-grid { grid-template-columns:1fr; } .preview { min-height:330px; } .stack { display:grid; grid-template-columns:1fr 1fr; gap:20px; } .stack .card { margin:0; } }

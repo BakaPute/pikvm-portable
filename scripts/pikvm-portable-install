@@ -218,10 +218,16 @@ def file_map():
     result[LIB / 'pikvm_oled.py'] = ((REPO / 'scripts/pikvm_oled.py').read_bytes(), 0o644)
     result[LIB / 'pikvm_gpio.py'] = ((REPO / 'scripts/pikvm_gpio.py').read_bytes(), 0o644)
     result[LIB / 'pikvm_transfer.py'] = ((REPO / 'scripts/pikvm_transfer.py').read_bytes(), 0o644)
+    for name in ('pikvm_config.py','pikvm_settings.py','pikvm_activity.py'):
+        result[LIB / name] = ((REPO / 'scripts' / name).read_bytes(), 0o644)
+    release=json.loads((REPO/'web/extras/portable-os/package.json').read_text())['version']
+    result[LIB/'release.json']=(json.dumps({'version':release,'installed_at':time.time()}).encode(),0o600)
     for source, destination in storage_sources()['files'].items():
         result[Path(destination)] = ((REPO / source).read_bytes(), 0o755 if source.startswith('scripts/') else 0o644)
     result[Path('/usr/local/bin/pikvm-portable-report')] = ((REPO / 'scripts/pikvm-portable-report').read_bytes(), 0o755)
     result[LIB / 'pikvm-storage-baselines.json'] = ((REPO / 'scripts/pikvm-storage-baselines.json').read_bytes(), 0o644)
+    import hashlib
+    result[LIB/'integrity.json']=(json.dumps({str(p):hashlib.sha256(content).hexdigest() for p,(content,_) in result.items()},sort_keys=True).encode(),0o600)
     return result
 
 
@@ -432,6 +438,7 @@ def install(h):
     manifest['oled_units'] = oled_states(h)
     manifest['wifi_was_active'] = active(h, 'wifi-wizard-api.service')
     h.write_file(manifest_path, json.dumps(manifest, indent=2).encode(), 0o600)
+    verify_backup(h, backup)  # Verify every saved byte before stopping any service.
     print('Sauvegarde : ' + str(backup), flush=True)
     try:
         stop_oled(h)

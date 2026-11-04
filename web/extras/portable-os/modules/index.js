@@ -3,7 +3,8 @@ import {dashboard} from './dashboard.js';
 import {storageModule} from './storage.js';
 import {nativeFrameModule} from './kvm.js';
 import {network} from './network.js';
-import {tools, power, settings} from './system.js';
+import {tools, power} from './system.js';
+import {settings} from './settings.js';
 
 // Module registry: add a descriptor here, without changing shell/router/session.
 export function createModules() {

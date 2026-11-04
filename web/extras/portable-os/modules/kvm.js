@@ -2,17 +2,19 @@ import {el, button, hint, notify} from '../core/ui.js';
 import {releaseNativeInput, bridgeNavigation} from '../core/native-bridge.js';
 import {adaptKvm} from '../core/kvm-adapter.js';
 import {routes} from '../../../legacy/routes.js';
+import {bindActivity,values} from '../core/configuration.js';
 export function nativeFrameModule({id, title, subtitle, icon, source}) {
-    let wrapper, frame, unbridge, adapter, mounted = false;
+    let wrapper, frame, unbridge, unActivity, adapter, mounted = false;
     return {id, title, subtitle, icon, group: id === 'kvm' ? 'ESPACE DE TRAVAIL' : 'SYSTÈME', mount(outlet, context) {
         mounted = true;
         const dock = document.getElementById('native-dock');
-        const fullscreen = () => (document.fullscreenElement ? document.exitFullscreen() : wrapper.requestFullscreen())
+        const fullscreen = () => (document.fullscreenElement ? document.exitFullscreen() :
+            (values(context.store).kvm_fullscreen==='page'?document.documentElement:wrapper).requestFullscreen())
             .catch(error => notify(error.message, true));
         if (!wrapper) {
             frame = el('iframe', {title, src: source, allow: 'fullscreen; autoplay; clipboard-read; clipboard-write', allowFullscreen: true,
                 onload: async () => {
-                    adapter?.destroy(); adapter = null; unbridge?.();
+                    adapter?.destroy(); adapter = null; unbridge?.();unActivity?.();
                     wrapper.querySelector('.native-error')?.remove();
                     try {
                         const doc = frame.contentDocument;
@@ -40,6 +42,7 @@ export function nativeFrameModule({id, title, subtitle, icon, source}) {
                         frame.style.visibility = 'visible'; frame.style.display = 'block';
                         if (!mounted || context?.store.data.session !== 'ready') adapter?.suspend();
                         unbridge = bridgeNavigation(frame, route => { location.hash = '#' + route; });
+                        unActivity=bindActivity(doc,context,id);
                     } catch (error) {
                         releaseNativeInput(frame); frame.style.display = 'none';
                         wrapper.append(el('p', {class: 'native-error alert', role: 'alert'}, error.message, ' ',

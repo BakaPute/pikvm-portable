@@ -59,6 +59,7 @@ jobs:
           node tests/portable-browser.cjs
           node tests/portable-kvm-layout.cjs
           node tests/portable-native-4213.cjs
+          node tests/portable-settings.cjs
           node tests/portable-dialogs.cjs
           node tests/portable-transfer.cjs
       - uses: actions/upload-artifact@v4

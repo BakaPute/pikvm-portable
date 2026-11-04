@@ -1,7 +1,5 @@
-import {routes} from '../../../legacy/routes.js';
 import {el, button, badge, card, row, hint, field, table, dialog, notify} from '../core/ui.js';
 import {powerSafe, usbEvidence} from '../core/state.js';
-import {getTheme, saveTheme} from '../core/preferences.js';
 export const tools = {id: 'tools', title: 'Outils & diagnostics', subtitle: 'Observations du PiKVM, sans modification matérielle.', icon: 'activity', group: 'SYSTÈME',
     mount(outlet, {api, store, action}) {
         let live = true;
@@ -15,8 +13,8 @@ export const tools = {id: 'tools', title: 'Outils & diagnostics', subtitle: 'Obs
                 ['Hôte', sys.hostname || 'Indisponible'], ['Noyau', sys.kernel || 'Indisponible'],
                 ['Python', sys.python || 'Indisponible'],
                 ['Uptime', sys.uptime == null ? 'Indisponible' : `${Math.floor(sys.uptime / 60)} min`]]));
-            services.replaceChildren(table(['Service', 'État', 'Démarrage'], Object.entries(items).map(([name, item]) =>
-                [name, badge(item.ActiveState || 'Inconnu', item.ActiveState === 'active' ? 'green' : ''), item.UnitFileState || 'Indisponible'])));
+            services.replaceChildren(table(['Service', 'État', 'Démarrage','Redémarrages'], Object.entries(items).map(([name, item]) =>
+                [name, badge(item.ActiveState || 'Inconnu', item.ActiveState === 'active' ? 'green' : ''), item.UnitFileState || 'Indisponible',item.NRestarts??'Indisponible'])));
             const info = store.get('usb'), drive = info?.drives?.['1'];
             usb.replaceChildren(hint(usbEvidence(info)), table(['Observation', 'Valeur'], [
                 ['Image Drive 1', drive?.attributes?.file || 'Aucune'], ['CD-ROM', drive?.attributes?.cdrom ?? 'Inconnu'],
@@ -56,18 +54,4 @@ export const power = {id: 'power', title: 'Batterie & alimentation', subtitle: '
                 }
             }), 'danger')));
         update(); const unsub = store.subscribe(update); return unsub;
-    }};
-export const settings = {id: 'settings', title: 'Paramètres', subtitle: 'Préférences de cette interface et compatibilité.', icon: 'settings', group: 'SYSTÈME',
-    mount(outlet, {store}) {
-        const theme = el('select', {value: getTheme(), onchange: () => {
-            if (!saveTheme(theme.value)) notify('Préférence appliquée pour cette session ; stockage navigateur indisponible.');
-            document.documentElement.dataset.theme = theme.value;
-        }}, el('option', {value: 'dark'}, 'Sombre'), el('option', {value: 'light'}, 'Clair'));
-        theme.value = getTheme();
-        outlet.append(card('Apparence', field('Thème', theme), hint('Préférence locale au navigateur, sans changement système.')),
-            card('Authentification & permissions', hint('Session PiKVM existante. Les opérations restent contrôlées par les API natives et SHARE.'),
-                hint('KVMD 4.213 n’expose pas de rôles distincts pour cette interface : aucun rôle administrateur artificiel n’est déduit côté navigateur.')),
-            card('Compatibilité', hint('Cible : KVMD 4.213 · Python 3.14.7 · Raspberry Pi Zero 2 W.'),
-                hint('L’interface historique et les moteurs vidéo/HID ne sont pas remplacés. Une API absente est signalée ; aucune configuration matérielle n’est migrée silencieusement.'),
-                el('a', {href: routes.legacy, target: '_blank', rel: 'noopener', class: 'button quiet'}, 'Interface PiKVM de secours')));
     }};
