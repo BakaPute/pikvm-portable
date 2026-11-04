@@ -9,7 +9,7 @@ const clone=value=>structuredClone(value);
 export const settings={id:'settings',title:'Paramètres',subtitle:'Configuration partagée, diagnostics et sauvegarde des préférences.',icon:'settings',group:'SYSTÈME',
     mount(outlet,context){
         const {api,store,action}=context;
-        let live=true,documentConfig,draft,selected=0,dirty=false,loading=false,frameTimer,frameController,diagnosticTimer,draftTimer,draftController,previewEpoch=0;
+        let live=true,documentConfig,draft,selected=0,dirty=false,loading=false,frameTimer,frameController,diagnosticTimer,draftTimer,draftController,previewEpoch=0,draftBusy=false,draftQueued=false;
         const error=el('p',{role:'alert',class:'alert',hidden:true}),state=el('p',{role:'status'}),categories=el('nav',{'aria-label':'Catégories des paramètres',class:'settings-categories'});
         const content=el('div',{class:'settings-content'}),search=el('input',{type:'search',placeholder:'Rechercher un paramètre…','aria-label':'Rechercher dans les paramètres'});
         const apply=button('Appliquer',()=>action(()=>save()),'primary'),cancel=button('Annuler',()=>{draft=clone(documentConfig.values);dirty=false;render();},'quiet');
@@ -21,7 +21,7 @@ export const settings={id:'settings',title:'Paramètres',subtitle:'Configuration
         function message(text){state.textContent=text;}
         function changed(){dirty=true;message('Modifications non enregistrées. Appliquer valide et enregistre ; Annuler rétablit les valeurs chargées.');apply.disabled=store.data.session!=='ready';cancel.disabled=false;
             if(selected===3){clearTimeout(draftTimer);draftTimer=setTimeout(refreshDraft,500);}}
-        function stopPreview(){previewEpoch++;clearTimeout(frameTimer);clearTimeout(draftTimer);frameController?.abort();draftController?.abort();frameController=draftController=null;}
+        function stopPreview(){previewEpoch++;clearTimeout(frameTimer);clearTimeout(draftTimer);frameController?.abort();frameController=null;draftQueued=false;}
         const preview=el('canvas',{width:128,height:64,class:'settings-oled','aria-label':'Aperçu OLED natif synchronisé'}),previewStatus=hint('');
         const draftPreview=el('canvas',{width:128,height:64,class:'settings-oled','aria-label':'Aperçu OLED du brouillon'}),draftStatus=hint('');
         const previewPage=el('select',{'aria-label':'Page OLED à prévisualiser',onchange:()=>refreshDraft()},
@@ -31,13 +31,18 @@ export const settings={id:'settings',title:'Paramètres',subtitle:'Configuration
                 'menu-network-confirm':'Confirmation hotspot','menu-working':'Opération en cours'}).map(([value,label])=>el('option',{value},label)));
         async function refreshDraft(){
             if(!live||selected!==3||search.value||document.hidden)return;
-            const epoch=previewEpoch;draftController?.abort();draftController=new AbortController();
+            // Cancelling fetch does not cancel the server's Pillow work. Drain
+            // one request, discard stale results, then render only the latest draft.
+            if(draftBusy){draftQueued=true;return;}
+            draftBusy=true;draftQueued=false;
+            const epoch=previewEpoch;draftController=new AbortController();
             try{
                 const page=previewPage.value;
                 const {result}=await api.request('/extras/portable-os/api/settings/preview',{method:'POST',body:{values:draft,page},signal:draftController.signal,timeout:4000});
                 if(!live||epoch!==previewEpoch)return;
                 draftPreview.getContext('2d').putImageData(new ImageData(unpackPixels(result.pixels),128,64),0,0);draftStatus.textContent=result.message;
             }catch(e){if(live&&epoch===previewEpoch)draftStatus.textContent='Brouillon non prévisualisable : '+e.message;}
+            finally{draftBusy=false;draftController=null;if(draftQueued){draftQueued=false;queueMicrotask(refreshDraft);}}
         }
         async function refreshPreview(){
             if(!live||selected!==3||search.value||document.hidden)return;

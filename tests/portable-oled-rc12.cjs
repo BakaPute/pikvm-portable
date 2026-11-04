@@ -9,6 +9,18 @@ const fs=require('node:fs');
     const browser=await chromium.launch({headless:true,...(process.platform==='win32'?{channel:'msedge'}:{})});
     try{
         const page=await browser.newPage({viewport:{width:1440,height:1000}});const errors=[];const posts=[];
+        const pixelCache=new Map();
+        page.on('response',async response=>{
+            if(new URL(response.url()).pathname!=='/extras/portable-os/api/oled'||response.status()!==200)return;
+            let f;try{f=(await response.json()).result;}catch{return;} // Navigation may discard a pending response body.
+            if(f.pixels)pixelCache.set(f.pixel_id,f.pixels);
+            if(pixelCache.size>16)pixelCache.delete(pixelCache.keys().next().value);
+            const pixels=pixelCache.get(f.pixel_id);if(!pixels)return;
+            await page.evaluate(({id,pixels})=>{
+                const old=window.__rc12Frames;const frames=old?.id===id?old.frames:[];
+                window.__rc12Frames={id,frames:[...frames.slice(-7),pixels]};
+            },{id:f.context.navigation_id,pixels}).catch(()=>{});
+        });
         page.on('pageerror',e=>errors.push(e.message));
         page.on('request',r=>{if(r.method()==='POST')posts.push(new URL(r.url()).pathname);});
         await page.request.post(origin+'/__test/reset',{headers:{'X-Portable-Test':'1'}});
@@ -19,11 +31,15 @@ const fs=require('node:fs');
         await page.locator('#device-oled').click();
         const screen=page.locator('#oled-sidebar .oled-screen');await screen.waitFor();
         await page.locator('#oled-sidebar .oled-status').filter({hasText:'1 avancer'}).waitFor();
-        async function sync(){const f=(await frame()).result;await page.waitForFunction(p=>{
-            const bytes=atob(p);const rgba=document.querySelector('#oled-sidebar canvas').getContext('2d').getImageData(0,0,128,64).data;
-            for(let i=0;i<8192;i++)if((rgba[i*4]===212)!==!!(bytes.charCodeAt(i>>3)&(128>>(i&7))))return false;
-            return true;
-        },f.pixels);}
+        async function sync(){const f=(await frame()).result;await page.waitForFunction(id=>{
+            const received=window.__rc12Frames;if(received?.id!==id)return false;
+            const rgba=document.querySelector('#oled-sidebar canvas').getContext('2d').getImageData(0,0,128,64).data;
+            return received.frames.some(p=>{
+                const bytes=atob(p);
+                for(let i=0;i<8192;i++)if((rgba[i*4]===212)!==!!(bytes.charCodeAt(i>>3)&(128>>(i&7))))return false;
+                return true;
+            });
+        },f.context.navigation_id);}
         async function waitScreen(name){await page.waitForFunction(async name=>{
             const r=await fetch('/__test/oled-rc12');return (await r.json()).screen===name;
         },name);await sync();await page.waitForTimeout(250);}
@@ -54,9 +70,16 @@ const fs=require('node:fs');
         await screen.click({delay:60});await waitScreen('power');
         assert.equal((await state()).error,null);
         await page.locator('[data-route="settings"]').evaluate(n=>n.click());
+        let previews=0,maxPreviews=0;
+        await page.route('**/api/settings/preview',async route=>{
+            previews++;maxPreviews=Math.max(maxPreviews,previews);
+            try{await new Promise(resolve=>setTimeout(resolve,250));const response=await route.fetch();await route.fulfill({response});}
+            finally{previews--;}
+        });
         await page.getByRole('navigation',{name:'Catégories des paramètres'}).getByRole('button',{name:'OLED et écrans',exact:true}).click();
-        const preview=page.getByLabel('Page OLED à prévisualiser');await preview.selectOption('menu-iso-info');
+        const preview=page.getByLabel('Page OLED à prévisualiser');await preview.selectOption('menu-menu');await preview.selectOption('menu-iso-info');
         await page.getByText('Menu natif avec données d’exemple ; aucune action exécutée.',{exact:true}).waitFor();
+        assert.equal(maxPreviews,1,'Slow preview requests must drain before the latest draft starts');
         await page.locator('[data-setting="oled_style"]').selectOption('detailed');
         await page.getByRole('button',{name:'Appliquer',exact:true}).click();await page.reload();
         await page.getByRole('navigation',{name:'Catégories des paramètres'}).getByRole('button',{name:'OLED et écrans',exact:true}).click();

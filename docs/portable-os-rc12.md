@@ -69,6 +69,8 @@ désactivées pour conserver la rotation enregistrée RC11. L’enregistrement
 explicite utilise toujours le bail PST natif et la révision concurrente. Les
 aperçus de pages et menus dans Paramètres utilisent le même rendu, sur un
 brouillon et des données synthétiques, sans action matérielle.
+Les aperçus sont sérialisés : un changement rapide de brouillon attend la fin
+du rendu précédent, dont le résultat est ignoré s’il est devenu obsolète.
 
 ## Mise à jour depuis RC11
 
