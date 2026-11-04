@@ -10,6 +10,7 @@ const fs=require('node:fs');const path=require('node:path');
         const page=await browser.newPage({viewport:{width:1440,height:1060}});page.setDefaultTimeout(10000);
         const errors=[],mutations=[];page.on('pageerror',e=>errors.push(e.message));
         page.on('request',r=>{if(r.method()==='POST')mutations.push(new URL(r.url()).pathname);});
+        page.on('response',async r=>{if(r.url().includes('/settings/preview')&&r.status()!==200)console.error('Preview API error',r.status(),await r.text().catch(()=>''));});
         await page.goto(url+'#settings');
         const nav=page.getByRole('navigation',{name:'Catégories des paramètres'});
         await nav.getByRole('button',{name:'Général',exact:true}).waitFor();assert.equal(await nav.getByRole('button').count(),12);
@@ -26,7 +27,8 @@ const fs=require('node:fs');const path=require('node:path');
         await page.locator('[data-setting="oled_contrast"]').fill('90');await save.click();
         await search.fill('');await nav.getByRole('button',{name:'OLED et écrans',exact:true}).click();
         await page.getByLabel('Aperçu OLED natif synchronisé').waitFor();await page.getByText(/Mode virtuel.*framebuffer réellement publié/).waitFor();
-        await page.getByText(/Même moteur natif.*données d’exemple/).waitFor();
+        try{await page.getByText(/Même moteur natif.*données d’exemple/).waitFor();}
+        catch(error){console.error('OLED preview diagnostics:',await page.locator('.settings-content').innerText());throw error;}
         const before=await page.getByLabel('Aperçu OLED du brouillon').evaluate(node=>node.toDataURL());
         await page.locator('[data-setting="oled_rotation"]').selectOption('180');
         await page.waitForFunction(before=>document.querySelector('canvas[aria-label="Aperçu OLED du brouillon"]').toDataURL()!==before,before);
