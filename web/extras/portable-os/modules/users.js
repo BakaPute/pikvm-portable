@@ -1,4 +1,12 @@
-import {el,button,card,hint,row,field,dialog,table,guarded,notify} from '../core/ui.js';
+import {el,button,card,hint,row,field,dialog,table as uiTable,guarded,notify} from '../core/ui.js';
+
+function table(headers,rows){
+    const node=uiTable(headers,rows);
+    node.classList.add('security-table');
+    if(headers.length===5)node.classList.add('security-table-wide');
+    node.tabIndex=0;node.setAttribute('role','region');node.setAttribute('aria-label',headers.join(' · '));
+    return node;
+}
 
 export function mountUsers(outlet,{api,store}){
     let live=true,state,actor;

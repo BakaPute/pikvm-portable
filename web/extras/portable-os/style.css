@@ -126,6 +126,12 @@ p { margin:7px 0 15px; }
 .file-name { border:0; background:none; color:var(--fg); padding:4px 0; text-align:left; }
 .file-icon { color:var(--accent); }
 .table-scroll { overflow:auto; max-width:100%; margin-top:16px; }
+.security-table table { min-width:620px; }
+.security-table-wide table { min-width:1000px; }
+.security-table td,.security-table th { overflow-wrap:normal; vertical-align:top; min-width:110px; }
+.security-table th { white-space:nowrap; }
+.security-table td:last-child .row { min-width:260px; }
+.security-table button { white-space:nowrap; }
 table { border-collapse:collapse; width:100%; text-align:left; font-size:12px; }
 th { font-size:9px; letter-spacing:.8px; text-transform:uppercase; font-weight:550; color:var(--faint); background:var(--surface); }
 td,th { padding:14px 10px; border-bottom:1px solid var(--line); overflow-wrap:anywhere; }

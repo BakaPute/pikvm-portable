@@ -276,8 +276,11 @@ avec un shell libre.
 
 ## Validation et limites de la candidate
 
-Validation locale du 5 novembre 2026 : 361 tests Python, aucun échec,
-6 cas réservés à Linux ; 23 tests JavaScript et 9 suites navigateur réussis.
+Validation du 5 novembre 2026 : 361 tests Python locaux, aucun échec,
+6 cas réservés à Linux ; puis 22 tests ciblés incluant le nouveau cas sudo.
+23 tests JavaScript et 9 suites navigateur réussis. Les tableaux de sécurité
+conservent une largeur lisible sur mobile, avec défilement interne tactile et
+clavier ; l’accès aux actions et l’absence de débordement de page sont testés.
 La fermeture des navigateurs attend les interceptions réseau en cours,
 sans masquer les assertions. Ces résultats concernent des données isolées,
 jamais les ISO ou comptes du Pi de production.

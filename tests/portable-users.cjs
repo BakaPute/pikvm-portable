@@ -51,7 +51,17 @@ const {chromium}=require('playwright'),assert=require('node:assert/strict'),fs=r
         assert.equal(state.users.find(u=>u.name==='codex').keys.length,0);assert.ok(!state.users.some(u=>u.name==='operator'));assert.ok(state.native_users.every(u=>u.protected));
         assert.ok(!JSON.stringify(state).includes('pbkdf2'));assert.ok(!JSON.stringify(state).includes('Synthetic-'));
         await page.getByRole('button',{name:'Connexions et refus disponibles',exact:true}).click();await page.getByRole('heading',{name:'Journal d’audit',exact:true}).waitFor();
-        await page.setViewportSize({width:390,height:844});fs.mkdirSync('private',{recursive:true});await page.screenshot({path:'private/portable-os-rc13-users.png',fullPage:true});
+        await page.setViewportSize({width:390,height:844});
+        const mobileTable=page.locator('.security-table-wide');
+        assert.ok(await mobileTable.evaluate(node=>node.scrollWidth>node.clientWidth),'Mobile accounts scroll horizontally instead of squeezing text');
+        assert.ok(await mobileTable.locator('th').first().evaluate(node=>node.getBoundingClientRect().width>=110),'Identity header stays readable');
+        assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),'Security tables must not overflow the page');
+        await mobileTable.focus();await page.keyboard.press('End');
+        await mobileTable.evaluate(node=>node.scrollLeft=node.scrollWidth);
+        await page.getByRole('button',{name:'SSH codex',exact:true}).click();
+        await page.getByRole('heading',{name:'SSH · codex',exact:true}).waitFor();
+        await mobileTable.evaluate(node=>node.scrollLeft=0);
+        fs.mkdirSync('private',{recursive:true});await page.screenshot({path:'private/portable-os-rc13-users.png',fullPage:true});
         assert.deepEqual(errors,[]);
         const viewer=await browser.newPage(),reads=[];
         viewer.on('request',request=>reads.push(new URL(request.url()).pathname));
