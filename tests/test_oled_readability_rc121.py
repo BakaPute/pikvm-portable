@@ -104,7 +104,8 @@ class LayoutTests(unittest.TestCase):
 
     def test_previews_and_optional_physical_output_share_exact_bits_in_both_modes(self):
         settings=Settings(SimpleNamespace(),Path('unused'))
-        with tempfile.TemporaryDirectory(dir=ROOT) as directory:
+        # Keep rapidly replaced frames outside IDE/workspace file watchers.
+        with tempfile.TemporaryDirectory() as directory:
             physical=Mock();device=oled.MirrorDevice('status',path=Path(directory)/'oled/frame.json',factory=lambda:physical,background=False)
             for style in ('readable','compact'):
                 values={**config.defaults(),'oled_style':style}
@@ -119,7 +120,7 @@ class LayoutTests(unittest.TestCase):
 class PreferenceTests(unittest.TestCase):
     def test_rc12_compact_preferences_and_order_are_preserved_without_a_write(self):
         old=json.loads((ROOT/'tests/fixtures/rc12-settings.json').read_text(encoding='utf-8'))
-        with tempfile.TemporaryDirectory(dir=ROOT) as directory:
+        with tempfile.TemporaryDirectory() as directory:
             target=Path(directory)/'settings.json';target.write_text(json.dumps(old),encoding='utf-8');target.chmod(0o600);raw=target.read_bytes()
             current=config.Store(target).read()
             self.assertTrue(current['healthy']);self.assertEqual(current['migrated_from'],2);self.assertEqual(current['revision'],9)
@@ -129,7 +130,7 @@ class PreferenceTests(unittest.TestCase):
             self.assertEqual(config.defaults()['oled_style'],'readable')
 
     def test_rc12_snapshot_restores_exact_original_preferences_after_rc121_save(self):
-        with tempfile.TemporaryDirectory(dir=ROOT) as directory:
+        with tempfile.TemporaryDirectory() as directory:
             root=Path(directory);target=root/'settings.json';raw=(ROOT/'tests/fixtures/rc12-settings.json').read_bytes();target.write_bytes(raw);target.chmod(0o600)
             backup=root/'backup';backup.mkdir();h=portable.helper()
             with patch.object(portable,'preferences_module',return_value=config),patch.object(config,'pst_path',return_value=target),patch.object(config,'pst_commit',side_effect=lambda writer:writer(target)):

@@ -74,11 +74,16 @@ def required(method,raw,data=None,current_settings=None):
             if not isinstance(data,dict) or not isinstance(data.get('values'),dict) or current_settings is None:raise SecurityError('Différence de paramètres non vérifiable.',403)
             wanted=data['values'];changed={key for key in wanted if wanted[key]!=current_settings.get(key)};needs=set()
             for key in changed:
-                needs.add('oled.pages' if key.startswith('oled_') else 'oled.gestures' if key.startswith('button_') else 'iso.info' if key in ('iso_favorite','iso_sort') else 'system.settings')
+                if key=='oled_pages':continue
+                needs.add('oled.notifications' if key in ('oled_low_priority','oled_transfer_priority','battery_notifications','battery_low','battery_critical') else
+                          'oled.durations' if key=='oled_alert_seconds' else
+                          'oled.pages' if key.startswith('oled_') else 'oled.gestures' if key.startswith('button_') else
+                          'iso.info' if key in ('iso_favorite','iso_sort') else 'system.settings')
             if 'oled_pages' in changed:
                 old={p['id']:p for p in current_settings['oled_pages']}
+                if not isinstance(wanted['oled_pages'],list) or any(not isinstance(p,dict) for p in wanted['oled_pages']):raise SecurityError('Pages OLED invalides.',400)
+                if [p.get('id') for p in wanted['oled_pages']]!=[p['id'] for p in current_settings['oled_pages']] or any(p.get('enabled')!=old.get(p.get('id'),{}).get('enabled') for p in wanted['oled_pages']):needs.add('oled.pages')
                 if any(p.get('seconds')!=old.get(p.get('id'),{}).get('seconds') for p in wanted['oled_pages']):needs.add('oled.durations')
-            if changed&{'oled_alert_battery','oled_notice','oled_show_battery'}:needs.add('oled.notifications')
             return tuple(needs)
         # OLED navigation can mount images, change Wi-Fi and confirm power.
         # It is an indivisible native menu: restricted accounts get pixels only.

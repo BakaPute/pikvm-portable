@@ -56,6 +56,7 @@ with tempfile.TemporaryDirectory() as directory:
         assert setup.effective(config,'root')==root_before
         account=pwd.getpwnam('codex');assert account.pw_uid>=1000 and account.pw_uid!=0
         assert os.getgrouplist('codex',account.pw_gid)==[account.pw_gid]
+        assert run(['runuser','-u','codex','--','sudo','-n','true'],check=False).returncode!=0
         assert json.loads(ssh('codex','version').stdout)['privileged'] is False
         status=json.loads(ssh('codex','status').stdout);assert status['uid']==account.pw_uid
         print('PASS real SSH Ed25519 login; distinct UID/home; no supplementary groups',flush=True)

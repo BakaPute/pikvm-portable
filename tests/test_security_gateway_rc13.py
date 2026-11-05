@@ -24,6 +24,7 @@ class GatewayTests(unittest.IsolatedAsyncioTestCase):
         async def upstream(request):
             self.seen.append((request.method,request.path,dict(request.headers),request.raw_path))
             if request.path=='/auth/check':return web.Response(status=401)
+            if request.path=='/extras/portable-os/api/oled':return web.json_response({'ok':True,'result':{'context':{'screen':'qr'},'pixels':'synthetic-sensitive-qr'}})
             if request.path=='/extras/pikvm-share/api/mode/usb':return web.json_response({'ok':False,'error':'Synthetic SHARE busy'},status=409)
             if request.path=='/ws':
                 ws=web.WebSocketResponse();await ws.prepare(request);self.native_ws.add(ws)
@@ -56,12 +57,39 @@ class GatewayTests(unittest.IsolatedAsyncioTestCase):
         response=await viewer.get('/api/hid',headers={'Authorization':'Basic fake','X-KVMD-User':'root','Cookie':'portable_session='+cookies['portable_session'].value+'; auth_token='+'a'*64})
         self.assertEqual(response.status,200)
         headers=self.seen[-1][2];self.assertNotIn('Cookie',headers);self.assertNotIn('Authorization',headers);self.assertNotIn('X-KVMD-User',headers)
-    async def test_readonly_ws_rejects_key_before_forwarding_and_filters_msd_state(self):
-        viewer=await self.client('viewer');ws=await viewer.ws_connect('/api/ws',headers=self.origin())
-        initial=await ws.receive_json();self.assertEqual(initial['event_type'],'loop')
-        await ws.send_json({'event_type':'key','event':{'key':'KeyA','state':True}})
-        message=await ws.receive(timeout=3);self.assertIn(message.type,(WSMsgType.CLOSE,WSMsgType.CLOSED));self.assertEqual(self.events,[])
-        await ws.close()
+    async def test_readonly_ws_never_opens_upstream_or_triggers_native_hid_lifecycle(self):
+        viewer=await self.client('viewer');before=len(self.seen)
+        response=await viewer.get('/api/ws',headers=self.origin())
+        self.assertEqual(response.status,403);self.assertEqual(len(self.seen),before);self.assertEqual(self.events,[])
+    async def test_oled_qr_credentials_are_not_returned_to_a_video_only_account(self):
+        viewer=await self.client('viewer');response=await viewer.get('/extras/portable-os/api/oled')
+        self.assertEqual(response.status,403);self.assertNotIn('synthetic-sensitive-qr',await response.text())
+    async def test_atx_requires_known_safe_mapping_before_upstream(self):
+        from types import SimpleNamespace
+        from pikvm_security import SecurityError
+        from pikvm_security_gateway import atx_mapping_safe
+        config=SimpleNamespace(type='gpio',power_led_pin=24,hdd_led_pin=22,power_switch_pin=23,reset_switch_pin=27)
+        self.assertTrue(atx_mapping_safe(config,'Raspberry Pi Zero 2 W Rev 1.0','/dev/gpiochip0'))
+        for name in ('power_led_pin','hdd_led_pin','power_switch_pin','reset_switch_pin'):
+            for pin in (17,18,None,'23'):
+                altered=copy.copy(config);setattr(altered,name,pin)
+                self.assertFalse(atx_mapping_safe(altered,'Raspberry Pi Zero 2 W','/dev/gpiochip0'))
+        self.assertFalse(atx_mapping_safe(config,'Unknown board','/dev/gpiochip0'))
+        self.assertFalse(atx_mapping_safe(config,'Raspberry Pi Zero 2 W','/dev/gpiochip1'))
+        admin=await self.client('supervisor');before=len(self.seen)
+        def deny():raise SecurityError('Synthetic unsafe mapping',403)
+        self.gateway.atx_guard=deny
+        response=await admin.post('/api/atx/power?action=on',headers=self.origin(),json={'confirmed':True})
+        self.assertEqual(response.status,403);self.assertEqual(len(self.seen),before)
+        self.gateway.atx_guard=lambda:None
+        response=await admin.post('/api/atx/power?action=on',headers=self.origin(),json={'confirmed':True})
+        self.assertEqual(response.status,200);self.assertEqual(len(self.seen),before+1)
+    async def test_partial_hid_permission_can_use_mouse_http_but_not_native_ws(self):
+        self.change('edit','operator',changes={'deny':['kvm.keyboard']});operator=await self.client('operator')
+        before=len(self.seen);response=await operator.get('/api/ws',headers=self.origin())
+        self.assertEqual(response.status,403);self.assertEqual(len(self.seen),before)
+        response=await operator.post('/api/hid/events/send_mouse_move?to_x=0&to_y=0',headers=self.origin(),json={});self.assertEqual(response.status,200)
+        response=await operator.post('/api/hid/events/send_key?key=KeyA&state=true',headers=self.origin(),json={});self.assertEqual(response.status,403)
     async def test_operator_keyboard_mouse_binary_and_session_revocation_close_ws(self):
         operator=await self.client('operator');ws=await operator.ws_connect('/api/ws',headers=self.origin())
         self.assertEqual((await ws.receive_json())['event_type'],'msd');await ws.receive_json()

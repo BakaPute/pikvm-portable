@@ -7,6 +7,18 @@ export function nativeFrameModule({id, title, subtitle, icon, source}) {
     let wrapper, frame, unbridge, unActivity, adapter, mounted = false;
     return {id, title, subtitle, icon, group: id === 'kvm' ? 'ESPACE DE TRAVAIL' : 'SYSTÈME', mount(outlet, context) {
         mounted = true;
+        if(id==='kvm'&&context.store.data.access&&context.can&&!context.can('kvm.keyboard','kvm.macros','kvm.mouse')){
+            // Direct native MJPEG: no native iframe/bootstrap/WS and no HID reset
+            // merely because a read-only viewer opens or closes the console.
+            const status=el('p',{role:'status'},'Vidéo en lecture seule · aucun canal HID natif ouvert.');
+            const image=el('img',{src:'/streamer/stream?key='+Date.now(),alt:'Vidéo KVM en lecture seule',style:'width:100%;max-height:75vh;object-fit:contain;background:#000',
+                onerror:()=>{status.textContent='Flux MJPEG indisponible. Aucun canal HID n’a été ouvert ; vérifier le producteur vidéo depuis l’administration native.';}});
+            const view=el('section',{class:'card','aria-label':'Console KVM en lecture seule'},status,image);
+            view.append(button('Plein écran',()=>view.requestFullscreen().catch(error=>notify(error.message,true)),'quiet'));
+            if(context.can('iso.view'))view.append(button('Lecteur ISO',()=>{location.hash='#images';},'quiet'));
+            if(context.can('share.status'))view.append(button('Clé USB',()=>{location.hash='#share';},'quiet'));
+            outlet.append(view);return()=>{mounted=false;image.removeAttribute('src');view.remove();};
+        }
         const dock = document.getElementById('native-dock');
         const fullscreen = () => (document.fullscreenElement ? document.exitFullscreen() :
             (values(context.store).kvm_fullscreen==='page'?document.documentElement:wrapper).requestFullscreen())

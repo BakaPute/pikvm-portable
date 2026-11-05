@@ -1,3 +1,4 @@
+const {closeBrowser}=require('./browser-cleanup.cjs');
 // Isolated real DOM and mocked API. No user images or PiKVM endpoints.
 const {chromium} = require('playwright');
 const assert = require('node:assert/strict');
@@ -91,5 +92,5 @@ const assert = require('node:assert/strict');
         assert.deepEqual(errors, []);
         assert.equal(nativeWrites, 0);
         console.log('USB lifecycle browser: separate stop/import, explicit USB reset, unknown/error gates, no polling mutations, one pending poll: passed');
-    } finally { await browser.close(); }
+    } finally { await closeBrowser(browser); }
 })().catch(error => { console.error(error); process.exitCode = 1; });

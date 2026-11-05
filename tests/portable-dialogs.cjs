@@ -1,3 +1,4 @@
+const {closeBrowser}=require('./browser-cleanup.cjs');
 // Native DOM regression and isolated ISO move API mocks. No disk images touched.
 const {chromium}=require('playwright');
 const assert=require('node:assert/strict');
@@ -103,5 +104,5 @@ const assert=require('node:assert/strict');
         assert.equal(await page.getByRole('dialog').count(),0);assert.equal(calls.length,3);
         assert.deepEqual(errors,[]);
         process.stdout.write('Dialog regression passed: native select getter, initial values, text/password/checkbox, ISO move to nested folder and root, API errors and cancellation.\n');
-    }finally{await browser.close();}
+    }finally{await closeBrowser(browser);}
 })().catch(error=>{console.error(error);process.exitCode=1;});

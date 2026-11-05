@@ -76,6 +76,10 @@ def apply(store,name,approved):
         created_account=True
         created=pwd.getpwnam(account)
         if created.pw_uid<1000 or created.pw_gid==0:raise SecurityError('UID/GID non conformes.',503)
+        if set(os.getgrouplist(account,created.pw_gid))!={created.pw_gid}:raise SecurityError('Groupes supplémentaires inattendus ; compte bloqué.',503)
+        if Path('/usr/bin/sudo').is_file():
+            privilege=subprocess.run(['/usr/bin/sudo','-n','-l','-U',account],capture_output=True,text=True,timeout=10,stdin=subprocess.DEVNULL,env={'PATH':'/usr/bin','LC_ALL':'C'})
+            if privilege.returncode==0 or 'not allowed to run sudo' not in (privilege.stdout+privilege.stderr):raise SecurityError('Droits sudo présents ou non vérifiables ; compte bloqué.',503)
         # No user-writable shell startup/SSH rc files can precede ForceCommand.
         home=Path(created.pw_dir)
         if home.is_symlink() or home!=Path('/home')/account:raise SecurityError('Home nouveau non reconnu.',503)

@@ -162,6 +162,14 @@ class PolicyTests(unittest.TestCase):
         self.assertIn('oled.gestures',access.required('POST','/extras/portable-os/api/settings/apply',{'values':changed},current))
         self.assertIn('oled.gestures',access.required('POST','/extras/portable-os/api/settings/import',{}))
         self.assertIn('system.shutdown',access.required('POST','/extras/portable-os/api/oled/button',{}))
+    def test_oled_page_duration_and_notification_permissions_are_independent(self):
+        from pikvm_config import defaults
+        current=defaults();changed=copy.deepcopy(current);changed['oled_pages'][0]['seconds']=11
+        self.assertEqual(set(access.required('POST','/extras/portable-os/api/settings/apply',{'values':changed},current)),{'oled.durations'})
+        changed=copy.deepcopy(current);changed['oled_pages'][0]['enabled']=False
+        self.assertEqual(set(access.required('POST','/extras/portable-os/api/settings/apply',{'values':changed},current)),{'oled.pages'})
+        changed={**current,'oled_low_priority':3}
+        self.assertEqual(set(access.required('POST','/extras/portable-os/api/settings/apply',{'values':changed},current)),{'oled.notifications'})
     def test_atx_requires_action_permission_and_confirmation(self):
         with self.assertRaises(security.SecurityError):access.required('POST','/api/atx/power?action=off_hard',{})
         self.assertEqual(access.required('POST','/api/atx/power?action=off_hard',{'confirmed':True}),('atx.sensitive',))

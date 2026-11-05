@@ -73,9 +73,17 @@ restauration/arrêt ; comptes/rôles/permissions/clés/audit/révocation.
 - **Clavier et macros** partagent les événements KVMD. Sans les deux droits,
   les événements clavier sont refusés ; on ne présente pas le masquage d’un
   bouton macro comme une protection contre un script envoyant des touches.
+- KVMD libère globalement les touches et boutons sur ajout/retrait d’un WS.
+  La passerelle refuse donc le WS aux comptes sans clavier+macros+souris.
+  Leur page KVM lit directement le MJPEG natif, sans iframe/WS/HID, et indique
+  si le producteur vidéo est indisponible. Les droits HID partiels restent
+  utilisables via les API HTTP, pas via la console native. Cette limitation
+  empêche un compte vidéo seul de libérer les touches d’un opérateur.
 - Le miroir OLED est consultable séparément. Ses gestes ouvrent un menu qui
   peut agir sur ISO, réseau et alimentation : la télécommande de ce menu
   nécessite tous ces droits, avec les confirmations RC12.1 et le bail 800 ms.
+  Un écran QR pouvant contenir un secret Wi-Fi est refusé sans droit réseau,
+  avant transmission des pixels ; aucun second rendu OLED n’est créé.
 - `/legacy/`, terminal Web, Redfish, Janus, KVMD-Media, API inconnues, import
   d’URL distante et reset USB sont refusés sur l’entrée restreinte. Le KVM
   natif y utilise MJPEG et un WebSocket filtré. L’origine administrateur
@@ -86,7 +94,12 @@ restauration/arrêt ; comptes/rôles/permissions/clés/audit/révocation.
 - Les changements SHARE passent par le contrôleur existant. L’ouverture du
   panneau ne connecte rien ; éjection PC et exclusivité Web/USB sont conservées.
 - Les actions ATX demandent une confirmation de requête indépendante. Une
-  commande native qui ne la fournit pas est refusée. Les permissions stockées
+  commande native qui ne la fournit pas est refusée. Avant chaque action, la
+  configuration KVMD est relue sans instancier le pilote GPIO : seul un Zero
+  2 W identifié, le backend GPIO sur `/dev/gpiochip0` et des broches connues
+  excluant 17/18 sont acceptés. Une configuration inconnue bloque l’action ;
+  cette vérification ne demande aucune ligne et ne change aucun niveau.
+  Les permissions stockées
   n’activent pas une voie inconnue : `system.update` n’offre aucun exécuteur
   root et les arrêts directs/réinitialisations restent bloqués.
 - Les mots de passe Wi-Fi sont masqués dans les réponses de la passerelle ;
@@ -262,6 +275,12 @@ conserver l’accès root. Ne jamais retirer un garde SSH en laissant un compte
 avec un shell libre.
 
 ## Validation et limites de la candidate
+
+Validation locale du 5 novembre 2026 : 361 tests Python, aucun échec,
+6 cas réservés à Linux ; 23 tests JavaScript et 9 suites navigateur réussis.
+La fermeture des navigateurs attend les interceptions réseau en cours,
+sans masquer les assertions. Ces résultats concernent des données isolées,
+jamais les ISO ou comptes du Pi de production.
 
 Les tests isolés couvrent comptes, mots de passe, rôles, dernière administration,
 élévation par réinitialisation de mot de passe, corruption, concurrence, CSRF,

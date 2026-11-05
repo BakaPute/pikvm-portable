@@ -1,3 +1,4 @@
+const {closeBrowser}=require('./browser-cleanup.cjs');
 // Real browser + upstream KVMD 4.213 DOM/controllers. All APIs/media are synthetic.
 const {chromium}=require('playwright');
 const assert=require('node:assert/strict');
@@ -170,5 +171,5 @@ const crypto=require('node:crypto');
         assert.deepEqual(errors,[]);
         assert.ok(posts.every(([p])=>p.startsWith('/api/msd/')),'No SHARE mutation, GPIO, power, reset or file deletion');
         console.log('PASS KVMD 4.213 native DOM/MSD/window manager/keyboard/mouse + synthetic API: selector, nested folders, modes, connect/eject, errors, SHARE, HID, lifecycle, auth');
-    }finally{await browser.close();}
+    }finally{await closeBrowser(browser);}
 })().catch(error=>{console.error(error);process.exitCode=1;});

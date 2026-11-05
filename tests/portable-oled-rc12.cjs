@@ -1,3 +1,4 @@
+const {closeBrowser}=require('./browser-cleanup.cjs');
 // Actual logical transport + Python RC12 navigation/rendering; synthetic ISO only.
 const {chromium}=require('playwright');
 const assert=require('node:assert/strict');
@@ -87,5 +88,5 @@ const fs=require('node:fs');
         fs.mkdirSync('private',{recursive:true});await page.screenshot({path:'private/portable-os-rc12-oled-settings.png',fullPage:true});
         assert.deepEqual(errors,[]);assert.ok(!posts.some(p=>p.includes('/api/msd/')||p.includes('/api/hid/')||p.includes('mode/usb')));
         console.log('RC12 OLED browser passed: exact pixels, single/double/back, nested synthetic ISO, readonly mount/eject confirmation, power cancellation, preview and persistence.');
-    }finally{await browser.close();}
+    }finally{await closeBrowser(browser);}
 })().catch(e=>{console.error(e);process.exitCode=1;});

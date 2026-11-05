@@ -24,14 +24,28 @@ from pikvm_access import required,target,websocket_permissions,visible_event,saf
 COOKIE='portable_session'
 HOP={'connection','upgrade','keep-alive','transfer-encoding','te','trailer','proxy-authorization','proxy-authenticate','set-cookie','server'}
 
+def atx_mapping_safe(config,model,device):
+    """Inspect configuration only; never instantiate a GPIO plugin or request lines."""
+    pins=[getattr(config,name,None) for name in ('power_led_pin','hdd_led_pin','power_switch_pin','reset_switch_pin')]
+    return ('Raspberry Pi Zero 2 W' in model and getattr(config,'type',None)=='gpio'
+            and device=='/dev/gpiochip0' and all(type(pin) is int and 0<=pin<=53 and pin not in (17,18) for pin in pins))
+
+def check_atx_mapping():
+    from kvmd.apps import init
+    config=init(prog='portable-security-atx-check',load_atx=True).config.kvmd.atx
+    model=Path('/proc/device-tree/model').read_bytes().decode('ascii').rstrip('\x00')
+    if not atx_mapping_safe(config,model,str(Path(config.device).resolve(strict=True))):
+        raise SecurityError('Configuration ATX non validée ; GPIO17/18 protégés.',403)
+
 class Gateway:
     def __init__(self,store=None,web_root=Path('/usr/share/kvmd/web'),kvmd_socket='/run/kvmd/kvmd.sock',stream_socket='/run/kvmd/ustreamer.sock',
-                 audit=None,delegation_key=None,test_upstream=None,secure=True,natives=None,public_origin=None):
+                 audit=None,delegation_key=None,test_upstream=None,secure=True,natives=None,public_origin=None,atx_guard=None):
         self.store=store or SecurityStore();self.logins=LoginManager(self.store);self.audit=audit or Audit()
         self.admin=SecurityAdmin(self.store,self.audit,**({'natives':natives} if natives else {}))
         self.web_root=Path(web_root);self.kvmd_socket=kvmd_socket;self.stream_socket=stream_socket
         self.delegation_key=delegation_key;self.test_upstream=test_upstream;self.secure=secure;self.clients={};self.slots=asyncio.Semaphore(16)
         self.public_origin=public_origin
+        self.atx_guard=atx_guard or check_atx_mapping
     async def open(self,app):
         self.clients['native']=ClientSession(connector=UnixConnector(path=self.kvmd_socket) if not self.test_upstream else TCPConnector(),timeout=ClientTimeout(total=None,sock_connect=5,sock_read=15))
         self.clients['stream']=ClientSession(connector=UnixConnector(path=self.stream_socket) if not self.test_upstream else TCPConnector(),timeout=ClientTimeout(total=None,sock_connect=5,sock_read=None))
@@ -118,7 +132,15 @@ class Gateway:
                     from pikvm_config import Configuration
                     current=await asyncio.to_thread(lambda:Configuration().read()['values'])
                 needs=required(request.method,request.raw_path,data,current);actor.require(*needs)
-                if path=='/api/ws':return await self.websocket(request,actor)
+                if path.startswith('/api/atx/') and request.method=='POST':
+                    try:await asyncio.to_thread(self.atx_guard)
+                    except SecurityError:raise
+                    except Exception:raise SecurityError('Configuration ATX inconnue ; action refusée.',403) from None
+                if path=='/api/ws':
+                    # KVMD clears BOTH keyboard and mouse on WS add/remove.
+                    # A viewer or partial-HID account must never trigger that.
+                    actor.require('kvm.keyboard','kvm.macros','kvm.mouse')
+                    return await self.websocket(request,actor)
                 return await self.revocable(request,self.proxy(request,actor,needs,data,binary_upload))
         except web.HTTPException:raise
         except SecurityError as error:
@@ -180,7 +202,8 @@ class Gateway:
         client=self.clients[kind if kind in ('native','stream') else 'local']
         async with client.request(request.method,URL(base+path,encoded=True),headers=headers,data=payload,allow_redirects=False) as upstream:
             if upstream.status in (301,302,303,307,308):raise SecurityError('Redirection amont refusée.',503)
-            if (kind=='native' and urlsplit(path).path=='/info') or (kind=='wifi' and urlsplit(path).path=='/api/networks'):
+            oled_frame=kind=='local' and urlsplit(path).path=='/extras/portable-os/api/oled'
+            if (kind=='native' and urlsplit(path).path=='/info') or (kind=='wifi' and urlsplit(path).path=='/api/networks') or oled_frame:
                 chunks=[];size=0
                 async for chunk in upstream.content.iter_chunked(16384):
                     size+=len(chunk)
@@ -189,6 +212,7 @@ class Gateway:
                 value=json.loads(b''.join(chunks))
                 if kind=='native' and isinstance(value.get('result'),dict):value={**value,'result':safe_info(value['result'])}
                 if kind=='wifi':value=redact_network(value)
+                if oled_frame and value.get('result',{}).get('context',{}).get('screen')=='qr':actor.require('system.network')
                 return web.json_response(value,status=upstream.status,headers={'Cache-Control':'no-store'})
             safe={k:v for k,v in upstream.headers.items() if k.lower() not in HOP and k.lower() in ('content-type','content-length','content-disposition','content-security-policy')}
             safe['Cache-Control']='no-store';safe['X-Content-Type-Options']='nosniff'
@@ -257,7 +281,7 @@ def main():
     installed=Path('/usr/local/lib/pikvm-portable/integrity.json')
     digest=hashlib.sha256(installed.read_bytes()).hexdigest()
     if settings.get('reviewed') is not True or settings.get('kvmd')!='4.213' or settings.get('application_integrity_sha256')!=digest or settings.get('native_test_report_sha256')!=hashlib.sha256(report.read_bytes()).hexdigest():raise SecurityError('Activation non validée pour cette installation.',503)
-    if proof.get('candidate_integrity_sha256')!=digest or any(proof.get(k) is not True for k in ('native_auth','ws_filters','terminal_denied','vnc_denied','legacy_denied','root_recovery')):raise SecurityError('Tests natifs et récupération non validés.',503)
+    if proof.get('candidate_integrity_sha256')!=digest or any(proof.get(k) is not True for k in ('native_auth','ws_filters','readonly_no_hid_effects','readonly_video_available','terminal_denied','vnc_denied','legacy_denied','root_recovery')):raise SecurityError('Tests natifs et récupération non validés.',503)
     origin=urlsplit(settings.get('origin',''))
     if origin.scheme!='https' or not origin.hostname or origin.path or origin.query or origin.fragment or origin.username or origin.password:raise SecurityError('Origine TLS explicite requise.',503)
     from pikvm_settings import Settings

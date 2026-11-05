@@ -1,3 +1,4 @@
+const {closeBrowser}=require('./browser-cleanup.cjs');
 // Local fixture only. Run with NODE_PATH pointing at a Playwright installation.
 const {chromium} = require('playwright');
 const assert = require('node:assert/strict');
@@ -294,5 +295,5 @@ const path = require('node:path');
         await noScript.close();
         assert.deepEqual(errors, []);
         process.stdout.write('Browser integration passed: dashboard, SHARE CRUD/upload/ejection guard, persistent KVM, images, network, logs, themes, mobile navigation.\n');
-    } finally { await browser.close(); }
+    } finally { await closeBrowser(browser); }
 })().catch(error => { console.error(error); process.exitCode = 1; });

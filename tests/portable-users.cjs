@@ -1,3 +1,4 @@
+const {closeBrowser}=require('./browser-cleanup.cjs');
 // Real Python security store, isolated localhost browser fixture only.
 const {chromium}=require('playwright'),assert=require('node:assert/strict'),fs=require('node:fs');
 (async()=>{
@@ -52,6 +53,14 @@ const {chromium}=require('playwright'),assert=require('node:assert/strict'),fs=r
         await page.getByRole('button',{name:'Connexions et refus disponibles',exact:true}).click();await page.getByRole('heading',{name:'Journal d’audit',exact:true}).waitFor();
         await page.setViewportSize({width:390,height:844});fs.mkdirSync('private',{recursive:true});await page.screenshot({path:'private/portable-os-rc13-users.png',fullPage:true});
         assert.deepEqual(errors,[]);
+        const viewer=await browser.newPage(),reads=[];
+        viewer.on('request',request=>reads.push(new URL(request.url()).pathname));
+        await viewer.route('**/api/auth/check',route=>route.fulfill({contentType:'application/json',body:JSON.stringify({ok:true,result:{user:'viewer',native:false,permissions:['kvm.video','system.diagnostics','oled.view']}})}));
+        await viewer.goto(url+'#kvm');await viewer.getByRole('region',{name:'Console KVM en lecture seule'}).waitFor();
+        await viewer.getByAltText('Vidéo KVM en lecture seule',{exact:true}).waitFor();
+        assert.ok(!reads.includes('/kvm/'));assert.ok(!reads.includes('/api/ws'));
+        assert.equal(await viewer.getByRole('button',{name:'Activer clavier / souris',exact:true}).count(),0);
+        await viewer.close();
         console.log('RC13 users passed: create/edit/password-safe export/custom roles/overrides/SSH plans/public keys/revocation/last-admin/persistence/audit/mobile; no Linux or ISO mutation.');
-    }finally{await browser.close();}
+    }finally{await closeBrowser(browser);}
 })().catch(error=>{console.error(error);process.exitCode=1;});

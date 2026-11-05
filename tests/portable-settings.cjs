@@ -1,3 +1,4 @@
+const {closeBrowser}=require('./browser-cleanup.cjs');
 // RC11, localhost-only settings backed by real Python validator and temporary PST fixture.
 const {chromium}=require('playwright');
 const assert=require('node:assert/strict');
@@ -73,5 +74,5 @@ const fs=require('node:fs');const path=require('node:path');
         await page.locator('[data-route="kvm"]').evaluate(node=>node.click());await kvm.locator('.kvm-controls').waitFor();
         assert.deepEqual(errors,[]);
         console.log('RC11 browser passed: 12 categories, search, drafts, validation, persistence, OLED ordering/durations, simulation, KVM, import/export, defaults, mobile, offline isolation.');
-    }finally{await browser.close();}
+    }finally{await closeBrowser(browser);}
 })().catch(e=>{console.error(e);process.exitCode=1;});

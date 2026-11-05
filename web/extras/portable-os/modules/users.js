@@ -41,7 +41,7 @@ export function mountUsers(outlet,{api,store}){
     }
     async function permissions(user){
         const form=el('form'),host=el('dialog',{'aria-label':'Permissions de '+user.name}),selectors={};
-        form.append(el('h2',{},'Permissions de '+user.name),hint('Rôle hérité, autorisation ou refus explicite. Refus prioritaire. Clavier et macros sont indissociables sur le protocole KVMD : sans les deux droits, le flux clavier est refusé. Les voies natives non filtrables restent interdites.'));
+        form.append(el('h2',{},'Permissions de '+user.name),hint('Rôle hérité, autorisation ou refus explicite. Refus prioritaire. La console native exige clavier, macros et souris ensemble ; sinon vidéo sans WebSocket natif. Les permissions HID partielles restent utilisables par les API HTTP autorisées. Les voies non filtrables restent interdites.'));
         const rows=Object.entries(state.permissions).map(([key,title])=>{
             const select=el('select',{'aria-label':key});
             for(const [value,text] of [['inherit','Hériter'],['allow','Autoriser'],['deny','Refuser']])select.append(el('option',{value},text));

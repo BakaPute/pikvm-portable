@@ -1,3 +1,4 @@
+const {closeBrowser}=require('./browser-cleanup.cjs');
 // RC12.1: real settings validator + renderer, temporary preferences, localhost only.
 const {chromium}=require('playwright');
 const assert=require('node:assert/strict');
@@ -51,6 +52,6 @@ const fs=require('node:fs');
             const restored=await page.request.post(origin+'/extras/portable-os/api/settings/apply',{headers:{'X-Pikvm-Share':'1'},data:{expected_revision:current.revision,confirmed:true,values:originalValues}});
             assert.equal(restored.status(),200,'Restore isolated fixture preferences');
         }
-        await browser.close();
+        await closeBrowser(browser);
     }
 })().catch(error=>{console.error(error);process.exitCode=1;});

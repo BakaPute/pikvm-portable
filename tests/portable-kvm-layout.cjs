@@ -1,3 +1,4 @@
+const {closeBrowser}=require('./browser-cleanup.cjs');
 // RC9 layout validation against localhost fixture only; no PiKVM connection.
 const {chromium}=require('playwright');
 const assert=require('node:assert/strict');
@@ -90,5 +91,5 @@ const fs=require('node:fs');
             assert.deepEqual(errors,[]);await context.close();
             process.stdout.write(`RC9 layout passed: ${name} ${width}x${height}.\n`);
         }
-    }finally{await browser.close();}
+    }finally{await closeBrowser(browser);}
 })().catch(error=>{console.error(error);process.exitCode=1;});
