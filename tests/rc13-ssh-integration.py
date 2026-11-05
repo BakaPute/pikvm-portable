@@ -52,7 +52,13 @@ with tempfile.TemporaryDirectory() as directory:
             if args[:3]==['/usr/bin/systemctl','reload','sshd.service']:process.send_signal(signal.SIGHUP);time.sleep(.2);return None
             return real_run(args)
         root_before=setup.effective(config,'root')
-        with patch.object(setup,'run',side_effect=reload):setup.apply(store,'codex',proposal['sha256'])
+        try:
+            with patch.object(setup,'run',side_effect=reload):setup.apply(store,'codex',proposal['sha256'])
+        except Exception:
+            # Disposable account only: preserve actual sudo policy diagnostics.
+            probe=run(['/usr/bin/sudo','-n','-l','-U','codex'],check=False)
+            print('SYNTHETIC_SUDO_POLICY='+json.dumps({'code':probe.returncode,'stdout':probe.stdout,'stderr':probe.stderr}),flush=True)
+            raise
         assert setup.effective(config,'root')==root_before
         account=pwd.getpwnam('codex');assert account.pw_uid>=1000 and account.pw_uid!=0
         assert os.getgrouplist('codex',account.pw_gid)==[account.pw_gid]
