@@ -145,7 +145,7 @@ def policy_preflight():
     if SHARE_API.is_symlink() or not SHARE_API.is_file():
         raise RuntimeError('Installer/configurer SHARE avant Portable OS ; API ordinaire requise.')
     source = SHARE_API.read_text()
-    patched = share_power_policy(bounded_share_policy(manual_shutdown_policy(source)))
+    patched = security_share_policy(share_power_policy(bounded_share_policy(manual_shutdown_policy(source))))
     auth = load('portable_installed_share', SHARE_API)
     if auth.kvmd_check() not in (401, 403):
         raise RuntimeError('Une authentification PiKVM active est obligatoire.')
@@ -156,6 +156,21 @@ def policy_preflight():
             raise RuntimeError('Éjecter puis démonter/libérer SHARE avant le patch de politique.')
         backend.ensure_unmounted()
     return patched.encode(), patched != source
+
+
+def security_share_policy(source):
+    # Surgical additions only. Preserve the existing storage and Python fixes.
+    auth='def authenticate(headers, checker=kvmd_check):\n'
+    guarded=auth+"    if headers.get('X-Portable-Delegation'):\n        from pikvm_security_bridge import verify\n        return verify(headers).owner\n"
+    start='        self.response_started = False\n        try:\n'
+    bound=start+"            if self.headers.get('X-Portable-Delegation'):\n                from pikvm_security_bridge import bind\n                bind(self.headers,self.command,self.path)\n"
+    if guarded in source and bound in source:return source
+    if 'X-Portable-Delegation' in source or source.count(auth)!=1 or source.count(start)!=1 or source.count('import uuid\n')!=1:
+        raise RuntimeError('Adaptateur auth SHARE local inconnu ; examen requis avant migration')
+    source=source.replace(auth,guarded,1).replace(start,bound,1)
+    source=source.replace('import uuid\n',"import uuid\nimport sys\nsys.path.insert(0, '/usr/local/lib/pikvm-portable')\n",1)
+    compile(source,'pikvm-share-api','exec')
+    return source
 
 
 def bounded_share_policy(source):
@@ -224,6 +239,9 @@ def file_map():
     result[LIB / 'pikvm_transfer.py'] = ((REPO / 'scripts/pikvm_transfer.py').read_bytes(), 0o644)
     for name in ('pikvm_config.py','pikvm_settings.py','pikvm_activity.py','pikvm_oled_ui.py','pikvm_oled_nav.py','pikvm_oled_control.py','pikvm_gestures.py','pikvm_iso.py'):
         result[LIB / name] = ((REPO / 'scripts' / name).read_bytes(), 0o644)
+    for name in ('pikvm_security.py','pikvm_security_bridge.py','pikvm_security_admin.py','pikvm_security_gateway.py','pikvm_security_migration.py','pikvm_access.py','pikvm_ssh.py','pikvm-maintenance-command','pikvm-security-authorized-keys','pikvm-security-ssh'):
+        result[LIB/name]=((REPO/'scripts'/name).read_bytes(),0o755 if name.startswith('pikvm-') else 0o644)
+    result[Path('/etc/systemd/system/pikvm-security-gateway.service')]=((REPO/'systemd/pikvm-security-gateway.service').read_bytes(),0o644)
     release=json.loads((REPO/'web/extras/portable-os/package.json').read_text())['version']
     result[LIB/'release.json']=(json.dumps({'version':release,'installed_at':time.time()}).encode(),0o600)
     for source, destination in storage_sources()['files'].items():
@@ -248,7 +266,7 @@ def storage_preflight():
             raise RuntimeError('Composant historique absent/non ordinaire : ' + destination)
         content = installed.read_bytes().replace(b'\r\n', b'\n')
         if (content != (REPO / source).read_bytes().replace(b'\r\n', b'\n') and
-                hashlib.sha256(content).hexdigest() != evidence['baselines'][destination]):
+                hashlib.sha256(content).hexdigest() not in (evidence['baselines'][destination] if isinstance(evidence['baselines'][destination],list) else [evidence['baselines'][destination]])):
             raise RuntimeError('Correctif local inconnu à examiner, aucun remplacement : ' + destination)
     transfer = load('portable_transfer_preflight', REPO / 'scripts/pikvm_transfer.py')
     observed = transfer.observe()
@@ -342,6 +360,9 @@ def verify_backup(h, backup):
         source=backup/'preferences.json'
         if metadata['exists'] and (source.is_symlink() or not source.is_file() or source.stat().st_size>16384 or h.digest(source)!=metadata.get('sha256')):
             raise RuntimeError('Sauvegarde des préférences altérée ; aucun service arrêté')
+    if 'portable_security' in manifest:
+        from pikvm_security_migration import verify
+        verify(h,backup,manifest['portable_security'])
     return manifest
 
 
@@ -482,6 +503,8 @@ def install(h):
     manifest['oled_units'] = oled_states(h)
     manifest['wifi_was_active'] = active(h, 'wifi-wizard-api.service')
     manifest['portable_preferences']=snapshot_preferences(h,backup)
+    from pikvm_security_migration import snapshot
+    manifest['portable_security']=snapshot(h,backup)
     h.write_file(manifest_path, json.dumps(manifest, indent=2).encode(), 0o600)
     verify_backup(h, backup)  # Verify every saved byte before stopping any service.
     print('Sauvegarde : ' + str(backup), flush=True)
@@ -521,6 +544,10 @@ def install(h):
 
 def restore(h, backup):
     manifest = verify_backup(h, backup)
+    # Revoke the restricted entry point before rolling back auth-aware services.
+    if Path('/etc/systemd/system/pikvm-security-gateway.service').is_file():
+        h.run(['systemctl','stop','pikvm-security-gateway.service'])
+        h.run(['systemctl','disable','pikvm-security-gateway.service'])
     if manifest.get('share_policy_patch'):
         # A live SHARE volume must never be interrupted to restore application files.
         auth = load('portable_restore_share', SHARE_API)
@@ -537,6 +564,9 @@ def restore(h, backup):
     if h.service_state()['active']:
         h.run(['systemctl', 'stop', PORTABLE_SERVICE])
     restore_preferences(h,backup,manifest)
+    if 'portable_security' in manifest:
+        from pikvm_security_migration import restore_state
+        restore_state(h,backup,manifest['portable_security'])
     restart = h.restore_files(backup)
     h.reload_nginx()
     if manifest.get('wifi_was_active'):
@@ -556,10 +586,20 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('action', choices=('check', 'install', 'restore'))
     parser.add_argument('backup', nargs='?', type=Path)
+    parser.add_argument('--approve-security-candidate',help='SHA256 du MANIFEST RC13 explicitement approuvé ; ne démarre ni passerelle ni SSH')
     args = parser.parse_args()
     if not hasattr(os, 'geteuid') or os.geteuid() != 0:
         raise SystemExit('root requis sur le PiKVM, après autorisation de déploiement.')
     sys.dont_write_bytecode = True
+    if args.action=='install':
+        import hashlib
+        manifest=REPO/'MANIFEST.sha256'
+        if not manifest.is_file() or args.approve_security_candidate!=hashlib.sha256(manifest.read_bytes()).hexdigest():
+            raise RuntimeError('RC13 : validation explicite de cette candidate requise (--approve-security-candidate SHA256 du MANIFEST). Aucun déploiement automatique.')
+        for line in manifest.read_text().splitlines():
+            digest,name=line.split('  ',1);source=REPO/name
+            if not re.fullmatch('[a-f0-9]{64}',digest) or source.is_symlink() or not source.resolve().is_relative_to(REPO.resolve()) or not source.is_file() or hashlib.sha256(source.read_bytes()).hexdigest()!=digest:
+                raise RuntimeError('RC13 : manifeste ou fichier candidat altéré ; aucun service arrêté.')
     if args.action != 'restore':
         preflight()
     if args.action == 'check':

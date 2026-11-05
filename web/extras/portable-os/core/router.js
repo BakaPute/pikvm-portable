@@ -18,6 +18,9 @@ export class Router {
         document.getElementById('page-title').textContent = module.title;
         document.getElementById('page-subtitle').textContent = module.subtitle;
         this.outlet.replaceChildren();
+        if(this.context.moduleAllowed&&!this.context.moduleAllowed(module.id)){
+            this.outlet.textContent='Cette fonction n’est pas autorisée pour ce compte.';this.dispose=null;return;
+        }
         this.dispose = module.mount(this.outlet, this.context) || null;
         document.title = module.title + ' · Portable OS';
         document.body.classList.remove('nav-open');

@@ -34,6 +34,7 @@ UNITS = ('kvmd.service', 'kvmd-nginx.service', 'wifi-wizard-api.service',
          'pikvm-power-hold.service', 'pikvm-auto-shutdown.service',
          'pikvm-hotspot-hostapd.service', 'pikvm-hotspot-dnsmasq.service',
          'pikvm-oled-custom.service', 'pikvm-button-menu.service')
+UNITS=(*UNITS,'sshd.service','pikvm-security-gateway.service')
 
 
 def read(path):
@@ -176,6 +177,10 @@ class Handler(share.Handler):
     server_version = 'PiKVM-Portable-OS'
     def dispatch(self, post=False):
         try:
+            delegated=None
+            if self.headers.get('X-Portable-Delegation'):
+                from pikvm_security_bridge import bind
+                delegated=bind(self.headers,self.command,self.path)
             auth_started = time.perf_counter()
             owner = share.authenticate(self.headers)
             auth_ms = (time.perf_counter()-auth_started)*1000
@@ -184,7 +189,11 @@ class Handler(share.Handler):
             url = urlsplit(self.path)
             route = url.path.removeprefix('/extras/portable-os/api/')
             backend = self.server.backend
-            if route.startswith('settings') or route in ('activity','idle','idle/simulate','report','integrity'):
+            if route.startswith('security/'):
+                from pikvm_security_admin import SecurityAdmin
+                from pikvm_security import native_admin
+                result=SecurityAdmin().dispatch(delegated or native_admin(owner),route,self.body() if post else None)
+            elif route.startswith('settings') or route in ('activity','idle','idle/simulate','report','integrity'):
                 from pikvm_config import ConfigError
                 settings=backend.settings
                 if settings is None:raise share.ShareError('Service de configuration indisponible ; fonctions existantes préservées.',503)
@@ -199,7 +208,7 @@ class Handler(share.Handler):
                 elif post and route=='activity':result=settings.activity(self.body())
                 elif not post and route=='idle':result=settings.diagnostic()
                 elif post and route=='idle/simulate':result=settings.diagnostic(self.body())
-                elif not post and route=='report':result={'status':backend.status(),'idle':settings.diagnostic(),'settings':settings.export(),'release':'0.2.0-rc.12.1'}
+                elif not post and route=='report':result={'status':backend.status(),'idle':settings.diagnostic(),'settings':settings.export(),'release':'0.2.0-rc.13'}
                 elif not post and route=='integrity':result=settings.integrity()
                 else:raise share.ShareError('Route introuvable.',404)
             elif not post and route == 'status':
@@ -247,8 +256,9 @@ class Handler(share.Handler):
             self.reply(400, {'ok': False, 'error': 'Requête invalide.'})
         except Exception as exc:
             from pikvm_config import ConfigError
-            self.reply(exc.status if isinstance(exc,ConfigError) else 503,
-                       {'ok': False, 'error': str(exc) if isinstance(exc,ConfigError) else 'Information système indisponible.'})
+            from pikvm_security import SecurityError
+            self.reply(exc.status if isinstance(exc,(ConfigError,SecurityError)) else 503,
+                       {'ok': False, 'error': str(exc) if isinstance(exc,(ConfigError,SecurityError)) else 'Information système indisponible.'})
 
 
 def main():

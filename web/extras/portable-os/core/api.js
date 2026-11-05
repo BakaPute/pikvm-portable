@@ -1,3 +1,4 @@
+import {can} from './access.js';
 export class ApiError extends Error {
     constructor(message, status) { super(message); this.status = status; }
 }
@@ -73,6 +74,8 @@ export class Poller {
             system: () => this.client.system('status'), usb: () => this.client.system('usb')};
         if(this.configuration){reads.settings=()=>this.client.system('settings/current');reads.idle=()=>this.client.system('idle');}
         await Promise.allSettled(Object.entries(reads).map(async ([name, read]) => {
+            const permissions={msd:'iso.view',share:'share.status',network:'system.diagnostics',battery:'system.diagnostics',system:'system.diagnostics',usb:'share.status',idle:'system.diagnostics'};
+            if(permissions[name]&&!can(this.store,permissions[name]))return;
             try { this.store.resource(name, await read()); }
             catch (error) { this.store.resource(name, null, error.message); }
         }));

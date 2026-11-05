@@ -25,6 +25,7 @@ export function openOled(context) {
 function createPanel(host, context) {
     host.dataset.ready = 'true';
     let frame, timer, reading = false, controller, armedControl = null;
+    const mayControl=()=>!context.can||context.can('oled.gestures','iso.mount','iso.eject','system.network','system.shutdown');
     const status = el('p', {class:'oled-status',role:'status','aria-live':'polite'}, 'Connexion…');
     const detail = el('p', {class:'oled-detail muted'});
     const canvas = el('canvas', {width:128,height:64,'aria-hidden':'true'});
@@ -79,8 +80,8 @@ function createPanel(host, context) {
             if(frame?.pixels!==result.pixels) canvas.getContext('2d').putImageData(new ImageData(unpackPixels(result.pixels),128,64),0,0);
             if(armedControl!==result.control_id) {arm.checked=false;armedControl=null;}
             frame=result;
-            screen.disabled=false;
-            if(!input.active) text(status,result.context?.ui_version===2?'1 avancer · 2 ouvrir · maintien retour':'Appuyer ou maintenir · Échap annule');
+            screen.disabled=!mayControl();
+            if(!input.active) text(status,!mayControl()?'Miroir en lecture seule':result.context?.ui_version===2?'1 avancer · 2 ouvrir · maintien retour':'Appuyer ou maintenir · Échap annule');
             // Controller health is diagnostic; a valid image never changes the
             // interaction state or flashes a warning during renderer handoff.
             text(freshness,'');
@@ -108,7 +109,7 @@ function createPanel(host, context) {
         }
     }
     function start(event) {
-        if(input.active||screen.disabled||!frame||!visible()||context.store.data.session!=='ready') return;
+        if(!mayControl()||input.active||screen.disabled||!frame||!visible()||context.store.data.session!=='ready') return;
         if(event?.button!==undefined&&event.button!==0) return;
         event?.preventDefault();
         screen.focus();

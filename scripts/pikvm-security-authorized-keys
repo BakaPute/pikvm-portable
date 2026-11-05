@@ -1,0 +1,24 @@
+#!/usr/bin/env python3
+"""Root AuthorizedKeysCommand: output only current public keys of mapped UIDs."""
+import json
+import os
+from pathlib import Path
+import pwd
+import sys
+sys.path.insert(0,'/usr/local/lib/pikvm-portable')
+from pikvm_security import SecurityStore,protected_file,username,public_key
+
+def keys(login,store=None,mapping=Path('/etc/ssh/portable-security-identities.json'),lookup=pwd.getpwnam):
+    protected_file(mapping);links=json.loads(mapping.read_text());link=links.get(login)
+    if not link:return []
+    user_name=username(link['web_user']);account=lookup(login)
+    if account.pw_uid<1000 or account.pw_uid!=link['uid']:return []
+    user=(store or SecurityStore()).read()['users'].get(user_name)
+    if not user or user['id']!=link['identity_id'] or not user['enabled'] or user['ssh']!='diagnostics':return []
+    return ['restrict '+public_key(k['public'])['public'] for k in user['keys']]
+
+if __name__=='__main__':
+    try:
+        if os.geteuid()!=0 or len(sys.argv)!=2:raise ValueError()
+        for key in keys(sys.argv[1]):print(key)
+    except Exception:raise SystemExit(1) # no state, secrets or credentials in sshd logs

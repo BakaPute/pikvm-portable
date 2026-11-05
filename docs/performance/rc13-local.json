@@ -1,0 +1,20 @@
+{
+  "platform": "Windows-11-10.0.26200-SP0",
+  "python": "3.12.14",
+  "scope": "PC only; synthetic 16 users; cached validated state, stat rechecked each request. Not Pi CPU/memory or KVMD latency.",
+  "iterations": 1000,
+  "authorization_mean_ms": 0.2606,
+  "authorization_p95_ms": 0.2909,
+  "pbkdf2_600000_ms": 204.75,
+  "state_bytes": 6409,
+  "limits": {
+    "concurrent_proxy_requests": 16,
+    "sessions": 128,
+    "credential_checks": 1,
+    "users": 64,
+    "roles": 32,
+    "public_keys_per_user": 8,
+    "http_management_bytes": 16384,
+    "ws_client_bytes": 4096
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "candidate_integrity_sha256": "REPLACE_WITH_REVIEWED_INSTALLED_INTEGRITY_JSON_SHA256",
+  "native_auth": false,
+  "ws_filters": false,
+  "terminal_denied": false,
+  "vnc_denied": false,
+  "legacy_denied": false,
+  "root_recovery": false
+}

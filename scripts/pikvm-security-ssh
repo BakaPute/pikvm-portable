@@ -1,0 +1,124 @@
+#!/usr/bin/env python3
+"""Explicit root-only SSH provisioning/revocation from a reviewed plan digest."""
+import argparse
+import hashlib
+import json
+import os
+from pathlib import Path
+import pwd
+import secrets
+import shutil
+import stat
+import subprocess
+import sys
+import time
+import uuid
+sys.path.insert(0,'/usr/local/lib/pikvm-portable')
+sys.path.insert(1,str(Path(__file__).resolve().parent))
+from pikvm_security import SecurityStore,SecurityError
+from pikvm_ssh import plan,BROKER,KEY_COMMAND,ssh_options
+
+def run(args):return subprocess.run(args,check=True,capture_output=True,text=True,timeout=15,stdin=subprocess.DEVNULL)
+def digest(path):return hashlib.sha256(path.read_bytes()).hexdigest()
+def write(path,content,mode):
+    if path.is_symlink():raise SecurityError('Lien symbolique refusé.',503)
+    temporary=path.with_name(path.name+'.'+uuid.uuid4().hex+'.new')
+    fd=os.open(temporary,os.O_WRONLY|os.O_CREAT|os.O_EXCL|getattr(os,'O_NOFOLLOW',0),mode)
+    try:
+        with os.fdopen(fd,'wb') as f:f.write(content);f.flush();os.fsync(f.fileno())
+        temporary.replace(path)
+    finally:temporary.unlink(missing_ok=True)
+def effective(config,user):
+    output=run(['/usr/bin/sshd','-T','-f',str(config),'-C','user='+user+',host=localhost,addr=127.0.0.1']).stdout
+    return ssh_options(output)
+def apply(store,name,approved):
+    if os.geteuid()!=0:raise SecurityError('Procédure root explicite requise.',403)
+    proposal=plan(store.read(),name)
+    if proposal['sha256']!=approved:raise SecurityError('Plan différent : relecture et nouvelle autorisation nécessaires.',409)
+    account=proposal['linux_user'];config=Path('/etc/ssh/sshd_config')
+    home=Path('/home')/account
+    if Path('/home').resolve()!=Path('/home') or home.exists() or home.is_symlink():raise SecurityError('Home existant ou redirigé ; aucun changement.',403)
+    # Abort instead of modifying system/global/root rules to make a plan fit.
+    for broker in (Path(BROKER),Path(KEY_COMMAND)):
+        s=broker.stat()
+        if not stat.S_ISREG(s.st_mode) or s.st_uid!=0 or stat.S_IMODE(s.st_mode)&0o022 or broker.resolve()!=broker:raise SecurityError('Helper non immuable par le compte SSH.',503)
+    marker='# Portable-Security '+account
+    original=config.read_bytes()
+    if marker.encode() in original:raise SecurityError('Compte déjà provisionné : utiliser sync-keys pour la révocation sans reconfigurer sshd.',409)
+    try:pwd.getpwnam(account)
+    except KeyError:pass
+    else:raise SecurityError('Identité Linux existante protégée ; aucune réaffectation.',409)
+    if proposal['mode']!='diagnostics' or not proposal['keys']:raise SecurityError('Activer le plan de diagnostic et importer une clé publique d’abord.',400)
+    candidate=config.with_name('sshd_config.portable-candidate')
+    write(candidate,original+b'\n'+marker.encode()+b'\n'+proposal['configuration'].encode(),0o600)
+    created_account=False
+    try:
+        run(['/usr/bin/sshd','-t','-f',str(candidate)])
+        if effective(config,'root')!=effective(candidate,'root'):raise SecurityError('Le plan modifierait SSH root ; refus.',403)
+        actual=effective(candidate,account)
+        expected={'passwordauthentication':'no','kbdinteractiveauthentication':'no','pubkeyauthentication':'yes','authenticationmethods':'publickey','permittty':'no','allowtcpforwarding':'no','allowagentforwarding':'no','x11forwarding':'no','permituserenvironment':'no','permitopen':'none'}
+        # Forwarding disabled is authoritative even if PermitOpen remains "any".
+        expected.pop('permitopen')
+        if any(actual.get(k)!=v for k,v in expected.items()) or actual.get('forcecommand')!='/usr/bin/python3 -I '+BROKER or actual.get('authorizedkeysfile')!='none' or actual.get('authorizedkeyscommand')!='/usr/bin/python3 -I '+KEY_COMMAND+' %u' or actual.get('authorizedkeyscommanduser')!='root':
+            raise SecurityError('Options SSH effectives incompatibles.',403)
+        if actual.get('allowusers') or actual.get('denyusers') or actual.get('allowgroups') or actual.get('denygroups'):
+            raise SecurityError('Politique SSH globale à examiner manuellement ; aucune modification implicite.',403)
+        if any(value not in ('LANG','LC_*') for value in actual.get('acceptenv','').split()) or actual.get('setenv','none')!='none':
+            raise SecurityError('Environnement SSH global non validé ; aucun changement implicite.',403)
+        backup=Path('/root/pikvm-security-backups')/(time.strftime('%Y%m%d-%H%M%S-')+uuid.uuid4().hex[:8]);backup.mkdir(mode=0o700,parents=True)
+        write(backup/'sshd_config',original,0o600)
+        if digest(backup/'sshd_config')!=hashlib.sha256(original).hexdigest():raise SecurityError('Sauvegarde SSH invalide.',503)
+        print('SSH_BACKUP='+str(backup),flush=True)
+        run(['/usr/bin/useradd','--create-home','--home-dir',str(home),'--user-group','--shell','/usr/bin/bash','--password','*',account])
+        created_account=True
+        created=pwd.getpwnam(account)
+        if created.pw_uid<1000 or created.pw_gid==0:raise SecurityError('UID/GID non conformes.',503)
+        # No user-writable shell startup/SSH rc files can precede ForceCommand.
+        home=Path(created.pw_dir)
+        if home.is_symlink() or home!=Path('/home')/account:raise SecurityError('Home nouveau non reconnu.',503)
+        for base,dirs,files in os.walk(home,followlinks=False):
+            for entry in [Path(base),*(Path(base)/name for name in files)]:
+                if entry.is_symlink():raise SecurityError('Squelette de home symbolique non reconnu.',503)
+                os.chown(entry,0,created.pw_gid);entry.chmod(0o750 if entry.is_dir() else 0o640)
+        # No supplementary groups, sudoers entry, privileged socket or device ACL.
+        mapping=Path('/etc/ssh/portable-security-identities.json')
+        links=json.loads(mapping.read_text()) if mapping.exists() else {}
+        if mapping.exists():write(backup/'ssh-identities.json',mapping.read_bytes(),0o600)
+        links[account]={'uid':created.pw_uid,'web_user':name,'identity_id':proposal['identity_id']}
+        write(mapping,json.dumps(links).encode(),0o600)
+        record={'linux_user':account,'uid':created.pw_uid,'web_user':name,'plan_sha256':approved,'backup_config_sha256':digest(backup/'sshd_config')}
+        write(backup/'manifest.json',json.dumps(record).encode(),0o600)
+        write(config,candidate.read_bytes(),0o600)
+        try:run(['/usr/bin/sshd','-t']);run(['/usr/bin/systemctl','reload','sshd.service'])
+        except Exception:
+            write(config,original,0o600)
+            run(['/usr/bin/usermod','--shell','/usr/bin/nologin',account]);raise
+        print('SSH_PROVISIONED='+account,flush=True)
+    except Exception:
+        if created_account:
+            try:write(config,original,0o600)
+            finally:run(['/usr/bin/usermod','--shell','/usr/bin/nologin',account])
+        raise
+    finally:candidate.unlink(missing_ok=True)
+
+def sync(store,name,approved):
+    if os.geteuid()!=0:raise SecurityError('root requis.',403)
+    proposal=plan(store.read(),name)
+    if proposal['sha256']!=approved:raise SecurityError('Révision/plan différent.',409)
+    account=proposal['linux_user'];config=Path('/etc/ssh/sshd_config')
+    if '# Portable-Security '+account not in config.read_text():raise SecurityError('Compte non géré.',403)
+    actual=effective(config,account)
+    if actual.get('forcecommand')!='/usr/bin/python3 -I '+BROKER:raise SecurityError('Confinement SSH perdu.',403)
+    if actual.get('authorizedkeyscommand')!='/usr/bin/python3 -I '+KEY_COMMAND+' %u':raise SecurityError('Résolveur de clés inconnu.',403)
+    print('SSH_KEYS_DYNAMIC='+account+'; état Web lu à chaque connexion ; commandes en cours limitées à 8 s')
+
+def main():
+    parser=argparse.ArgumentParser(description=__doc__);parser.add_argument('action',choices=('plan','apply','sync-keys'));parser.add_argument('user');parser.add_argument('--approve-plan-sha256')
+    options=parser.parse_args();store=SecurityStore()
+    if options.action=='plan':print(json.dumps(plan(store.read(),options.user),indent=2,ensure_ascii=False))
+    elif options.action=='apply':apply(store,options.user,options.approve_plan_sha256)
+    else:sync(store,options.user,options.approve_plan_sha256)
+
+if __name__=='__main__':
+    try:main()
+    except Exception:raise SystemExit('Opération SSH refusée ou échouée ; conserver la sauvegarde et vérifier le compte avant de réessayer.')

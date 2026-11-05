@@ -1,0 +1,25 @@
+[Unit]
+Description=Portable OS RC13 permission gateway (explicit activation only)
+After=kvmd.service kvmd-pst.service
+ConditionPathExists=/etc/kvmd/portable-security-activation.json
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 -I -B /usr/local/lib/pikvm-portable/pikvm_security_gateway.py
+Restart=on-failure
+RestartSec=10
+RuntimeDirectory=pikvm-portable-security
+RuntimeDirectoryMode=0700
+UMask=0077
+NoNewPrivileges=yes
+CapabilityBoundingSet=
+ProtectHome=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+IPAddressDeny=any
+IPAddressAllow=localhost
+
+[Install]
+WantedBy=multi-user.target

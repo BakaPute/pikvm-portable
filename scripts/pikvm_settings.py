@@ -23,7 +23,7 @@ LIMITATIONS = {
     'button':'Clic suivant, double clic ouvrir, maintien retour, 3 s accueil hors confirmation. Dans la confirmation : 2 s relancer KVM, 5 s arrêter ou changer le hotspot. Bail Web 800 ms et autorisation dédiée conservés.',
     'storage':'Pas d’attachement automatique, changement de montage, préférence d’intégrité désactivable ou suppression automatique. Les protections existantes restent obligatoires.',
     'kvm':'Capture manuelle uniquement. Macros/raccourcis restent dans les contrôles KVMD natifs ; aucun éditeur parallèle.',
-    'security':'Authentification KVMD et CSRF obligatoires. Aucun réglage de rôles, GPIO, shell, tension, fréquence CPU ou swap.',
+    'security':'KVMD administrateur conservé. Comptes Portable séparés, passerelle à permissions côté serveur, activation distincte après validation native ; aucun accès Linux implicite.',
 }
 
 
@@ -73,7 +73,7 @@ class Settings:
             if not path.is_symlink() and path.stat().st_size<1024:installed=json.loads(path.read_text(encoding='utf-8')).get('installed_at')
         except (OSError,ValueError,AttributeError):pass
         return {**document,'fields':FIELDS,'categories':CATEGORIES,'defaults':defaults(),'limitations':LIMITATIONS,
-                'release':'0.2.0-rc.12.1','installed_at':installed,'restart_required':[],
+                'release':'0.2.0-rc.13','installed_at':installed,'restart_required':[],
                 'persistence':'PST KVMD : bail natif en écriture, jamais de remount racine ou MSD'}
 
     def apply(self,data,reset=False):

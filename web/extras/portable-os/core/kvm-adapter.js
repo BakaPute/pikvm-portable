@@ -20,6 +20,8 @@ export function adaptKvm(frame, fullscreen, onSize=()=>{}, context) {
     const on=(target,type,fn,options)=>{target.addEventListener(type,fn,options);listeners.push(()=>target.removeEventListener(type,fn,options));};
     const mute=doc.getElementById('hid-mute-switch');
     const captured=()=>active&&enabled&&!mute.checked;
+    const keyboardAllowed=()=>!context?.can||context.can('kvm.keyboard','kvm.macros');
+    const mouseAllowed=()=>!context?.can||context.can('kvm.mouse');
     const controls=el('div',{class:'kvm-controls','aria-label':'Commandes KVM'});
     const toggle=button('Activer clavier / souris',()=>setEnabled(!captured(),true),'quiet',{'aria-pressed':'false'});
     controls.append(toggle,button('Plein écran',fullscreen,'quiet'));
@@ -78,7 +80,7 @@ export function adaptKvm(frame, fullscreen, onSize=()=>{}, context) {
     }
     function setEnabled(value,focus=false){
         if(!value){const stop=doc.getElementById('hid-recorder-stop');if(stop&&!stop.disabled)stop.click();}
-        releaseNativeInput(frame);enabled=!!value&&active;mute.checked=!enabled;
+        releaseNativeInput(frame);enabled=!!value&&active&&(keyboardAllowed()||mouseAllowed());mute.checked=!enabled;
         doc.documentElement.classList.toggle('portable-hid-enabled',enabled);
         if(enabled&&focus){win.focus();stream.focus();}
         sync();
@@ -89,6 +91,10 @@ export function adaptKvm(frame, fullscreen, onSize=()=>{}, context) {
         const nativeInput = target.closest?.('#stream-window,#keyboard-window,#mouse-window,[data-keyboard-shortcut],#hid-recorder-play,#hid-recorder-record,#hid-pak-button');
         const windowManagement = target.closest?.('.window-header,[data-wm-window-close]');
         const pasteShortcut = target.closest?.('#hid-pak-text') && event.ctrlKey && event.key === 'Enter';
+        if(event.code==='Escape'&&event.ctrlKey&&event.shiftKey)return;
+        const keyboardEvent=event.type.startsWith('key')||target.closest?.('#keyboard-window,[data-keyboard-shortcut],#hid-recorder-play,#hid-recorder-record,#hid-pak-button');
+        if(nativeInput&&!windowManagement&&((keyboardEvent&&!keyboardAllowed())||(!keyboardEvent&&!mouseAllowed()))){event.preventDefault();event.stopImmediatePropagation();return;}
+        if(pasteShortcut&&context?.can&&!context.can('kvm.keyboard','kvm.macros','kvm.text')){event.preventDefault();event.stopImmediatePropagation();return;}
         if (!captured() && ((nativeInput && !windowManagement) || pasteShortcut)) {
             event.preventDefault(); event.stopImmediatePropagation();
         }
@@ -133,9 +139,10 @@ export function adaptKvm(frame, fullscreen, onSize=()=>{}, context) {
         if(size&&`${size.width}x${size.height}`!==lastSize){lastSize=`${size.width}x${size.height}`;onSize(size);}
         leds.forEach(binding=>binding.sync());
         toggle.textContent=captured()?'Désactiver clavier / souris':'Activer clavier / souris';
-        toggle.setAttribute('aria-pressed',String(captured()));toggle.disabled=!active;
-        usbControl.disabled=!active;
-        for(const [control,native]of toolbarButtons)control.disabled=!active||native.classList.contains('feature-disabled');
+        toggle.setAttribute('aria-pressed',String(captured()));toggle.disabled=!active||(!keyboardAllowed()&&!mouseAllowed());
+        usbControl.disabled=!active||(context?.can&&!context.can('share.status'));
+        const needs={'msd-dropdown':'iso.view','atx-dropdown':'atx.view','shortcuts-dropdown':'kvm.keyboard','macro-dropdown':'kvm.macros','text-dropdown':'kvm.text','system-dropdown':'kvm.hid'};
+        for(const [control,native]of toolbarButtons)control.disabled=!active||native.classList.contains('feature-disabled')||(context?.can&&!context.can(needs[native.id]));
         for(const node of doc.querySelectorAll('.window:not(#stream-window):not(#stream-ocr-window)')){
             if(node.classList.contains('hidden')){openedWindows.delete(node);continue;}
             if(!openedWindows.has(node)&&active){openedWindows.add(node);openPanel(node,node.querySelector('.window-grab')?.textContent||'Contrôles natifs');}

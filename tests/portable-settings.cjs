@@ -13,7 +13,7 @@ const fs=require('node:fs');const path=require('node:path');
         page.on('response',async r=>{if(r.url().includes('/settings/preview')&&r.status()!==200)console.error('Preview API error',r.status(),await r.text().catch(()=>''));});
         await page.goto(url+'#settings');
         const nav=page.getByRole('navigation',{name:'Catégories des paramètres'});
-        await nav.getByRole('button',{name:'Général',exact:true}).waitFor();assert.equal(await nav.getByRole('button').count(),12);
+        await nav.getByRole('button',{name:'Général',exact:true}).waitFor();assert.equal(await nav.getByRole('button').count(),13);
         const save=page.getByRole('button',{name:'Appliquer',exact:true});
         await page.getByLabel('Thème',{exact:true}).selectOption('light');
         assert.equal(await page.locator('html').getAttribute('data-theme'),'dark','Draft is not a write');

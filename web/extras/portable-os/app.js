@@ -7,12 +7,13 @@ import {el, icon, notify, guarded} from './core/ui.js';
 import {Router} from './core/router.js';
 import {createModules} from './modules/index.js';
 import {getTheme} from './core/preferences.js';
+import {can,moduleAllowed} from './core/access.js';
 
 document.getElementById('fallback-link').href = routes.legacy;
 const store = new Store(), api = new Client(store), poller = new Poller(api, store,{configuration:true});
 document.documentElement.dataset.theme = getTheme();
 const modules = createModules();
-const context = {api, store, poller, notify, action: async work => {
+const context = {api, store, poller, notify, can:(...permissions)=>can(store,...permissions), moduleAllowed:id=>moduleAllowed(store,id), action: async work => {
     if (store.data.session !== 'ready') { notify('Une session PiKVM valide est requise.', true); return; }
     if (store.data.operation) { notify('Une opération est déjà en cours.', true); return; }
     store.update({operation: true});
@@ -62,7 +63,9 @@ document.getElementById('logout').onclick = () => context.action(async () => {
     await api.native('auth/logout', undefined, 'POST'); location.assign('/login/');
 });
 async function start() {
-    try { await api.native('auth/check'); store.update({session: 'ready'}); }
+    try { const identity=await api.native('auth/check');store.update({session:'ready',access:identity.permissions?identity:null});
+        for(const link of nav.querySelectorAll('[data-route]'))link.hidden=!moduleAllowed(store,link.dataset.route);
+    }
     catch (error) { store.update({session: 'expired'}); notify(error.message, true); return; }
     const router = new Router(modules, document.getElementById('view'), context);
     router.start(); if(!document.hidden)poller.start();

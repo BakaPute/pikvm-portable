@@ -18,7 +18,10 @@
   "baselines": {
     "/usr/local/bin/pikvm-usb-transfer": "6edbd11966feb251acd9fa6a23c212033d49f14f52681dce1de881b0a6815b4a",
     "/usr/local/bin/pikvm-image-folders": "878eedbe24ae997c87569819f3b596c764d072bb13f4e512588242f0f617f677",
-    "/usr/local/bin/wifi-wizard-api": "60f0de6f247c0bf20ee819bdfe523980f228f62d11f8c0da2846e4dee115f9b2",
+    "/usr/local/bin/wifi-wizard-api": [
+      "60f0de6f247c0bf20ee819bdfe523980f228f62d11f8c0da2846e4dee115f9b2",
+      "b581530f89159065bcaf79dccf0ce624ef86ad431e418dabaaf7363887db5118"
+    ],
     "/usr/share/kvmd/web/share/js/usb-transfer.js": "54f9f1c195e5e19e5b461e71986e62125eedceabc05d69967a67815499e5e0b0",
     "/usr/share/kvmd/web/share/js/drive-folders.js": "f564c129028156e13171124708f2173080ad5b111f41e271e0f6bfcb2c938109",
     "/usr/share/kvmd/web/extras/wifi-wizard/index.html": "aae6eb23272d81c8fe841837e71afea8b5b2f97cda0d36c27ffa589c25b0e844",

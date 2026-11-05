@@ -18,6 +18,8 @@ import threading
 import time
 import unicodedata
 import uuid
+import sys
+sys.path.insert(0, '/usr/local/lib/pikvm-portable')
 from http.cookies import SimpleCookie
 from http.server import BaseHTTPRequestHandler
 from urllib.parse import parse_qs, quote, urlsplit
@@ -554,6 +556,9 @@ def kvmd_check(cookie=None):
 
 
 def authenticate(headers, checker=kvmd_check):
+    if headers.get('X-Portable-Delegation'):
+        from pikvm_security_bridge import verify
+        return verify(headers).owner
     token = session_cookie(headers)
     # Auth-disabled KVMD must never grant management access. No socket-user bypass.
     if checker() not in (401, 403):
@@ -646,6 +651,9 @@ class Handler(BaseHTTPRequestHandler):
     def dispatch(self, post=False):
         self.response_started = False
         try:
+            if self.headers.get('X-Portable-Delegation'):
+                from pikvm_security_bridge import bind
+                bind(self.headers,self.command,self.path)
             owner = authenticate(self.headers)
             if post:
                 check_csrf(self.headers)

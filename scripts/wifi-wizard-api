@@ -750,6 +750,9 @@ class Handler(BaseHTTPRequestHandler):
         path = urlparse(self.path).path
 
         try:
+            if self.headers.get('X-Portable-Delegation'):
+                from pikvm_security_bridge import bind
+                bind(self.headers,self.command,self.path)
             authorize(self.headers)
             if path == "/api/image-manager/folders":
                 self.send_json(200, {
@@ -790,6 +793,9 @@ class Handler(BaseHTTPRequestHandler):
         path = urlparse(self.path).path
         locked = False
         try:
+            if self.headers.get('X-Portable-Delegation'):
+                from pikvm_security_bridge import bind
+                bind(self.headers,self.command,self.path)
             authorize(self.headers, mutation=True)
             data = self.read_body()
             locked = MUTATION_LOCK.acquire(blocking=False)

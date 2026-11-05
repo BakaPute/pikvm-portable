@@ -16,6 +16,11 @@ from pikvm_settings import Settings
 from pikvm_config import ConfigError
 SETTINGS_TEMP=tempfile.TemporaryDirectory(prefix='portable-settings-fixture-')
 SETTINGS=Settings(SimpleNamespace(usb=lambda:{'drives':{}},share_lease=lambda:None),Path(SETTINGS_TEMP.name)/'settings.json')
+from pikvm_security import SecurityStore,SecurityError,native_admin
+from pikvm_security_admin import SecurityAdmin
+from pikvm_security_bridge import Audit
+SECURITY=SecurityAdmin(SecurityStore(Path(SETTINGS_TEMP.name)/'identities.json',writer=lambda f:f(),lock_path=Path(SETTINGS_TEMP.name)/'security.lock',strict=False),
+    Audit(Path(SETTINGS_TEMP.name)/'audit.jsonl',strict=False),natives=lambda:['admin'])
 FILES = {'welcome.txt': b'Portable OS local test fixture'}
 MODE = 'detached'
 UPLOADS = {}
@@ -50,6 +55,9 @@ class Preview(SimpleHTTPRequestHandler):
 
     def do_GET(self):
         url = urlsplit(self.path)
+        if url.path.startswith('/extras/portable-os/api/security/'):
+            try:return self.reply({'ok':True,'result':SECURITY.dispatch(native_admin(),url.path.split('/api/',1)[1])})
+            except SecurityError as error:return self.reply({'ok':False,'error':str(error)},error.status)
         if url.path=='/__test/oled-rc12' and OLED_RC12 is not None:
             with OLED_RC12.lock:return self.reply({'screen':OLED_RC12.navigation.screen,'calls':OLED_RC12.backend.calls,'error':OLED_RC12.last_error})
         settings_reads={'settings':SETTINGS.describe,'settings/current':SETTINGS.configuration.read,
@@ -118,6 +126,12 @@ class Preview(SimpleHTTPRequestHandler):
         global MODE, OLED_PAGE, OLED_RC12
         url = urlsplit(self.path)
         config_action=url.path.removeprefix('/extras/portable-os/api/')
+        if config_action.startswith('security/'):
+            if self.headers.get('X-Pikvm-Share')!='1':return self.reply({'ok':False,'error':'CSRF'},403)
+            try:
+                data=json.loads(self.rfile.read(int(self.headers.get('Content-Length','0'))))
+                return self.reply({'ok':True,'result':SECURITY.dispatch(native_admin(),config_action,data)})
+            except SecurityError as error:return self.reply({'ok':False,'error':str(error)},error.status)
         if config_action in ('settings/apply','settings/reset','settings/import','settings/preview','activity','idle/simulate'):
             try:
                 data=json.loads(self.rfile.read(int(self.headers.get('Content-Length','0'))))

@@ -20,7 +20,7 @@ jobs:
           node-version: '22'
       - name: Install nginx for real configuration validation
         run: sudo apt-get update && sudo apt-get install -y nginx
-      - run: python -m pip install Pillow
+      - run: python -m pip install Pillow aiohttp
       - run: python -m unittest discover -s tests -v
         env:
           NGINX_BINARY: /usr/sbin/nginx
@@ -46,7 +46,7 @@ jobs:
           node-version: '22'
       - name: Prepare isolated browser test tools (never installed on PiKVM)
         run: |
-          python -m pip install Pillow
+          python -m pip install Pillow aiohttp
           npm --prefix "$RUNNER_TEMP/portable-browser-tools" install --no-save --package-lock=false playwright@1.62.1
           "$RUNNER_TEMP/portable-browser-tools/node_modules/.bin/playwright" install --with-deps chromium
       - name: Run browser integration against localhost simulation
@@ -65,6 +65,7 @@ jobs:
           node tests/portable-transfer.cjs
           node tests/portable-oled-rc12.cjs
           node tests/portable-oled-readability.cjs
+          node tests/portable-users.cjs
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -72,3 +73,28 @@ jobs:
           path: |
             private/portable-os-*.png
             ${{ runner.temp }}/portable-preview.log
+  security-ssh:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build disposable SSH validation container
+        run: docker build -t pikvm-rc13-ssh-test tests/rc13-ssh
+      - name: Test real SSH keys, privilege boundaries, revocation and root recovery
+        run: docker run --rm --network none -v "$GITHUB_WORKSPACE/scripts:/project/scripts:ro" -v "$GITHUB_WORKSPACE/tests/rc13-ssh-integration.py:/project/tests/rc13-ssh-integration.py:ro" pikvm-rc13-ssh-test
+  security-native-auth:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: pikvm/kvmd
+          ref: v4.213
+          path: private/native-kvmd
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.14'
+      - run: python -m pip install aiohttp aiofiles passlib pyotp
+      - name: Validate actual KVMD auth modules without hardware entrypoints
+        env:
+          KVMD_SOURCE: ${{ github.workspace }}/private/native-kvmd
+        run: python -B tests/rc13-native-auth-integration.py

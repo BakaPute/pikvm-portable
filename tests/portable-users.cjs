@@ -1,0 +1,57 @@
+// Real Python security store, isolated localhost browser fixture only.
+const {chromium}=require('playwright'),assert=require('node:assert/strict'),fs=require('node:fs');
+(async()=>{
+    const url=process.env.PORTABLE_TEST_URL||'http://127.0.0.1:8765/extras/portable-os/';
+    if(!['localhost','127.0.0.1'].includes(new URL(url).hostname))throw Error('Local fixture only');
+    const browser=await chromium.launch({headless:true,...(process.platform==='win32'?{channel:'msedge'}:{})});
+    try{
+        const page=await browser.newPage({viewport:{width:1440,height:1040}});page.setDefaultTimeout(12000);
+        const errors=[];page.on('pageerror',e=>errors.push(e.message));
+        await page.goto(url+'#settings');await page.getByRole('button',{name:'Utilisateurs et permissions',exact:true}).click();
+        await page.getByRole('button',{name:'Préparer la sécurité Portable',exact:true}).click();
+        async function fill(fields,submit){const d=page.getByRole('dialog');for(const [key,value] of Object.entries(fields)){const input=d.locator(`[name="${key}"]`);if(await input.evaluate(n=>n.tagName==='SELECT'))await input.selectOption(value);else await input.fill(value);}await d.getByRole('button',{name:submit,exact:true}).click();}
+        await fill({name:'owner',display:'Owner',password:'Synthetic-Browser-2026!'},'Créer');
+        await page.getByRole('button',{name:'Ajouter un utilisateur',exact:true}).waitFor();
+        await page.getByRole('button',{name:'Ajouter un utilisateur',exact:true}).click();
+        await fill({name:'operator',display:'Équipe test',password:'Synthetic-Operator-2026!',role:'operator'},'Créer');
+        await page.getByRole('button',{name:'Modifier operator',exact:true}).click();
+        await fill({display:'Opérateur modifié',role:'operator'},'Confirmer');
+        await page.getByText('Opérateur modifié (operator)',{exact:true}).waitFor();
+        await page.getByRole('button',{name:'Permissions operator',exact:true}).click();
+        await page.getByRole('dialog').getByLabel('iso.mount',{exact:true}).selectOption('deny');
+        await page.getByRole('button',{name:'Enregistrer les permissions',exact:true}).click();
+        await page.getByRole('button',{name:'Dupliquer un rôle',exact:true}).click();
+        await fill({source:'readonly',name:'custom_team',display:'Équipe limitée'},'Confirmer');
+        await page.getByRole('button',{name:'Modifier le rôle',exact:true}).waitFor();
+        await page.getByRole('button',{name:'Modifier le rôle',exact:true}).click();
+        await page.getByRole('dialog').getByLabel('iso.view',{exact:true}).check();await page.getByRole('button',{name:'Enregistrer le rôle',exact:true}).click();
+        await page.getByRole('button',{name:'Préparer le compte Codex',exact:true}).click();
+        await fill({password:'Synthetic-Codex-Web-2026!'},'Confirmer');
+        await page.getByRole('button',{name:'SSH codex',exact:true}).click();
+        await page.getByRole('button',{name:'Ajouter une clé publique',exact:true}).click();
+        const blob=Buffer.concat([Buffer.from([0,0,0,11]),Buffer.from('ssh-ed25519'),Buffer.from([0,0,0,32]),Buffer.alloc(32,7)]);
+        await fill({public_key:'ssh-ed25519 '+blob.toString('base64')},'Confirmer');
+        await page.getByRole('button',{name:'SSH codex',exact:true}).click();
+        await page.getByRole('button',{name:'Préparer SSH diagnostic',exact:true}).click();
+        await page.getByRole('dialog').getByRole('button',{name:'Confirmer',exact:true}).click();
+        await page.getByRole('button',{name:'SSH codex',exact:true}).click();
+        await page.getByRole('button',{name:'Afficher le plan Linux',exact:true}).click();
+        await page.getByText(/Plan uniquement, non appliqué. SHA256/).waitFor();
+        let state=(await(await page.request.get(new URL('/extras/portable-os/api/security/users',url).href)).json()).result;
+        assert.ok(state.users.find(u=>u.name==='operator').deny.includes('iso.mount'));assert.equal(state.roles.custom_team.permissions.includes('iso.view'),true);
+        assert.equal(state.users.find(u=>u.name==='codex').linux_applied,false);assert.equal(state.users.find(u=>u.name==='codex').keys.length,1);
+        await page.getByRole('button',{name:'Révoquer cette clé',exact:true}).click();await page.getByRole('dialog').getByRole('button',{name:'Révoquer',exact:true}).click();
+        await page.getByRole('button',{name:'Supprimer operator',exact:true}).click();await page.getByRole('dialog').getByRole('button',{name:'Supprimer',exact:true}).click();
+        await page.getByRole('button',{name:'Supprimer owner',exact:true}).click();await page.getByRole('dialog').getByRole('button',{name:'Supprimer',exact:true}).click();
+        await page.getByText(/Modification refusée : dernier administrateur/).waitFor();
+        await page.reload();await page.getByRole('button',{name:'Utilisateurs et permissions',exact:true}).click();
+        await page.getByRole('button',{name:'SSH codex',exact:true}).waitFor();
+        state=(await(await page.request.get(new URL('/extras/portable-os/api/security/users',url).href)).json()).result;
+        assert.equal(state.users.find(u=>u.name==='codex').keys.length,0);assert.ok(!state.users.some(u=>u.name==='operator'));assert.ok(state.native_users.every(u=>u.protected));
+        assert.ok(!JSON.stringify(state).includes('pbkdf2'));assert.ok(!JSON.stringify(state).includes('Synthetic-'));
+        await page.getByRole('button',{name:'Connexions et refus disponibles',exact:true}).click();await page.getByRole('heading',{name:'Journal d’audit',exact:true}).waitFor();
+        await page.setViewportSize({width:390,height:844});fs.mkdirSync('private',{recursive:true});await page.screenshot({path:'private/portable-os-rc13-users.png',fullPage:true});
+        assert.deepEqual(errors,[]);
+        console.log('RC13 users passed: create/edit/password-safe export/custom roles/overrides/SSH plans/public keys/revocation/last-admin/persistence/audit/mobile; no Linux or ISO mutation.');
+    }finally{await browser.close();}
+})().catch(error=>{console.error(error);process.exitCode=1;});

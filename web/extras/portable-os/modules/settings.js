@@ -1,6 +1,7 @@
 import {el,button,card,hint,row,field,dialog,notify,table} from '../core/ui.js';
 import {saveTheme,getTheme} from '../core/preferences.js';
 import {unpackPixels} from './oled.js';
+import {mountUsers} from './users.js';
 
 const pageNames={main:'Accueil / réseau',battery:'Batterie',system:'Système : CPU / RAM / température',system_details:'Mémoire et durée',network:'Réseau',network_details:'Connexion et signal',usb:'USB et lecteurs',transfer:'Transfert USB (conditionnel)'};
 const commandNames={'msd-dropdown':'Lecteur ISO',share:'Clé USB','atx-dropdown':'ATX','shortcuts-dropdown':'Raccourcis','macro-dropdown':'Macros','text-dropdown':'Texte','system-dropdown':'Vidéo & HID'};
@@ -9,7 +10,7 @@ const clone=value=>structuredClone(value);
 export const settings={id:'settings',title:'Paramètres',subtitle:'Configuration partagée, diagnostics et sauvegarde des préférences.',icon:'settings',group:'SYSTÈME',
     mount(outlet,context){
         const {api,store,action}=context;
-        let live=true,documentConfig,draft,selected=0,dirty=false,loading=false,frameTimer,frameController,diagnosticTimer,draftTimer,draftController,previewEpoch=0,draftBusy=false,draftQueued=false;
+        let live=true,documentConfig,draft,selected=0,dirty=false,loading=false,frameTimer,frameController,diagnosticTimer,draftTimer,draftController,previewEpoch=0,draftBusy=false,draftQueued=false,usersCleanup;
         const error=el('p',{role:'alert',class:'alert',hidden:true}),state=el('p',{role:'status'}),categories=el('nav',{'aria-label':'Catégories des paramètres',class:'settings-categories'});
         const content=el('div',{class:'settings-content'}),search=el('input',{type:'search',placeholder:'Rechercher un paramètre…','aria-label':'Rechercher dans les paramètres'});
         const apply=button('Appliquer',()=>action(()=>save()),'primary'),cancel=button('Annuler',()=>{draft=clone(documentConfig.values);dirty=false;render();},'quiet');
@@ -92,8 +93,11 @@ export const settings={id:'settings',title:'Paramètres',subtitle:'Configuration
         function render(){
             if(!documentConfig)return;
             stopPreview();clearTimeout(diagnosticTimer);content.replaceChildren();categories.replaceChildren();
+            usersCleanup?.();usersCleanup=null;
             apply.disabled=!dirty||loading||store.data.session!=='ready';cancel.disabled=!dirty||loading;restore.disabled=loading||store.data.session!=='ready';
             documentConfig.categories.forEach((name,index)=>categories.append(button(name,()=>{selected=index;search.value='';render();},'quiet',{'aria-current':selected===index?'page':'false'})));
+            if(!context.can||context.can('accounts.view'))categories.append(button('Utilisateurs et permissions',()=>{selected=12;search.value='';render();},'quiet',{'aria-current':selected===12?'page':'false'}));
+            if(selected===12){apply.disabled=cancel.disabled=restore.disabled=true;usersCleanup=mountUsers(content,context);return;}
             const q=search.value.trim().toLocaleLowerCase('fr');
             const selectedFields=Object.entries(documentConfig.fields).filter(([key,spec])=>q?`${spec.label} ${spec.description} ${documentConfig.categories[spec.category]}`.toLocaleLowerCase('fr').includes(q):spec.category===selected);
             if(!q)content.append(el('h2',{},documentConfig.categories[selected]));
@@ -164,5 +168,5 @@ export const settings={id:'settings',title:'Paramètres',subtitle:'Configuration
         document.addEventListener('visibilitychange',visibility);
         const beforeUnload=event=>{if(dirty){event.preventDefault();event.returnValue='';}};window.addEventListener('beforeunload',beforeUnload);
         const unsub=store.subscribe(data=>{if(data.session!=='ready'){apply.disabled=restore.disabled=true;stopPreview();clearTimeout(diagnosticTimer);}});
-        load();return()=>{live=false;stopPreview();clearTimeout(diagnosticTimer);unsub();document.removeEventListener('visibilitychange',visibility);window.removeEventListener('beforeunload',beforeUnload);};
+        load();return()=>{live=false;usersCleanup?.();stopPreview();clearTimeout(diagnosticTimer);unsub();document.removeEventListener('visibilitychange',visibility);window.removeEventListener('beforeunload',beforeUnload);};
     }};

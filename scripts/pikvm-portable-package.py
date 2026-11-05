@@ -8,8 +8,10 @@ from pathlib import Path
 import tarfile
 
 ROOT = Path(__file__).resolve().parent.parent
-RELEASE = 'pikvm-portable-os-0.2.0-rc.12.1'
-FILES = ('docs/portable-os-rc121.md','docs/performance/rc121-local.json','docs/images/rc121/comparison.png',
+RELEASE = 'pikvm-portable-os-0.2.0-rc.13'
+FILES = ('docs/portable-os-rc13.md','docs/performance/rc13-local.json','config/portable-security/nginx.example.conf','config/portable-security/activation.example.json','config/portable-security/native-tests.example.json','systemd/pikvm-security-gateway.service',
+         'scripts/pikvm_security.py','scripts/pikvm_access.py','scripts/pikvm_security_bridge.py','scripts/pikvm_security_admin.py','scripts/pikvm_security_gateway.py','scripts/pikvm_security_migration.py','scripts/pikvm_ssh.py','scripts/pikvm-maintenance-command','scripts/pikvm-security-authorized-keys','scripts/pikvm-security-ssh',
+         'docs/portable-os-rc121.md','docs/performance/rc121-local.json','docs/images/rc121/comparison.png',
          'docs/portable-os-rc12.md','docs/performance/rc12-local.json','docs/images/rc12-oled.png',
          'scripts/pikvm-portable-rc12-diagnose.sh','scripts/pikvm-oled-benchmark.py','scripts/pikvm_oled_ui.py','scripts/pikvm_oled_nav.py','scripts/pikvm_oled_control.py','scripts/pikvm_gestures.py','scripts/pikvm_iso.py',
          'docs/portable-os-rc11.md', 'scripts/pikvm-portable-rc11-diagnose.sh', 'scripts/pikvm_config.py', 'scripts/pikvm_settings.py', 'scripts/pikvm_activity.py', 'docs/portable-os-rc10.2.md', 'scripts/pikvm_preflight_probe.py', 'scripts/pikvm-portable-drive-check.sh',
