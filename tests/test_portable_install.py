@@ -78,6 +78,13 @@ class PortableInstallTests(unittest.TestCase):
             preferences=__import__('pikvm_config');stack.enter_context(patch.object(portable,'preferences_module',return_value=preferences))
             stack.enter_context(patch.object(preferences,'pst_path',return_value=root/'pst/portable-os/settings.json'))
             stack.enter_context(patch.object(preferences,'pst_commit',side_effect=lambda writer:writer(preferences.pst_path())))
+            # No host SSH/auth configuration is a fixture, even on Linux CI.
+            import pikvm_security_migration as security_migration
+            auth_fixture=root/'synthetic-sshd-config'
+            auth_fixture.write_bytes(b'# synthetic auth configuration only\n')
+            stack.enter_context(patch.object(security_migration,'PST_PATH',root/'pst/security/identities.json'))
+            stack.enter_context(patch.object(security_migration,'AUTH_FILES',(str(auth_fixture),)))
+            stack.enter_context(patch.object(security_migration,'selected_auth_paths',return_value=[str(auth_fixture)]))
             stack.enter_context(patch.object(portable, 'policy_preflight', return_value=(b'', False)))
             stack.enter_context(patch.object(portable, 'oled_preflight'))
             stack.enter_context(patch.object(portable, 'oled_states', return_value={

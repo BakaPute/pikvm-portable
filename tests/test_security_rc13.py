@@ -119,7 +119,7 @@ class IdentityTests(Fixture):
     def test_key_validation_and_ssh_no_sudo_no_group_no_shell_plan(self):
         self.create('codex','maintenance');self.change('key_add','codex',public_key=PUBLIC+' example');self.change('ssh','codex',mode='diagnostics')
         proposal=plan(self.store.read(),'codex');self.assertFalse(proposal['sudo']);self.assertEqual(proposal['groups'],[])
-        for required in ('ForceCommand','AuthorizedKeysFile none','AllowTcpForwarding no','AllowStreamLocalForwarding no','PermitTTY no','AuthorizedKeysCommandUser root'):
+        for required in ('ForceCommand','AuthorizedKeysFile none','PubkeyAcceptedAlgorithms ssh-ed25519','AllowTcpForwarding no','AllowStreamLocalForwarding no','PermitTTY no','AuthorizedKeysCommandUser root'):
             self.assertIn(required,proposal['configuration'])
         for value in ('command="bad" '+PUBLIC,'-----BEGIN PRIVATE KEY-----','ssh-rsa AAAA',PUBLIC+'\n'+PUBLIC):
             with self.assertRaises(security.SecurityError):security.public_key(value)

@@ -12,7 +12,8 @@ def selected_auth_paths():
 def permitted_auth_path(value):
     p=Path(value)
     return value in AUTH_FILES or (str(p.parent)=='/etc/kvmd/override.d' and p.suffix=='.yaml') or (str(p.parent)=='/etc/ssh/sshd_config.d' and p.suffix=='.conf')
-def snapshot(h,backup,state=PST_PATH,auth_paths=None):
+def snapshot(h,backup,state=None,auth_paths=None):
+    state=Path(state) if state is not None else PST_PATH
     if auth_paths is None:auth_paths=selected_auth_paths()
     metadata={'state':{'exists':False},'auth':[]}
     if state.exists() or state.is_symlink():
@@ -42,9 +43,12 @@ def verify(h,backup,metadata,auth_paths=None):
         source=backup/item['file']
         if source.is_symlink() or not source.resolve().is_relative_to(backup.resolve()) or not source.is_file() or h.digest(source)!=item['sha256']:raise SecurityError('Sauvegarde auth altérée ; restauration refusée.',503)
 
-def restore_state(h,backup,metadata,state=PST_PATH,writer=None):
+def restore_state(h,backup,metadata,state=None,writer=None):
+    state=Path(state) if state is not None else PST_PATH
     raw=(backup/'security-state.json').read_bytes() if metadata['state']['exists'] else None
     if raw is None and not state.exists() and not state.is_symlink():return
+    if state.is_symlink() or (state.exists() and (not state.is_file() or state.stat().st_size>512*1024)):
+        raise SecurityError('État courant non ordinaire ; restauration refusée avant lecture.',503)
     if state.exists():h.write_file(backup/'security-before-restore.json',state.read_bytes(),0o600)
     def write(directory):
         if directory.resolve()!=state.parent.resolve():raise SecurityError('Correspondance de restauration PST refusée.',503)

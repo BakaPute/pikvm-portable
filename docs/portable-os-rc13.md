@@ -160,7 +160,10 @@ globale incompatible ou helper modifiable. UID/groupe distincts, home dédié
 sans fichier de démarrage modifiable, mot de passe Linux inutilisable, aucun
 groupe sensible/sudo. `ForceCommand` accepte uniquement `status`, `services`,
 `version` : aucun shell, chemin arbitraire, SCP/SFTP, transfert, tunnel, PTY ou
-agent forwarding. Le compte ne peut pas écrire les GPIO ni effacer les
+agent forwarding. Seules les clés Ed25519 brutes sont acceptées : un certificat
+issu d’une éventuelle CA SSH globale ne contourne pas la liste gérée. Les
+helpers et leurs répertoires doivent être immuables pour le compte. Le compte
+ne peut pas écrire les GPIO ni effacer les
 sauvegardes via cette interface. Il n’est pas un compte root d’automatisation.
 
 Le résolveur de clés root, de chemin fixe et non modifiable par le compte,
@@ -278,6 +281,7 @@ n’a été générée et aucune nouvelle authentification n’a été déployé
 Les performances de RC13 sur le Pi ne sont pas revendiquées avant ce test
 autorisé. Cadences, connexions, sessions, tailles et vérifications PBKDF2 sont
 bornées pour limiter la charge ; aucun swap ni dépendance matérielle ajouté.
+[Mesures locales du validateur](performance/rc13-local.json), sur PC uniquement.
 
 Audit passif du Pi : KVMD 4.213, Python 3.14.7, aiohttp 3.13.5, htpasswd interne,
 seul utilisateur Web natif `admin`, service VNC inactif. Les sockets KVMD et

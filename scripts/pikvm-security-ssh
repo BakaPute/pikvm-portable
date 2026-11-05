@@ -42,6 +42,9 @@ def apply(store,name,approved):
     for broker in (Path(BROKER),Path(KEY_COMMAND)):
         s=broker.stat()
         if not stat.S_ISREG(s.st_mode) or s.st_uid!=0 or stat.S_IMODE(s.st_mode)&0o022 or broker.resolve()!=broker:raise SecurityError('Helper non immuable par le compte SSH.',503)
+        for parent in broker.parents:
+            info=parent.stat()
+            if info.st_uid!=0 or stat.S_IMODE(info.st_mode)&0o022:raise SecurityError('Répertoire du helper modifiable ; provisionnement refusé.',503)
     marker='# Portable-Security '+account
     original=config.read_bytes()
     if marker.encode() in original:raise SecurityError('Compte déjà provisionné : utiliser sync-keys pour la révocation sans reconfigurer sshd.',409)
@@ -56,7 +59,7 @@ def apply(store,name,approved):
         run(['/usr/bin/sshd','-t','-f',str(candidate)])
         if effective(config,'root')!=effective(candidate,'root'):raise SecurityError('Le plan modifierait SSH root ; refus.',403)
         actual=effective(candidate,account)
-        expected={'passwordauthentication':'no','kbdinteractiveauthentication':'no','pubkeyauthentication':'yes','authenticationmethods':'publickey','permittty':'no','allowtcpforwarding':'no','allowagentforwarding':'no','x11forwarding':'no','permituserenvironment':'no','permitopen':'none'}
+        expected={'passwordauthentication':'no','kbdinteractiveauthentication':'no','pubkeyauthentication':'yes','pubkeyacceptedalgorithms':'ssh-ed25519','authenticationmethods':'publickey','permittty':'no','allowtcpforwarding':'no','allowagentforwarding':'no','x11forwarding':'no','permituserenvironment':'no','permitopen':'none'}
         # Forwarding disabled is authoritative even if PermitOpen remains "any".
         expected.pop('permitopen')
         if any(actual.get(k)!=v for k,v in expected.items()) or actual.get('forcecommand')!='/usr/bin/python3 -I '+BROKER or actual.get('authorizedkeysfile')!='none' or actual.get('authorizedkeyscommand')!='/usr/bin/python3 -I '+KEY_COMMAND+' %u' or actual.get('authorizedkeyscommanduser')!='root':
@@ -92,12 +95,12 @@ def apply(store,name,approved):
         try:run(['/usr/bin/sshd','-t']);run(['/usr/bin/systemctl','reload','sshd.service'])
         except Exception:
             write(config,original,0o600)
-            run(['/usr/bin/usermod','--shell','/usr/bin/nologin',account]);raise
+            run(['/usr/bin/usermod','--expiredate','1','--lock','--shell','/usr/bin/nologin',account]);raise
         print('SSH_PROVISIONED='+account,flush=True)
     except Exception:
         if created_account:
             try:write(config,original,0o600)
-            finally:run(['/usr/bin/usermod','--shell','/usr/bin/nologin',account])
+            finally:run(['/usr/bin/usermod','--expiredate','1','--lock','--shell','/usr/bin/nologin',account])
         raise
     finally:candidate.unlink(missing_ok=True)
 

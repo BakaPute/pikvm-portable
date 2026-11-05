@@ -27,6 +27,7 @@ def plan(document,name):
     configuration='\n'.join(['Match all','Match User '+login,
         '    AuthenticationMethods publickey','    PasswordAuthentication no','    KbdInteractiveAuthentication no',
         '    PubkeyAuthentication yes','    AuthorizedKeysFile none',
+        '    PubkeyAcceptedAlgorithms ssh-ed25519',
         '    AuthorizedKeysCommand /usr/bin/python3 -I '+KEY_COMMAND+' %u','    AuthorizedKeysCommandUser root',
         '    PermitUserRC no','    PermitTTY no',
         '    AllowTcpForwarding no','    AllowStreamLocalForwarding no','    AllowAgentForwarding no',
