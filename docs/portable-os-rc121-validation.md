@@ -35,6 +35,12 @@ navigation et migration OLED ont réussi sur Python 3.14.7.
   nouveau hachage des 28 Gio d’ISO pendant ce déploiement ; les sept SHA256
   précédemment comparés ne constituent pas un nouveau contrôle du contenu.
 
+Validation utilisateur après rechargement : « Tout fonctionne » pour les deux
+profils, les pages secondaires, la sauvegarde/relecture des préférences, les
+gestes du miroir (simple, double, retour), la vidéo, le clavier, la souris KVM
+et l’ouverture du sélecteur ISO sans connexion de lecteur. Cette vérification
+du miroir ne remplace pas un essai sur SSD1306 physique.
+
 ## Mesures sur le Pi
 
 Deux fenêtres de 30 secondes, CPU d’un cœur incluant les enfants via cgroups.
