@@ -17,6 +17,55 @@ import pikvm_security_migration as migration
 from test_security_rc13 import Fixture,OTHER
 
 class MigrationTests(unittest.TestCase):
+    def test_share_audit_is_utf8_idempotent_and_does_not_write_source(self):
+        import io
+        from types import SimpleNamespace
+        with tempfile.TemporaryDirectory() as directory:
+            source=Path(directory)/'api'
+            text=(portable.REPO/'scripts/pikvm-share-api').read_text(encoding='utf-8')
+            text=text.replace("    if headers.get('X-Portable-Delegation'):\n        from pikvm_security_bridge import verify\n        return verify(headers).owner\n",'').replace("            if self.headers.get('X-Portable-Delegation'):\n                from pikvm_security_bridge import bind\n                bind(self.headers,self.command,self.path)\n",'').replace("import sys\nsys.path.insert(0, '/usr/local/lib/pikvm-portable')\n",'')
+            source.write_text(text,encoding='utf-8');before=source.read_bytes();output=io.StringIO()
+            with patch.object(portable,'SHARE_API',source),patch.object(portable,'load',return_value=SimpleNamespace(kvmd_check=lambda:401)),patch('sys.stdout',output):portable.share_patch_audit()
+            self.assertEqual(source.read_bytes(),before)
+            self.assertIn('"storage_unchanged": true',output.getvalue());self.assertIn('"idempotent": true',output.getvalue())
+
+    def test_legitimate_ssh_link_backup_and_rollback_preserve_link(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root=Path(directory);target=root/'vendor.conf';target.write_bytes(b'# vendor configuration\n');target.chmod(0o644)
+            link=root/'20-systemd-userdb.conf'
+            try:link.symlink_to(target.name)
+            except OSError:self.skipTest('Symlink privilege unavailable')
+            backup=root/'backup';backup.mkdir();h=portable.helper()
+            with patch.object(migration,'APPROVED_SSH_LINKS',{str(link):str(target)}),patch.object(migration,'trusted_path'),patch.object(migration,'verify_link_record',wraps=migration.verify_link_record) as record:
+                metadata=migration.snapshot(h,backup,root/'missing-state',[str(link)])
+                # Fixture ownership only: production requires root on both objects.
+                metadata['auth'][0]['uid']=metadata['auth'][0]['target_uid']=0
+                migration.verify(h,backup,metadata,[str(link)])
+                migration.restore_state(h,backup,metadata,root/'missing-state',writer=lambda f:f())
+                self.assertTrue(link.is_symlink());self.assertEqual(link.readlink(),Path(target.name));self.assertEqual(target.read_bytes(),b'# vendor configuration\n')
+                metadata['auth'][0]['resolved_target']='/etc/shadow'
+                with self.assertRaises(security.SecurityError):migration.verify(h,backup,metadata,[str(link)])
+                self.assertTrue(record.called)
+
+    def test_unapproved_broken_cyclic_and_writable_link_targets_refused(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root=Path(directory);target=root/'vendor.conf';target.write_bytes(b'fixture');link=root/'include.conf'
+            try:link.symlink_to(target.name)
+            except OSError:self.skipTest('Symlink privilege unavailable')
+            with self.assertRaises(security.SecurityError):migration.link_metadata(link)
+            with patch.object(migration,'APPROVED_SSH_LINKS',{str(link):str(target)}):
+                target.chmod(0o666)
+                with self.assertRaises(security.SecurityError):migration.link_metadata(link)
+                target.unlink()
+                with self.assertRaises(security.SecurityError):migration.link_metadata(link)
+                target.symlink_to(link.name)
+                with self.assertRaises(security.SecurityError):migration.link_metadata(link)
+
+    def test_backup_only_does_not_invoke_install_or_restore(self):
+        with patch.object(sys,'argv',['installer','backup-only','--approve-security-candidate','bad']),patch.object(portable.os,'geteuid',return_value=0,create=True),patch.object(portable,'install') as install,patch.object(portable,'restore') as restore:
+            with self.assertRaises(RuntimeError):portable.main()
+            install.assert_not_called();restore.assert_not_called()
+
     def test_secret_backup_verified_restore_exact_and_tampering_refused(self):
         with tempfile.TemporaryDirectory() as directory:
             root=Path(directory);backup=root/'backup';backup.mkdir();state=root/'identities.json';state.write_bytes(b'{"synthetic":"old-secret-fixture"}')

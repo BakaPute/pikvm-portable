@@ -1,9 +1,46 @@
 """Verified root-only auth backup; ordinary preference exports never include it."""
 import json
+import os
+import stat
 from pathlib import Path
 from pikvm_security import PST_PATH,SecurityError,protected_file
 
 AUTH_FILES=('/etc/kvmd/htpasswd','/etc/kvmd/vncpasswd','/etc/kvmd/ipmipasswd','/etc/kvmd/totp.secret','/etc/kvmd/override.yaml','/etc/kvmd/auth.yaml','/etc/ssh/sshd_config','/etc/ssh/portable-security-identities.json','/etc/kvmd/portable-security-activation.json','/etc/kvmd/portable-security-native-tests.json')
+APPROVED_SSH_LINKS = {
+    '/etc/ssh/sshd_config.d/20-systemd-userdb.conf':
+        '/usr/lib/systemd/sshd_config.d/20-systemd-userdb.conf',
+}  # Audited on the Pi; every parent must remain root-owned and non-writable.
+
+def trusted_path(path):
+    for item in (path,*path.parents):
+        info=item.lstat()
+        if item.is_symlink() or info.st_uid!=0 or stat.S_IMODE(info.st_mode)&0o022:
+            raise SecurityError('Chemin SSH non immuable par root.',503)
+
+def link_metadata(source):
+    try:
+        raw=os.readlink(source);target=source.resolve(strict=True)
+        if APPROVED_SSH_LINKS.get(str(source))!=str(target):
+            raise SecurityError('Cible symbolique SSH non approuvée.',503)
+        trusted_path(source.parent);trusted_path(target)
+        info=target.stat();link=source.lstat()
+        if not stat.S_ISREG(info.st_mode) or info.st_nlink!=1 or info.st_size>512*1024:
+            raise SecurityError('Cible SSH non ordinaire.',503)
+        return {'kind':'symlink','link_target':raw,'resolved_target':str(target),
+                'uid':link.st_uid,'gid':link.st_gid,'mode':stat.S_IMODE(link.st_mode),
+                'target_uid':info.st_uid,'target_gid':info.st_gid,'target_mode':stat.S_IMODE(info.st_mode),
+                'target_inode':info.st_ino,'target_mtime_ns':info.st_mtime_ns,'target_size':info.st_size}
+    except (OSError,RuntimeError) as exc:
+        raise SecurityError('Lien SSH cassé, cyclique ou inaccessible.',503) from exc
+
+def verify_link_record(entry):
+    target=APPROVED_SSH_LINKS.get(entry['path'])
+    raw=entry.get('link_target')
+    if not target or entry.get('resolved_target')!=target or not isinstance(raw,str) or not raw or '\x00' in raw:
+        raise SecurityError('Métadonnées de lien SSH non approuvées.',503)
+    lexical=os.path.normpath(os.path.join(str(Path(entry['path']).parent),raw))
+    if lexical!=target or entry.get('uid')!=0 or entry.get('target_uid')!=0 or type(entry.get('target_mode')) is not int or entry['target_mode']&0o022:
+        raise SecurityError('Métadonnées de lien SSH dangereuses.',503)
 def selected_auth_paths():
     result=set(AUTH_FILES)
     for folder,suffix in (('/etc/kvmd/override.d','*.yaml'),('/etc/ssh/sshd_config.d','*.conf')):
@@ -22,12 +59,14 @@ def snapshot(h,backup,state=None,auth_paths=None):
     directory=backup/'authentication';directory.mkdir(mode=0o700)
     for number,name in enumerate(auth_paths):
         source=Path(name);entry={'path':str(name),'exists':source.exists()}
-        if source.is_symlink():raise SecurityError('Configuration auth symbolique à examiner avant migration.',503)
+        before=link_metadata(source) if source.is_symlink() else None
+        if before:entry.update(before)
         if source.exists():
             if not source.is_file() or source.stat().st_size>512*1024:raise SecurityError('Configuration auth non ordinaire.',503)
             destination=directory/str(number);h.write_file(destination,source.read_bytes(),0o600)
             if h.digest(destination)!=h.digest(source):raise SecurityError('Sauvegarde auth instable.',503)
             entry.update(file='authentication/'+str(number),sha256=h.digest(destination))
+            if before and link_metadata(source)!=before:raise SecurityError('Lien SSH modifié pendant sauvegarde.',503)
         metadata['auth'].append(entry)
     return metadata
 
@@ -39,6 +78,9 @@ def verify(h,backup,metadata,auth_paths=None):
     if type(state.get('exists')) is not bool:raise SecurityError('État de sécurité sauvegardé invalide.',503)
     items=[{'file':'security-state.json','sha256':state.get('sha256')}] if state['exists'] else []
     items.extend(e for e in metadata['auth'] if e['exists'])
+    for entry in metadata['auth']:
+        if entry.get('kind')=='symlink':verify_link_record(entry)
+        elif 'kind' in entry:raise SecurityError('Type de sauvegarde auth inconnu.',503)
     for item in items:
         source=backup/item['file']
         if source.is_symlink() or not source.resolve().is_relative_to(backup.resolve()) or not source.is_file() or h.digest(source)!=item['sha256']:raise SecurityError('Sauvegarde auth altérée ; restauration refusée.',503)

@@ -144,7 +144,7 @@ def manual_shutdown_policy(source):
 def policy_preflight():
     if SHARE_API.is_symlink() or not SHARE_API.is_file():
         raise RuntimeError('Installer/configurer SHARE avant Portable OS ; API ordinaire requise.')
-    source = SHARE_API.read_text()
+    source = SHARE_API.read_text(encoding='utf-8')
     patched = security_share_policy(share_power_policy(bounded_share_policy(manual_shutdown_policy(source))))
     auth = load('portable_installed_share', SHARE_API)
     if auth.kvmd_check() not in (401, 403):
@@ -156,6 +156,30 @@ def policy_preflight():
             raise RuntimeError('Éjecter puis démonter/libérer SHARE avant le patch de politique.')
         backend.ensure_unmounted()
     return patched.encode(), patched != source
+
+
+def share_patch_audit():
+    """Reproduce transformations on UTF-8 text in memory; never write SHARE."""
+    import ast
+    import difflib
+    import hashlib
+    original=SHARE_API.read_text(encoding='utf-8');result=original
+    transforms=(manual_shutdown_policy,bounded_share_policy,share_power_policy,security_share_policy)
+    for transform in transforms:
+        updated=transform(result)
+        print('SHARE_COMPONENT='+json.dumps({'name':transform.__name__,'changed':updated!=result}),flush=True)
+        result=updated
+    compile(result,str(SHARE_API),'exec')
+    again=result
+    for transform in transforms:again=transform(again)
+    if again!=result:raise RuntimeError('Patch SHARE non idempotent')
+    def storage(text):
+        return ast.dump(next(node for node in ast.parse(text).body if isinstance(node,ast.ClassDef) and node.name=='LinuxBackend'))
+    if storage(original)!=storage(result):raise RuntimeError('Operations stockage SHARE modifiees')
+    auth=load('portable_share_audit',SHARE_API)
+    if auth.kvmd_check() not in (401,403):raise RuntimeError('Authentification native non active')
+    print('SHARE_RESULT='+json.dumps({'path':str(SHARE_API),'source_sha256':hashlib.sha256(SHARE_API.read_bytes()).hexdigest(),'patched_utf8_sha256':hashlib.sha256(result.encode('utf-8')).hexdigest(),'syntax':True,'idempotent':True,'storage_unchanged':True,'native_auth':True}),flush=True)
+    print('\n'.join(difflib.unified_diff(original.splitlines(),result.splitlines(),fromfile='installed',tofile='RC13',lineterm='')),flush=True)
 
 
 def security_share_policy(source):
@@ -181,7 +205,7 @@ def bounded_share_policy(source):
     daemon_threads = False
     block_on_close = True
     request_queue_size = 8'''
-    candidate = (REPO / 'scripts/pikvm-share-api').read_text()
+    candidate = (REPO / 'scripts/pikvm-share-api').read_text(encoding='utf-8')
     def server(text):
         nodes = [n for n in ast.parse(text).body if isinstance(n, ast.ClassDef) and n.name == 'Server']
         if len(nodes) != 1:
@@ -482,7 +506,7 @@ def active(h, service):
                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode == 0
 
 
-def install(h):
+def create_backup(h):
     oled_preflight()
     policy, changed = policy_preflight()
     mapping = file_map()
@@ -508,6 +532,11 @@ def install(h):
     h.write_file(manifest_path, json.dumps(manifest, indent=2).encode(), 0o600)
     verify_backup(h, backup)  # Verify every saved byte before stopping any service.
     print('Sauvegarde : ' + str(backup), flush=True)
+    return backup, mapping, changed, manifest
+
+
+def install(h):
+    backup, mapping, changed, manifest = create_backup(h)
     try:
         stop_oled(h)
         if manifest['wifi_was_active']:
@@ -584,14 +613,21 @@ def restore(h, backup):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('action', choices=('check', 'install', 'restore'))
+    parser.add_argument('action', choices=('check', 'share-audit', 'backup-only', 'install', 'restore'))
     parser.add_argument('backup', nargs='?', type=Path)
     parser.add_argument('--approve-security-candidate',help='SHA256 du MANIFEST RC13 explicitement approuvé ; ne démarre ni passerelle ni SSH')
     args = parser.parse_args()
     if not hasattr(os, 'geteuid') or os.geteuid() != 0:
         raise SystemExit('root requis sur le PiKVM, après autorisation de déploiement.')
     sys.dont_write_bytecode = True
-    if args.action=='install':
+    if args.action=='share-audit':
+        try:share_patch_audit()
+        except Exception:
+            import traceback
+            traceback.print_exc(file=sys.stdout)
+            raise
+        return
+    if args.action in ('install','backup-only'):
         import hashlib
         manifest=REPO/'MANIFEST.sha256'
         if not manifest.is_file() or args.approve_security_candidate!=hashlib.sha256(manifest.read_bytes()).hexdigest():
@@ -606,11 +642,15 @@ def main():
         with preflight_journal().phase('share-authentication-and-policy'):
             _, changed = policy_preflight()
         print('Précontrôle sans modification système (journal temporaire conservé) ; patch SHARE nécessaire : ' + str(changed))
-    elif args.action == 'install':
+    elif args.action in ('install','backup-only'):
         h = helper()
         transfer = load('portable_transfer_lock', REPO / 'scripts/pikvm_transfer.py' if (REPO / 'scripts/pikvm_transfer.py').exists() else LIB / 'pikvm_transfer.py')
         with mutation_lock(), transfer.exclusive(transfer.STORAGE_LOCK), transfer.exclusive(transfer.LOCK):
-            install(h)
+            if args.action=='install':install(h)
+            else:
+                backup, _, _, _ = create_backup(h)
+                print('RC13_RC121_BACKUP=' + str(backup), flush=True)
+                print('RC13_BACKUP_VERIFIED=YES', flush=True)
     elif args.backup:
         h = helper()
         transfer = load('portable_transfer_lock', REPO / 'scripts/pikvm_transfer.py' if (REPO / 'scripts/pikvm_transfer.py').exists() else LIB / 'pikvm_transfer.py')

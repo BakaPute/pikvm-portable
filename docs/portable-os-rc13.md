@@ -195,6 +195,30 @@ ssh.exe -o IdentitiesOnly=yes -i $codexKey codex@192.168.168.99 version
 
 ## Installation progressive, sans activation automatique
 
+Correctif de pré-déploiement : le seul lien SSH autorisé est
+`/etc/ssh/sshd_config.d/20-systemd-userdb.conf` vers
+`/usr/lib/systemd/sshd_config.d/20-systemd-userdb.conf`, identifié sur le Pi.
+Le fichier cible et tous ses parents doivent rester root et non modifiables
+par groupe/autres. Liens cassés, cycles, autres cibles et changements pendant
+copie bloquent la sauvegarde. Celle-ci conserve le contenu cible, la nature du
+lien, son texte, UID/GID/modes et identité du fichier cible. Le rollback
+applicatif ne réécrit pas les fichiers d'authentification : le lien système
+et ses permissions restent en place, sans conversion en fichier ordinaire.
+
+`python3 -B scripts/pikvm-portable-install share-audit` calcule en mémoire le
+diff SHARE, vérifie Python, l'idempotence, l'authentification native et l'identité
+AST du backend de stockage. Il ne modifie pas le fichier installé et conserve
+les exceptions complètes sur stdout. Toutes les lectures du patch sont UTF-8.
+
+Après vérification du nouveau manifeste, précontrôle et libération des lecteurs,
+`python3 -B scripts/pikvm-portable-install backup-only --approve-security-candidate SHA256_DU_MANIFEST`
+crée une sauvegarde vérifiée seule. Cette commande reprend exactement la phase
+de sauvegarde de l'installation, sans arrêter/démarrer de service, activer de
+passerelle, créer de compte ou écrire de fichier applicatif. La racine doit
+être temporairement RW pour le seul dossier de sauvegarde, puis remise RO.
+Le chemin `RC13_RC121_BACKUP` doit être conservé. La commande `install`
+reste une opération distincte, interdite pendant ce pré-déploiement.
+
 **Ne pas exécuter maintenant sur le Pi de production.** Vérifier archive,
 SHA256 et manifeste, puis tous les précontrôles RC12.1 : Python/KVMD, nginx,
 GPIO17 HIGH, GPIO18 inchangé/relâché, lecteurs libres, aucune opération SHARE.
