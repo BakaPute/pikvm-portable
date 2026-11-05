@@ -2,7 +2,7 @@ import {el,button,card,hint,row,field,dialog,notify,table} from '../core/ui.js';
 import {saveTheme,getTheme} from '../core/preferences.js';
 import {unpackPixels} from './oled.js';
 
-const pageNames={main:'Accueil / réseau',battery:'Batterie',system:'Système / USB / HDMI',network:'Réseau',usb:'USB et lecteurs',transfer:'Transfert USB (conditionnel)'};
+const pageNames={main:'Accueil / réseau',battery:'Batterie',system:'Système : CPU / RAM / température',system_details:'Mémoire et durée',network:'Réseau',network_details:'Connexion et signal',usb:'USB et lecteurs',transfer:'Transfert USB (conditionnel)'};
 const commandNames={'msd-dropdown':'Lecteur ISO',share:'Clé USB','atx-dropdown':'ATX','shortcuts-dropdown':'Raccourcis','macro-dropdown':'Macros','text-dropdown':'Texte','system-dropdown':'Vidéo & HID'};
 const clone=value=>structuredClone(value);
 

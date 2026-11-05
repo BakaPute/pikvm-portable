@@ -12,7 +12,7 @@ import threading
 import time
 import uuid
 
-VERSION = 2
+VERSION = 3
 MAX_BYTES = 16384
 CATEGORIES = ['Général', 'Inactivité et veille', 'Alimentation et batterie', 'OLED et écrans',
               'Bouton physique', 'Console KVM', 'USB et stockage', 'Réseau',
@@ -69,7 +69,7 @@ FIELDS['button_short']['description']='Clic simple après le délai de double cl
 FIELDS['button_menu_timeout']['description']='Retour sans action à expiration ; les confirmations sensibles restent distinctes.'
 field('button_double_ms',4,'Fenêtre du double clic (ms)',350,'Deux clics du même utilisateur, sur le même écran. Le clic simple attend cette fenêtre.',minimum=200,maximum=500)
 field('button_back_ms',4,'Appui retour (ms)',1200,'Revenir sans action sensible. Hors confirmation, 3 secondes ramènent à l’accueil.',minimum=800,maximum=2000)
-field('oled_style',3,'Style OLED','compact','Compact privilégie l’IP ; détaillé ajoute les observations vidéo.',choices={'compact':'Compact','detailed':'Détaillé'})
+field('oled_style',3,'Style OLED','readable','Lisible : valeurs grandes et espace généreux. Compact : davantage de détails. Les préférences antérieures sont conservées lors de la migration.',choices={'readable':'Lisible (recommandé)','compact':'Compact'})
 field('oled_alignment',3,'Alignement des valeurs OLED','left','Alignement de l’IP et du pourcentage principal, dans des zones bornées.',choices={'left':'Gauche','right':'Droite'})
 field('oled_animations',3,'Défilements OLED',True,'Défilement des seuls textes trop longs ; aucun rafraîchissement animé d’une page immobile.')
 field('oled_scroll_speed',3,'Défilement OLED (pixels/seconde)',16,'Pas de 2 pixels, cadence plafonnée à 10 Hz. Pause aux extrémités.',minimum=8,maximum=32)
@@ -78,8 +78,11 @@ field('oled_show_ssid',3,'SSID sur la page d’accueil',True,'Le nom complet res
 field('oled_show_battery',3,'Pourcentage sur la page d’accueil',True,'La page Batterie et les alertes critiques restent disponibles.')
 field('oled_show_voltage',3,'Tension sur la page Batterie',True,'Mesure disponible uniquement ; aucune autonomie extrapolée.')
 field('oled_show_temperature',3,'Température sur la page Système',True,'Préférence d’affichage, sans modification du capteur ou de la ventilation.')
-FIELDS['oled_fixed']['choices'].update(network='Réseau',usb='USB et lecteurs')
-PAGES = ('main', 'battery', 'system', 'network', 'usb', 'transfer')
+for key in ('oled_fixed','oled_start'):
+    FIELDS[key]['choices'].update(network='Réseau',usb='USB et lecteurs',system_details='Mémoire et durée',network_details='Connexion et signal')
+    FIELDS[key]['choices']['system']='Système : CPU / RAM / température'
+PAGES = ('main','battery','system','system_details','network','network_details','usb','transfer')
+RC12_PAGES=('main','battery','system','network','usb','transfer')
 RC11_PAGES=('main','battery','system','transfer')
 COMMANDS = ('msd-dropdown', 'share', 'atx-dropdown', 'shortcuts-dropdown', 'macro-dropdown', 'text-dropdown', 'system-dropdown')
 
@@ -105,8 +108,19 @@ def migrate_rc11(values):
         raise ConfigError('Pages RC11 invalides.')
     merged={**defaults(),**copy.deepcopy(values)}
     # Preserve the user's existing rotation, ordering, visibility and durations.
-    merged['oled_pages'].extend({'id':name,'enabled':False,'seconds':10} for name in ('network','usb'))
+    merged['oled_pages'].extend({'id':name,'enabled':False,'seconds':10} for name in ('network','usb','system_details','network_details'))
     merged['oled_start']=next((p['id'] for p in pages if p.get('enabled') and p['id']!='transfer'),'main')
+    return validate(merged)
+
+
+def migrate_rc12(values):
+    if not isinstance(values,dict) or set(values)!=set(defaults()):raise ConfigError('Préférences RC12 inconnues ou incomplètes.')
+    pages=values.get('oled_pages')
+    if not isinstance(pages,list) or len(pages)!=6 or any(not isinstance(p,dict) or p.get('id') not in RC12_PAGES for p in pages) or {p['id'] for p in pages}!=set(RC12_PAGES):
+        raise ConfigError('Pages RC12 invalides.')
+    merged=copy.deepcopy(values)
+    if merged['oled_style']=='detailed':merged['oled_style']='readable'
+    merged['oled_pages'].extend({'id':name,'enabled':False,'seconds':10} for name in ('system_details','network_details'))
     return validate(merged)
 
 
@@ -204,16 +218,18 @@ class Store:
             if not isinstance(document,dict):raise ValueError()
             if type(document.get('schema_version')) is int and document['schema_version']==0 and set(document)=={'schema_version','theme'} and document['theme'] in ('dark','light'):
                 return dict(schema_version=VERSION,revision=0,values={**defaults(),'theme':document['theme']},history=[],healthy=True,migrated=True)
-            migrated=False
+            migrated=None
             if type(document.get('schema_version')) is int and document['schema_version']==1:
-                document={**document,'schema_version':VERSION,'values':migrate_rc11(document['values'])};migrated=True
+                document={**document,'schema_version':VERSION,'values':migrate_rc11(document['values'])};migrated=1
+            elif type(document.get('schema_version')) is int and document['schema_version']==2:
+                document={**document,'schema_version':VERSION,'values':migrate_rc12(document['values'])};migrated=2
             if set(document)!={'schema_version','revision','values','history'} or type(document['schema_version']) is not int or document['schema_version']!=VERSION or type(document['revision']) is not int or document['revision']<0 or not isinstance(document['history'],list) or len(document['history'])>20:
                 raise ValueError()
             validate(document['values'])
             # History is a bounded, server-authored list of field names only.
             for item in document['history']:
                 if not isinstance(item,dict) or set(item)!={'at','keys'} or type(item['at']) not in (float,int) or not isinstance(item['keys'],list) or any(k not in defaults() for k in item['keys']):raise ValueError()
-            return {**document,'healthy':True,**({'migrated_from':1} if migrated else {})}
+            return {**document,'healthy':True,**({'migrated_from':migrated} if migrated else {})}
         except (OSError,ValueError,TypeError,KeyError,ConfigError):
             return dict(schema_version=VERSION,revision='corrupt',values=defaults(),history=[],healthy=False,error='Préférences illisibles : valeurs sûres actives. Restauration explicite nécessaire.')
 

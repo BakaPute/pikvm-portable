@@ -1,0 +1,330 @@
+{
+  "platform": "win32",
+  "python": "3.12.14",
+  "iterations": 200,
+  "scope": "Synthetic renderer timing on this computer, same fonts for before/after; no Pi CPU measurement",
+  "profiles": {
+    "before": {
+      "main": {
+        "mean_ms": 0.063,
+        "p95_ms": 0.107
+      },
+      "battery": {
+        "mean_ms": 0.05,
+        "p95_ms": 0.061
+      },
+      "system": {
+        "mean_ms": 0.077,
+        "p95_ms": 0.089
+      },
+      "network": {
+        "mean_ms": 0.065,
+        "p95_ms": 0.072
+      },
+      "usb": {
+        "mean_ms": 0.06,
+        "p95_ms": 0.089
+      },
+      "transfer": {
+        "mean_ms": 0.067,
+        "p95_ms": 0.075
+      },
+      "menu": {
+        "mean_ms": 0.089,
+        "p95_ms": 0.123
+      },
+      "power": {
+        "mean_ms": 0.086,
+        "p95_ms": 0.11
+      },
+      "wifi": {
+        "mean_ms": 0.083,
+        "p95_ms": 0.137
+      },
+      "menu-network": {
+        "mean_ms": 0.082,
+        "p95_ms": 0.129
+      },
+      "iso-root": {
+        "mean_ms": 0.115,
+        "p95_ms": 0.164
+      },
+      "iso": {
+        "mean_ms": 0.116,
+        "p95_ms": 0.178
+      },
+      "iso-action": {
+        "mean_ms": 0.1,
+        "p95_ms": 0.139
+      },
+      "iso-info": {
+        "mean_ms": 0.08,
+        "p95_ms": 0.144
+      },
+      "iso-connect-confirm": {
+        "mean_ms": 0.084,
+        "p95_ms": 0.156
+      },
+      "iso-eject-confirm": {
+        "mean_ms": 0.06,
+        "p95_ms": 0.075
+      },
+      "power-confirm": {
+        "mean_ms": 0.072,
+        "p95_ms": 0.1
+      },
+      "network-confirm": {
+        "mean_ms": 0.076,
+        "p95_ms": 0.116
+      },
+      "working": {
+        "mean_ms": 0.069,
+        "p95_ms": 0.112
+      },
+      "message": {
+        "mean_ms": 0.053,
+        "p95_ms": 0.092
+      },
+      "qr": {
+        "mean_ms": 0.029,
+        "p95_ms": 0.031
+      },
+      "error": {
+        "mean_ms": 0.033,
+        "p95_ms": 0.048
+      },
+      "notification": {
+        "mean_ms": 0.034,
+        "p95_ms": 0.048
+      },
+      "idle": {
+        "mean_ms": 0.023,
+        "p95_ms": 0.025
+      },
+      "off": {
+        "mean_ms": 0.007,
+        "p95_ms": 0.01
+      }
+    },
+    "readable": {
+      "main": {
+        "mean_ms": 0.059,
+        "p95_ms": 0.064
+      },
+      "battery": {
+        "mean_ms": 0.043,
+        "p95_ms": 0.069
+      },
+      "system": {
+        "mean_ms": 0.058,
+        "p95_ms": 0.066
+      },
+      "system_details": {
+        "mean_ms": 0.048,
+        "p95_ms": 0.051
+      },
+      "network": {
+        "mean_ms": 0.05,
+        "p95_ms": 0.09
+      },
+      "network_details": {
+        "mean_ms": 0.042,
+        "p95_ms": 0.05
+      },
+      "usb": {
+        "mean_ms": 0.056,
+        "p95_ms": 0.06
+      },
+      "transfer": {
+        "mean_ms": 0.068,
+        "p95_ms": 0.113
+      },
+      "menu": {
+        "mean_ms": 0.077,
+        "p95_ms": 0.136
+      },
+      "power": {
+        "mean_ms": 0.074,
+        "p95_ms": 0.088
+      },
+      "wifi": {
+        "mean_ms": 0.074,
+        "p95_ms": 0.088
+      },
+      "menu-network": {
+        "mean_ms": 0.125,
+        "p95_ms": 0.133
+      },
+      "iso-root": {
+        "mean_ms": 0.097,
+        "p95_ms": 0.126
+      },
+      "iso": {
+        "mean_ms": 0.075,
+        "p95_ms": 0.142
+      },
+      "iso-action": {
+        "mean_ms": 0.088,
+        "p95_ms": 0.126
+      },
+      "iso-info": {
+        "mean_ms": 0.079,
+        "p95_ms": 0.143
+      },
+      "iso-connect-confirm": {
+        "mean_ms": 0.079,
+        "p95_ms": 0.103
+      },
+      "iso-eject-confirm": {
+        "mean_ms": 0.064,
+        "p95_ms": 0.094
+      },
+      "power-confirm": {
+        "mean_ms": 0.056,
+        "p95_ms": 0.065
+      },
+      "network-confirm": {
+        "mean_ms": 0.062,
+        "p95_ms": 0.118
+      },
+      "working": {
+        "mean_ms": 0.085,
+        "p95_ms": 0.143
+      },
+      "message": {
+        "mean_ms": 0.071,
+        "p95_ms": 0.131
+      },
+      "qr": {
+        "mean_ms": 0.027,
+        "p95_ms": 0.028
+      },
+      "error": {
+        "mean_ms": 0.042,
+        "p95_ms": 0.045
+      },
+      "notification": {
+        "mean_ms": 0.05,
+        "p95_ms": 0.055
+      },
+      "idle": {
+        "mean_ms": 0.025,
+        "p95_ms": 0.027
+      },
+      "off": {
+        "mean_ms": 0.004,
+        "p95_ms": 0.006
+      }
+    },
+    "compact": {
+      "main": {
+        "mean_ms": 0.083,
+        "p95_ms": 0.111
+      },
+      "battery": {
+        "mean_ms": 0.052,
+        "p95_ms": 0.056
+      },
+      "system": {
+        "mean_ms": 0.063,
+        "p95_ms": 0.067
+      },
+      "system_details": {
+        "mean_ms": 0.048,
+        "p95_ms": 0.051
+      },
+      "network": {
+        "mean_ms": 0.046,
+        "p95_ms": 0.087
+      },
+      "network_details": {
+        "mean_ms": 0.045,
+        "p95_ms": 0.083
+      },
+      "usb": {
+        "mean_ms": 0.055,
+        "p95_ms": 0.059
+      },
+      "transfer": {
+        "mean_ms": 0.056,
+        "p95_ms": 0.067
+      },
+      "menu": {
+        "mean_ms": 0.087,
+        "p95_ms": 0.155
+      },
+      "power": {
+        "mean_ms": 0.087,
+        "p95_ms": 0.136
+      },
+      "wifi": {
+        "mean_ms": 0.075,
+        "p95_ms": 0.094
+      },
+      "menu-network": {
+        "mean_ms": 0.082,
+        "p95_ms": 0.118
+      },
+      "iso-root": {
+        "mean_ms": 0.113,
+        "p95_ms": 0.186
+      },
+      "iso": {
+        "mean_ms": 0.116,
+        "p95_ms": 0.203
+      },
+      "iso-action": {
+        "mean_ms": 0.106,
+        "p95_ms": 0.188
+      },
+      "iso-info": {
+        "mean_ms": 0.078,
+        "p95_ms": 0.136
+      },
+      "iso-connect-confirm": {
+        "mean_ms": 0.08,
+        "p95_ms": 0.098
+      },
+      "iso-eject-confirm": {
+        "mean_ms": 0.068,
+        "p95_ms": 0.117
+      },
+      "power-confirm": {
+        "mean_ms": 0.057,
+        "p95_ms": 0.063
+      },
+      "network-confirm": {
+        "mean_ms": 0.061,
+        "p95_ms": 0.098
+      },
+      "working": {
+        "mean_ms": 0.085,
+        "p95_ms": 0.101
+      },
+      "message": {
+        "mean_ms": 0.063,
+        "p95_ms": 0.07
+      },
+      "qr": {
+        "mean_ms": 0.031,
+        "p95_ms": 0.053
+      },
+      "error": {
+        "mean_ms": 0.035,
+        "p95_ms": 0.041
+      },
+      "notification": {
+        "mean_ms": 0.05,
+        "p95_ms": 0.054
+      },
+      "idle": {
+        "mean_ms": 0.027,
+        "p95_ms": 0.04
+      },
+      "off": {
+        "mean_ms": 0.005,
+        "p95_ms": 0.008
+      }
+    }
+  }
+}

@@ -129,7 +129,7 @@ class OledPreferenceTests(unittest.TestCase):
         values['oled_start']='battery'
         values['oled_pages'][0]['seconds']=5
         for page in values['oled_pages']:
-            if page['id'] in ('system','network','usb'):page['enabled']=False
+            if page['id'] in ('system','system_details','network','network_details','usb'):page['enabled']=False
         rotation=config.PageRotation();self.assertEqual(rotation.choose(values,0)[0],'battery')
         self.assertEqual(rotation.choose(values,4)[0],'battery');self.assertEqual(rotation.choose(values,5)[0],'main')
         self.assertEqual(rotation.choose(values,15)[0],'battery')
@@ -146,7 +146,7 @@ class OledPreferenceTests(unittest.TestCase):
     def test_permanent_page_and_logical_next_request(self):
         values=config.defaults();values.update(oled_auto=False,oled_fixed='system')
         for page in values['oled_pages']:
-            if page['id'] in ('network','usb'):page['enabled']=False
+            if page['id'] in ('network','network_details','system_details','usb'):page['enabled']=False
         rotation=config.PageRotation();self.assertEqual(rotation.choose(values,0)[0],'system')
         self.assertEqual(rotation.choose(values,100,request='next')[0],'main')
         self.assertEqual(rotation.choose(values,105)[0],'main')

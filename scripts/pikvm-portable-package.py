@@ -8,8 +8,9 @@ from pathlib import Path
 import tarfile
 
 ROOT = Path(__file__).resolve().parent.parent
-RELEASE = 'pikvm-portable-os-0.2.0-rc.12'
-FILES = ('docs/portable-os-rc12.md','docs/performance/rc12-local.json','docs/images/rc12-oled.png',
+RELEASE = 'pikvm-portable-os-0.2.0-rc.12.1'
+FILES = ('docs/portable-os-rc121.md','docs/performance/rc121-local.json','docs/images/rc121/comparison.png',
+         'docs/portable-os-rc12.md','docs/performance/rc12-local.json','docs/images/rc12-oled.png',
          'scripts/pikvm-portable-rc12-diagnose.sh','scripts/pikvm-oled-benchmark.py','scripts/pikvm_oled_ui.py','scripts/pikvm_oled_nav.py','scripts/pikvm_oled_control.py','scripts/pikvm_gestures.py','scripts/pikvm_iso.py',
          'docs/portable-os-rc11.md', 'scripts/pikvm-portable-rc11-diagnose.sh', 'scripts/pikvm_config.py', 'scripts/pikvm_settings.py', 'scripts/pikvm_activity.py', 'docs/portable-os-rc10.2.md', 'scripts/pikvm_preflight_probe.py', 'scripts/pikvm-portable-drive-check.sh',
          'docs/performance/rc10.1-startup-local.json',
@@ -57,6 +58,10 @@ def payload():
                     path.suffix in {'.js', '.css', '.svg', '.html', '.json', '.conf', '.yaml'} and
                     not any(part.startswith('.') or part == 'node_modules' for part in parts)):
                 result[path.relative_to(ROOT).as_posix()] = path.read_bytes()
+    # Documentation only; never installed in the web app or on a service path.
+    for path in sorted((ROOT/'docs/images/rc121').glob('*')):
+        if path.is_file() and not path.is_symlink() and path.suffix in ('.png','.md','.html','.json'):
+            result[path.relative_to(ROOT).as_posix()]=path.read_bytes()
     result['MANIFEST.sha256'] = ''.join(hashlib.sha256(content).hexdigest() + '  ' + name + '\n'
                                       for name, content in sorted(result.items())).encode()
     return result

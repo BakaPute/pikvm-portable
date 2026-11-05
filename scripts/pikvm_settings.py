@@ -10,7 +10,7 @@ import base64
 import importlib.machinery
 import importlib.util
 from types import SimpleNamespace
-from pikvm_config import Configuration, ConfigError, FIELDS, CATEGORIES, defaults, validate, IdleEngine, pst_path, VERSION, migrate_rc11
+from pikvm_config import Configuration, ConfigError, FIELDS, CATEGORIES, defaults, validate, IdleEngine, pst_path, VERSION, migrate_rc11, migrate_rc12, PAGES
 from pikvm_activity import latest, RUNTIME
 from pikvm_config import atomic
 
@@ -73,7 +73,7 @@ class Settings:
             if not path.is_symlink() and path.stat().st_size<1024:installed=json.loads(path.read_text(encoding='utf-8')).get('installed_at')
         except (OSError,ValueError,AttributeError):pass
         return {**document,'fields':FIELDS,'categories':CATEGORIES,'defaults':defaults(),'limitations':LIMITATIONS,
-                'release':'0.2.0-rc.12','installed_at':installed,'restart_required':[],
+                'release':'0.2.0-rc.12.1','installed_at':installed,'restart_required':[],
                 'persistence':'PST KVMD : bail natif en écriture, jamais de remount racine ou MSD'}
 
     def apply(self,data,reset=False):
@@ -88,7 +88,7 @@ class Settings:
 
     def preview(self,data):
         menus=('menu','power','wifi','network','iso-root','iso','iso-action','iso-info','iso-connect-confirm','iso-eject-confirm','power-confirm','network-confirm','working')
-        if not isinstance(data,dict) or set(data)!={'values','page'} or data['page'] not in ('main','battery','system','network','usb','transfer',*('menu-'+name for name in menus)):
+        if not isinstance(data,dict) or set(data)!={'values','page'} or data['page'] not in (*PAGES,*('menu-'+name for name in menus)):
             raise ConfigError('Aperçu OLED invalide.')
         values=validate(data['values'])
         if not self.preview_lock.acquire(blocking=False):raise ConfigError('Aperçu déjà en cours.',423)
@@ -143,16 +143,16 @@ class Settings:
                 if not path.is_absolute() or '..' in path.parts or not name.startswith(('/usr/local/bin/','/usr/local/lib/pikvm-portable/','/usr/share/kvmd/web/','/usr/share/kvmd/extras/','/etc/systemd/system/pikvm-portable-api.service')):raise ValueError()
                 okay=not path.is_symlink() and path.is_file() and path.stat().st_size<1048576 and hashlib.sha256(path.read_bytes()).hexdigest()==digest
                 result.append({'file':name,'valid':okay})
-            return {'files':result,'valid':all(r['valid'] for r in result),'scope':'Fichiers applicatifs installés par RC11 ; ne contrôle pas les données ISO ni tout Python système.'}
+            return {'files':result,'valid':all(r['valid'] for r in result),'scope':'Fichiers de l’installateur Portable OS ; ne contrôle pas les données ISO ni tout Python système.'}
         except (OSError,ValueError,TypeError):raise ConfigError('Manifeste applicatif indisponible ou invalide.',503) from None
 
     def import_config(self,data):
         if not isinstance(data,dict) or set(data)!={'expected_revision','confirmed','config'}:raise ConfigError('Import invalide.')
         document=data['config']
-        if not isinstance(document,dict) or set(document)!={'format','schema_version','values'} or document['format']!='pikvm-portable-settings' or type(document['schema_version']) is not int or document['schema_version'] not in (1,VERSION):
+        if not isinstance(document,dict) or set(document)!={'format','schema_version','values'} or document['format']!='pikvm-portable-settings' or type(document['schema_version']) is not int or document['schema_version'] not in (1,2,VERSION):
             raise ConfigError('Format ou version d’import non pris en charge.')
         if data['confirmed'] is not True:raise ConfigError('Confirmation d’import requise.',409)
-        imported=migrate_rc11(document['values']) if document['schema_version']==1 else document['values']
+        imported=migrate_rc11(document['values']) if document['schema_version']==1 else migrate_rc12(document['values']) if document['schema_version']==2 else document['values']
         return self.apply({**{k:data[k] for k in ('expected_revision','confirmed')},'values':imported})
 
     def activity(self,data):

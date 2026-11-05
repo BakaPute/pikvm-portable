@@ -434,6 +434,15 @@ def page_network(device,remaining):
     show_status(device,'network',network_info(),remaining)
 
 
+def page_system_details(device,remaining):
+    memory=memory_info()
+    show_status(device,'system_details',{'available_mb':memory['available_mb'],'uptime':uptime()},remaining)
+
+
+def page_network_details(device,remaining):
+    show_status(device,'network_details',network_info(),remaining)
+
+
 def page_usb(device,remaining):
     show_status(device,'usb',{'drives':drive_info(),'usb':usb_state()},remaining)
 
@@ -464,7 +473,7 @@ def display_navigation(device,model,values,now,notice=''):
             # unavailable QR/menu instead of trapping the remote user.
             surface=render_message('Affichage indisponible',[type(error).__name__,'Clic ou maintien : retour'],values,'Le bouton reste disponible')
         if notice:
-            surface.draw.rectangle((0,54,127,63),fill=0);surface.footer(notice)
+            surface.draw.rectangle((0,52,127,63),fill=0);surface.footer(notice)
         device.menu_animated=surface.animated;device.render_ms=(time.perf_counter()-began)*1000
         device.display(surface.image);device.menu_render_key=key
     else:device.refresh()
@@ -484,7 +493,8 @@ def main():
     navigation=NavigationReader()
 
     rotation=PageRotation()
-    renderers={'main':page_main,'battery':page_battery,'system':page_system,'network':page_network,'usb':page_usb,'transfer':page_usb_transfer}
+    renderers={'main':page_main,'battery':page_battery,'system':page_system,'system_details':page_system_details,
+               'network':page_network,'network_details':page_network_details,'usb':page_usb,'transfer':page_usb_transfer}
     last_render=None
     last_request=0
 

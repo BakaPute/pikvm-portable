@@ -97,7 +97,7 @@ class ComponentTests(unittest.TestCase):
 
     def test_style_visible_preferences_and_idle_frames_are_real_render_changes(self):
         values=config.defaults();first=ui.render_status('main',SAMPLE,values).image.tobytes()
-        for key,value in (('oled_style','detailed'),('oled_alignment','right'),('oled_show_ip',False),('oled_show_battery',False),('oled_show_ssid',False)):
+        for key,value in (('oled_style','compact'),('oled_alignment','right'),('oled_show_ip',False),('oled_show_battery',False),('oled_show_ssid',False)):
             self.assertNotEqual(first,ui.render_status('main',SAMPLE,{**values,key:value}).image.tobytes(),key)
         self.assertIsNone(ui.render_idle('off',values).image.getbbox())
         self.assertIsNotNone(ui.render_idle('screen',values).image.getbbox())
@@ -109,12 +109,12 @@ class MigrationTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             path=Path(directory)/'settings.json';path.write_text(json.dumps(raw));path.chmod(0o600)
             before=path.read_bytes();store=config.Store(path);loaded=store.read()
-            self.assertTrue(loaded['healthy']);self.assertEqual(loaded['schema_version'],2);self.assertEqual(loaded['revision'],7)
+            self.assertTrue(loaded['healthy']);self.assertEqual(loaded['schema_version'],3);self.assertEqual(loaded['revision'],7)
             self.assertEqual(loaded['values']['oled_pages'][:4],raw['values']['oled_pages'])
             self.assertFalse(any(p['enabled'] for p in loaded['values']['oled_pages'] if p['id'] in ('network','usb')))
             self.assertEqual(loaded['values']['theme'],'light');self.assertFalse(loaded['values']['idle_enabled'])
             self.assertEqual(path.read_bytes(),before,'Reading RO preferences must not persist a migration')
-            values=loaded['values'];values['oled_style']='detailed';saved=store.save(values,7)
+            values=loaded['values'];values['oled_style']='compact';saved=store.save(values,7)
             self.assertTrue(saved['healthy']);self.assertEqual(saved['revision'],8)
 
     def test_unknown_rc11_fields_are_not_silently_imported(self):

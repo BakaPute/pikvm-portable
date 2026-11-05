@@ -1,0 +1,101 @@
+{
+  "schema_version": 2,
+  "revision": 9,
+  "values": {
+    "theme": "light",
+    "idle_enabled": false,
+    "idle_first_seconds": 300,
+    "idle_shutdown_seconds": 1800,
+    "idle_warning_seconds": 60,
+    "idle_action": "none",
+    "activity_web": true,
+    "activity_keyboard": true,
+    "activity_mouse": true,
+    "activity_terminal": true,
+    "activity_button": true,
+    "activity_menu": true,
+    "activity_transfer": true,
+    "activity_storage": true,
+    "inhibit_ssh": true,
+    "inhibit_kvm": true,
+    "battery_low": 20,
+    "battery_critical": 10,
+    "battery_notifications": true,
+    "oled_rotation": "0",
+    "oled_contrast": 160,
+    "oled_auto": true,
+    "oled_fixed": "main",
+    "oled_low_priority": 2,
+    "oled_transfer_priority": 1,
+    "oled_alert_seconds": 5,
+    "oled_show_ip": true,
+    "button_short": "next",
+    "button_menu_timeout": 10,
+    "kvm_default_panel": "none",
+    "kvm_fit": "contain",
+    "kvm_fullscreen": "console",
+    "iso_sort": "name",
+    "iso_favorite": "",
+    "network_notifications": true,
+    "dashboard_ip": true,
+    "profile": "balanced",
+    "animations": true,
+    "advanced_diagnostics": false,
+    "button_double_ms": 350,
+    "button_back_ms": 1200,
+    "oled_style": "compact",
+    "oled_alignment": "left",
+    "oled_animations": true,
+    "oled_scroll_speed": 16,
+    "oled_start": "main",
+    "oled_show_ssid": true,
+    "oled_show_battery": true,
+    "oled_show_voltage": true,
+    "oled_show_temperature": true,
+    "iso_favorites": [],
+    "iso_recent": [],
+    "oled_pages": [
+      {
+        "id": "main",
+        "enabled": true,
+        "seconds": 10
+      },
+      {
+        "id": "battery",
+        "enabled": true,
+        "seconds": 10
+      },
+      {
+        "id": "system",
+        "enabled": true,
+        "seconds": 17
+      },
+      {
+        "id": "network",
+        "enabled": true,
+        "seconds": 10
+      },
+      {
+        "id": "usb",
+        "enabled": true,
+        "seconds": 10
+      },
+      {
+        "id": "transfer",
+        "enabled": true,
+        "seconds": 10
+      }
+    ],
+    "kvm_order": [
+      "msd-dropdown",
+      "share",
+      "atx-dropdown",
+      "shortcuts-dropdown",
+      "macro-dropdown",
+      "text-dropdown",
+      "system-dropdown"
+    ],
+    "kvm_hidden": []
+  },
+  "history": []
+}

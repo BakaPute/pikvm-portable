@@ -252,20 +252,20 @@ def render_navigation(model,values,phase=0):
         if model.get('error'):
             # Errors replace help, without covering selectable rows.
             from pikvm_oled_ui import Surface
-            surface.draw.rectangle((0,54,127,63),fill=0);surface.footer(model['error'])
+            surface.draw.rectangle((0,52,127,63),fill=0);surface.footer(model['error'])
         return surface
     if screen=='qr':
         return render_qr(qr_image(model['qr_id']),'Scanner Wi-Fi',values,phase)
-    if screen=='iso-connect-confirm':return render_message('Connecter ISO ?',[Path(model['target']).name,'CD/DVD · lecture seule' if model['mode'] else 'Flash · lecture seule'],values,'Double : connecter',symbol='disc',phase=phase)
+    if screen=='iso-connect-confirm':return render_message('Connecter ISO ?',[Path(model['target']).name,'CD/DVD · RO' if model['mode'] else 'Flash · RO'],values,'2 clics : connecter',symbol='disc',phase=phase)
     if screen=='iso-eject-confirm':return render_message('Éjection propre',['Éjecter sur le PC','puis confirmer ici'],values,'Double : déconnecter',symbol='usb')
     if screen in ('power-confirm','network-confirm'):
         operation=model['operation'];threshold=2 if operation=='restart' else 5
         title='Relancer KVM ?' if operation=='restart' else 'Arrêter PiKVM ?' if operation=='shutdown' else 'Changer Wi-Fi ?'
-        return render_message(title,[f'Maintenir {threshold}s puis relâcher','Clic : annuler'],values,'Relâcher pour confirmer',symbol='power' if screen=='power-confirm' else 'wifi',progress=model['held']/threshold)
+        return render_message(title,[f'Tenir {threshold}s, lâcher','Clic : annuler'],values,'Relâcher pour confirmer',symbol='power' if screen=='power-confirm' else 'wifi',progress=model['held']/threshold)
     if screen=='iso-info':
         size=model.get('size');size=f'{size/1024**3:.2f} Gio' if type(size) is int and size>=0 else 'Taille inconnue'
-        return render_message('Informations ISO',[model['target'],size,'Lecture seule obligatoire'],values,'Clic : retour',symbol='disc',phase=phase)
-    if screen=='working':return render_message('Opération en cours',['Attendre le résultat','Bouton toujours surveillé'],values,'Aucune réinitialisation USB',symbol='system')
+        return render_message('Informations ISO',[model['target'],size,'Lecture seule'],values,'Clic : retour',symbol='disc',phase=phase)
+    if screen=='working':return render_message('En cours',['Patientez…','Bouton actif'],values,'Aucune action automatique',symbol='system')
     return render_message('Information',[model.get('error') or 'Opération terminée'],values,'Clic : menu',phase=phase)
 
 

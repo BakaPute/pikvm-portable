@@ -1,0 +1,638 @@
+{
+  "synthetic": true,
+  "physical_validation": false,
+  "images": [
+    {
+      "profile": "before",
+      "scene": "main",
+      "file": "before-main.png",
+      "width": 128,
+      "height": 64,
+      "pixels_sha256": "90aa9bf10b8cfffff5a2324e09ec131b968211e8472eb56fca29058a85639f61"
+    },
+    {
+      "profile": "before",
+      "scene": "battery",
+      "file": "before-battery.png",
+      "width": 128,
+      "height": 64,
+      "pixels_sha256": "34da0456b8c0fc4fe1f4a6f8848354da7cd3c3778ff5000c1c13e0fc132a358d"
+    },
+    {
+      "profile": "before",
+      "scene": "system",
+      "file": "before-system.png",
+      "width": 128,
+      "height": 64,
+      "pixels_sha256": "2d193b4b2fcb5e9c9ffba09bf0916529b7ef8040f236233d0c84e11a5132c045"
+    },
+    {
+      "profile": "before",
+      "scene": "network",
+      "file": "before-network.png",
+      "width": 128,
+      "height": 64,
+      "pixels_sha256": "41229cd585a3ba7ca6fc75a366f076eb0fb058973afcb525f16e24cb53be983a"
+    },
+    {
+      "profile": "before",
+      "scene": "usb",
+      "file": "before-usb.png",
+      "width": 128,
+      "height": 64,
+      "pixels_sha256": "05d26c0ead28e12cf0d0a67d2e98758e5871d0c0aaf7299831b6349fa102331c"
+    },
+    {
+      "profile": "before",
+      "scene": "transfer",
+      "file": "before-transfer.png",
+      "width": 128,
+      "height": 64,
+      "pixels_sha256": "2317c8baa97212aa8ee4feb3f1a5ffafa659e610c4f912262dc158ba55b2b7d5"
+    },
+    {
+      "profile": "before",
+      "scene": "menu",
+      "file": "before-menu.png",
+      "width": 128,
+      "height": 64,
+      "pixels_sha256": "861c4e1663843c5895dc855ed1621b1eed52500bcfbb9ccd443825252ace43f9"
+    },
+    {
+      "profile": "before",
+      "scene": "power",
+      "file": "before-power.png",
+      "width": 128,
+      "height": 64,
+      "pixels_sha256": "7b776a1225756ef16dff9335d7c357206eb233f78a8fc95cbbc24d8e422209e7"
+    },
+    {
+      "profile": "before",
+      "scene": "wifi",
+      "file": "before-wifi.png",
+      "width": 128,
+      "height": 64,
+      "pixels_sha256": "facb4ad54abf4ff9cbd4bd808bc966b53793d967d82e2c3462cd5879643ed5e0"
+    },
+    {
+      "profile": "before",
+      "scene": "menu-network",
+      "file": "before-menu-network.png",
+      "width": 128,
+      "height": 64,
+      "pixels_sha256": "8496d2dfbbdcad2e8939b81a6ccf56d7ec26c4b018aaed51fd0821cd900971c2"
+    },
+    {
+      "profile": "before",
+      "scene": "iso-root",
+      "file": "before-iso-root.png",
+      "width": 128,
+      "height": 64,
+      "pixels_sha256": "878b5df4e179c06eddb9469a9ee464de356ee0e14c36bed30fda43a189bad5fb"
+    },
+    {
+      "profile": "before",
+      "scene": "iso",
+      "file": "before-iso.png",
+      "width": 128,
+      "height": 64,
+      "pixels_sha256": "08bc2665dc3ce475a820d68d773db5bed27cf465e019a9ede3a7a0b7773bbf07"
+    },
+    {
+      "profile": "before",
+      "scene": "iso-action",
+      "file": "before-iso-action.png",
+      "width": 128,
+      "height": 64,
+      "pixels_sha256": "c4f7fdb048cf05ce35e978b023dcbc3f122feaf097527f005dd545597eb3938b"
+    },
+    {
+      "profile": "before",
+      "scene": "iso-info",
+      "file": "before-iso-info.png",
+      "width": 128,
+      "height": 64,
+      "pixels_sha256": "c828e56201bf3cf88a25e94288a60bf3bccf34abb8588da0adcdb7f4f83d9bb8"
+    },
+    {
+      "profile": "before",
+      "scene": "iso-connect-confirm",
+      "file": "before-iso-connect-confirm.png",
+      "width": 128,
+      "height": 64,
+      "pixels_sha256": "842bc6c9c7cc5961fec3daa0b0ca21c1b68925bd3d293df4549f3749497c7b83"
+    },
+    {
+      "profile": "before",
+      "scene": "iso-eject-confirm",
+      "file": "before-iso-eject-confirm.png",
+      "width": 128,
+      "height": 64,
+      "pixels_sha256": "be9984406682fe3eb8f767a3c84b97764e578abb747b9b30c9c8f5e2dcf8886e"
+    },
+    {
+      "profile": "before",
+      "scene": "power-confirm",
+      "file": "before-power-confirm.png",
+      "width": 128,
+      "height": 64,
+      "pixels_sha256": "71a579b88c3ea18eec6a5ad22bdcdd5ade09664fe7e99330d5c9afb3fd061fb2"
+    },
+    {
+      "profile": "before",
+      "scene": "network-confirm",
+      "file": "before-network-confirm.png",
+      "width": 128,
+      "height": 64,
+      "pixels_sha256": "bc9d9c0fa6bf51e171b11d98b7acea5eb83dc59ef51d2751ee3fd28fec98416c"
+    },
+    {
+      "profile": "before",
+      "scene": "working",
+      "file": "before-working.png",
+      "width": 128,
+      "height": 64,
+      "pixels_sha256": "e9f70bba40ea6e3f04fe061fe26328f9ee3819da469533c0b3ad4c22dab3813e"
+    },
+    {
+      "profile": "before",
+      "scene": "message",
+      "file": "before-message.png",
+      "width": 128,
+      "height": 64,
+      "pixels_sha256": "7649d21410a5d8704d4ca75c50647f33254c851bcd643ec6a4d8b83b24598b4b"
+    },
+    {
+      "profile": "before",
+      "scene": "qr",
+      "file": "before-qr.png",
+      "width": 128,
+      "height": 64,
+      "pixels_sha256": "d2ce6a7c48877eea25f54bc4c0b0aa27aa578f60ea02ede8fe2235adc57d291e"
+    },
+    {
+      "profile": "before",
+      "scene": "error",
+      "file": "before-error.png",
+      "width": 128,
+      "height": 64,
+      "pixels_sha256": "c2f91a3c584437e1d7ff84cf1bb4292ca542af6023f098d4b3f4c3df5703326b"
+    },
+    {
+      "profile": "before",
+      "scene": "notification",
+      "file": "before-notification.png",
+      "width": 128,
+      "height": 64,
+      "pixels_sha256": "8486b626c1cd34d0acf9c15cfa9330411a14b95f98f4e750dd332993e4294173"
+    },
+    {
+      "profile": "before",
+      "scene": "idle",
+      "file": "before-idle.png",
+      "width": 128,
+      "height": 64,
+      "pixels_sha256": "670f632a80c52aa0907cf86d9e8d3cb7e497d98013d53a031e97e9d48059098d"
+    },
+    {
+      "profile": "before",
+      "scene": "off",
+      "file": "before-off.png",
+      "width": 128,
+      "height": 64,
+      "pixels_sha256": "5f70bf18a086007016e948b04aed3b82103a36bea41755b6cddfaf10ace3c6ef"
+    },
+    {
+      "profile": "readable",
+      "scene": "main",
+      "file": "readable-main.png",
+      "width": 128,
+      "height": 64,
+      "pixels_sha256": "28f637c6468aacbf38f52ade75a1d1ea19fe12da5b7d4c88622e7bad983d754d"
+    },
+    {
+      "profile": "readable",
+      "scene": "battery",
+      "file": "readable-battery.png",
+      "width": 128,
+      "height": 64,
+      "pixels_sha256": "061223758bdd5c01e1785271c4b10ade474ea38d70079cff743a11ed96f72a54"
+    },
+    {
+      "profile": "readable",
+      "scene": "system",
+      "file": "readable-system.png",
+      "width": 128,
+      "height": 64,
+      "pixels_sha256": "8ee1ce68eab99c8d1ab23839baed7c36fc5b8cf0f3c4777be5e82b0eae0564f1"
+    },
+    {
+      "profile": "readable",
+      "scene": "system_details",
+      "file": "readable-system_details.png",
+      "width": 128,
+      "height": 64,
+      "pixels_sha256": "8bebb04dc142a976b93e4897e303faa1550418623329c53cdaf598c600180a71"
+    },
+    {
+      "profile": "readable",
+      "scene": "network",
+      "file": "readable-network.png",
+      "width": 128,
+      "height": 64,
+      "pixels_sha256": "0a6dea37ce95a25e1ba7b0bf12608cfa66a9149091ff71a983aa460e4e4ba0db"
+    },
+    {
+      "profile": "readable",
+      "scene": "network_details",
+      "file": "readable-network_details.png",
+      "width": 128,
+      "height": 64,
+      "pixels_sha256": "6abb7b49233e3735deb7df2d959b66e989db6108d273f07d5d08c2824da63a41"
+    },
+    {
+      "profile": "readable",
+      "scene": "usb",
+      "file": "readable-usb.png",
+      "width": 128,
+      "height": 64,
+      "pixels_sha256": "173b054bf1499b0830472d953af86406ef8742a889bf620833b714b92d9108d3"
+    },
+    {
+      "profile": "readable",
+      "scene": "transfer",
+      "file": "readable-transfer.png",
+      "width": 128,
+      "height": 64,
+      "pixels_sha256": "0e27afa98da7e1c226de28b913bb3057b18f2370ec035188b8245ccf26dc4dc8"
+    },
+    {
+      "profile": "readable",
+      "scene": "menu",
+      "file": "readable-menu.png",
+      "width": 128,
+      "height": 64,
+      "pixels_sha256": "bc3e0724f97c936705963feb5c32eadbce5d8ce4691e1135c5bab25b7adfc17d"
+    },
+    {
+      "profile": "readable",
+      "scene": "power",
+      "file": "readable-power.png",
+      "width": 128,
+      "height": 64,
+      "pixels_sha256": "9803173436fa4dfec080a9e461724b25f35a437726b75e104e7b9983f4e4a0bc"
+    },
+    {
+      "profile": "readable",
+      "scene": "wifi",
+      "file": "readable-wifi.png",
+      "width": 128,
+      "height": 64,
+      "pixels_sha256": "3bc19fc1dff644cd54394bcf5ea8e302590b5de2b6c3b756a26ebd3e1cd08e80"
+    },
+    {
+      "profile": "readable",
+      "scene": "menu-network",
+      "file": "readable-menu-network.png",
+      "width": 128,
+      "height": 64,
+      "pixels_sha256": "a4c3e5e940df066c03c56419ef9f708e3743d5df1d62c4338f4e9d8799a1d4a4"
+    },
+    {
+      "profile": "readable",
+      "scene": "iso-root",
+      "file": "readable-iso-root.png",
+      "width": 128,
+      "height": 64,
+      "pixels_sha256": "104d56d00a8d965f982e92faab3741d7bf494fdbbc2ae6fb437270c260c6e56d"
+    },
+    {
+      "profile": "readable",
+      "scene": "iso",
+      "file": "readable-iso.png",
+      "width": 128,
+      "height": 64,
+      "pixels_sha256": "8740685d77547cdd16d665143a2aa5482476493d10d0b1adbaf056d1b9fbc625"
+    },
+    {
+      "profile": "readable",
+      "scene": "iso-action",
+      "file": "readable-iso-action.png",
+      "width": 128,
+      "height": 64,
+      "pixels_sha256": "19b383786a00730550540a6e5b439c2bf26d85a449ceffbbab61fdf3a80f34af"
+    },
+    {
+      "profile": "readable",
+      "scene": "iso-info",
+      "file": "readable-iso-info.png",
+      "width": 128,
+      "height": 64,
+      "pixels_sha256": "ad0b8e20e26b538605dfa5d022613ee93e42d9b1bcc4d63742ec18db45fba82c"
+    },
+    {
+      "profile": "readable",
+      "scene": "iso-connect-confirm",
+      "file": "readable-iso-connect-confirm.png",
+      "width": 128,
+      "height": 64,
+      "pixels_sha256": "1365f5d12a659688821d16b69d4e29e9f6ab9a6dcfc491af1c4f966735ed8b14"
+    },
+    {
+      "profile": "readable",
+      "scene": "iso-eject-confirm",
+      "file": "readable-iso-eject-confirm.png",
+      "width": 128,
+      "height": 64,
+      "pixels_sha256": "968f6c3147c8b9d433ec7d4e03b4c5b0c4c7c45dfdbf9d8b67900dafa1dc46f7"
+    },
+    {
+      "profile": "readable",
+      "scene": "power-confirm",
+      "file": "readable-power-confirm.png",
+      "width": 128,
+      "height": 64,
+      "pixels_sha256": "71eeb1835c6529d4223b99e153312deef31637d959226690178ce1827ca529d8"
+    },
+    {
+      "profile": "readable",
+      "scene": "network-confirm",
+      "file": "readable-network-confirm.png",
+      "width": 128,
+      "height": 64,
+      "pixels_sha256": "7bc1bbe6647555081bc64e43d9c2f24a0f29e5332c0d34d9cfd16c89bb70075e"
+    },
+    {
+      "profile": "readable",
+      "scene": "working",
+      "file": "readable-working.png",
+      "width": 128,
+      "height": 64,
+      "pixels_sha256": "1ccc206feaac138649459f38d5337a150b14546c5d3e93b2ce5dd6136372bcc2"
+    },
+    {
+      "profile": "readable",
+      "scene": "message",
+      "file": "readable-message.png",
+      "width": 128,
+      "height": 64,
+      "pixels_sha256": "7bdcefd5d1f855b9d433debf6e5706bc1ad6dccdfe05b4fe4b97c6a89081d7a2"
+    },
+    {
+      "profile": "readable",
+      "scene": "qr",
+      "file": "readable-qr.png",
+      "width": 128,
+      "height": 64,
+      "pixels_sha256": "b8d648176225629877abfe386591453e950d87aa31426177b694812a254707f4"
+    },
+    {
+      "profile": "readable",
+      "scene": "error",
+      "file": "readable-error.png",
+      "width": 128,
+      "height": 64,
+      "pixels_sha256": "f19302f16020a1a81f7fa2e4e65988b3ccc7cd1b2fc953a20b17dc6f58c6fb14"
+    },
+    {
+      "profile": "readable",
+      "scene": "notification",
+      "file": "readable-notification.png",
+      "width": 128,
+      "height": 64,
+      "pixels_sha256": "842875651f5eb2fe5a7b8d04da4902a9cfa5f95be3e56fcff31d35793752557a"
+    },
+    {
+      "profile": "readable",
+      "scene": "idle",
+      "file": "readable-idle.png",
+      "width": 128,
+      "height": 64,
+      "pixels_sha256": "3c380c80655624113af9925bbd5332b598db8e06d53089be00a9a293bb065b28"
+    },
+    {
+      "profile": "readable",
+      "scene": "off",
+      "file": "readable-off.png",
+      "width": 128,
+      "height": 64,
+      "pixels_sha256": "5f70bf18a086007016e948b04aed3b82103a36bea41755b6cddfaf10ace3c6ef"
+    },
+    {
+      "profile": "compact",
+      "scene": "main",
+      "file": "compact-main.png",
+      "width": 128,
+      "height": 64,
+      "pixels_sha256": "bbcd11b2d1d62bdaf220109ef11d335bdb15cbc5b6f462cc92d822d7ae8440cd"
+    },
+    {
+      "profile": "compact",
+      "scene": "battery",
+      "file": "compact-battery.png",
+      "width": 128,
+      "height": 64,
+      "pixels_sha256": "6bb48d6050127d006a8853bce719c67ba8a29fb738beaba9e51d3ddf3a117ff0"
+    },
+    {
+      "profile": "compact",
+      "scene": "system",
+      "file": "compact-system.png",
+      "width": 128,
+      "height": 64,
+      "pixels_sha256": "962ad6f76c074133e44f4984c39dc9522986ec4459c73b35188c5c3be8976f2b"
+    },
+    {
+      "profile": "compact",
+      "scene": "system_details",
+      "file": "compact-system_details.png",
+      "width": 128,
+      "height": 64,
+      "pixels_sha256": "a4534503c23279cfdf0c9f20bcffb0e2b886d45722f45c2594a1b22069d9891e"
+    },
+    {
+      "profile": "compact",
+      "scene": "network",
+      "file": "compact-network.png",
+      "width": 128,
+      "height": 64,
+      "pixels_sha256": "84c17234dac977397761b1caf142210752cb6e7c1b73a2a02c4ad5255574cc12"
+    },
+    {
+      "profile": "compact",
+      "scene": "network_details",
+      "file": "compact-network_details.png",
+      "width": 128,
+      "height": 64,
+      "pixels_sha256": "f0b61e5dc2ec9a6beb39b9d2fcd4cdb6fcbeb7e59d352ccbc9a4f146d72163fc"
+    },
+    {
+      "profile": "compact",
+      "scene": "usb",
+      "file": "compact-usb.png",
+      "width": 128,
+      "height": 64,
+      "pixels_sha256": "3c283191634bd4f9fc6d3ce748cd278372215a672ebfd04ef9d916bc4a176136"
+    },
+    {
+      "profile": "compact",
+      "scene": "transfer",
+      "file": "compact-transfer.png",
+      "width": 128,
+      "height": 64,
+      "pixels_sha256": "e60eccb64a49b2900e55cc1a78e5f61f4af309be56b1f03882f6085ba664c2e0"
+    },
+    {
+      "profile": "compact",
+      "scene": "menu",
+      "file": "compact-menu.png",
+      "width": 128,
+      "height": 64,
+      "pixels_sha256": "c12ffb55bfa382bbed9fe5a1a732d5bd9e778a8a115bbf4542efc2192b426863"
+    },
+    {
+      "profile": "compact",
+      "scene": "power",
+      "file": "compact-power.png",
+      "width": 128,
+      "height": 64,
+      "pixels_sha256": "4a6990f061f7d7a3e7741120e1f72a5ae942380e8e72c72af067c95286aaf4b8"
+    },
+    {
+      "profile": "compact",
+      "scene": "wifi",
+      "file": "compact-wifi.png",
+      "width": 128,
+      "height": 64,
+      "pixels_sha256": "dcd3ff5458178edefa55b011276989240a1c5a903f572890d55ac47d9524496f"
+    },
+    {
+      "profile": "compact",
+      "scene": "menu-network",
+      "file": "compact-menu-network.png",
+      "width": 128,
+      "height": 64,
+      "pixels_sha256": "97e4aeed1ef7bb353db4b412f360f0214cb038567a8e88ea8226e9fe8ae313b3"
+    },
+    {
+      "profile": "compact",
+      "scene": "iso-root",
+      "file": "compact-iso-root.png",
+      "width": 128,
+      "height": 64,
+      "pixels_sha256": "ec623e37eefeadcb955542dd410cfbc33bacb9e893a53ad1b409b3d512605fd4"
+    },
+    {
+      "profile": "compact",
+      "scene": "iso",
+      "file": "compact-iso.png",
+      "width": 128,
+      "height": 64,
+      "pixels_sha256": "928584773c45a1f64a58a27f4418b359cb3ecb4d75e05f529a69ba375ac1e909"
+    },
+    {
+      "profile": "compact",
+      "scene": "iso-action",
+      "file": "compact-iso-action.png",
+      "width": 128,
+      "height": 64,
+      "pixels_sha256": "11e9335c1000b26d68632e5f33f19cf765fdfbbb70fbf34e29c331d3fdc612b1"
+    },
+    {
+      "profile": "compact",
+      "scene": "iso-info",
+      "file": "compact-iso-info.png",
+      "width": 128,
+      "height": 64,
+      "pixels_sha256": "146da2825aa2eb60558ea592453a01724a91ebe9ec304ee74598ed4423f9fa4b"
+    },
+    {
+      "profile": "compact",
+      "scene": "iso-connect-confirm",
+      "file": "compact-iso-connect-confirm.png",
+      "width": 128,
+      "height": 64,
+      "pixels_sha256": "7315c7fc27ab04474ed8e3fa097fd8010561ebe2ab97f7b6aa8bee509565e657"
+    },
+    {
+      "profile": "compact",
+      "scene": "iso-eject-confirm",
+      "file": "compact-iso-eject-confirm.png",
+      "width": 128,
+      "height": 64,
+      "pixels_sha256": "56b886fc33fd4e3f7360da3e0ba48a0f52fb6d3525eba32cb03199a83dac4835"
+    },
+    {
+      "profile": "compact",
+      "scene": "power-confirm",
+      "file": "compact-power-confirm.png",
+      "width": 128,
+      "height": 64,
+      "pixels_sha256": "33e15857c66e01ffdf91094e1e91705d8d1cde52b9a4a9a3fb653d6fed819318"
+    },
+    {
+      "profile": "compact",
+      "scene": "network-confirm",
+      "file": "compact-network-confirm.png",
+      "width": 128,
+      "height": 64,
+      "pixels_sha256": "bfea516a810b0456b738504a70773713272487e0e40f38596d206c48dc4f6df4"
+    },
+    {
+      "profile": "compact",
+      "scene": "working",
+      "file": "compact-working.png",
+      "width": 128,
+      "height": 64,
+      "pixels_sha256": "02d260fd17975d9b9e74f5655d9278f4d8606d3f9734d3194fa65f7252e47117"
+    },
+    {
+      "profile": "compact",
+      "scene": "message",
+      "file": "compact-message.png",
+      "width": 128,
+      "height": 64,
+      "pixels_sha256": "74152abcdef8f906e51457c498b6202b655827eb8d0271267a81c9b3d2c506c9"
+    },
+    {
+      "profile": "compact",
+      "scene": "qr",
+      "file": "compact-qr.png",
+      "width": 128,
+      "height": 64,
+      "pixels_sha256": "b8d648176225629877abfe386591453e950d87aa31426177b694812a254707f4"
+    },
+    {
+      "profile": "compact",
+      "scene": "error",
+      "file": "compact-error.png",
+      "width": 128,
+      "height": 64,
+      "pixels_sha256": "a4fe64d64302999c08b21f0f6163c69228a085d0448d2f77d2d306345f4a5396"
+    },
+    {
+      "profile": "compact",
+      "scene": "notification",
+      "file": "compact-notification.png",
+      "width": 128,
+      "height": 64,
+      "pixels_sha256": "3a2630a069e3e044598a6437950aabb76483eb9f81e2f57c6b0f863a60464c60"
+    },
+    {
+      "profile": "compact",
+      "scene": "idle",
+      "file": "compact-idle.png",
+      "width": 128,
+      "height": 64,
+      "pixels_sha256": "7191a2b06014684f69013f01d4d5fea28ad3f9d54482ddcfa08e8a1ed39bb911"
+    },
+    {
+      "profile": "compact",
+      "scene": "off",
+      "file": "compact-off.png",
+      "width": 128,
+      "height": 64,
+      "pixels_sha256": "5f70bf18a086007016e948b04aed3b82103a36bea41755b6cddfaf10ace3c6ef"
+    }
+  ]
+}
