@@ -264,14 +264,14 @@ def render_list(title,items,index,values,help_text='',phase=0,remaining=None):
     if not count:s.text('Liste vide',3,27,122,size=12,h=16)
     else:
         index=min(count-1,max(0,index));start=min(max(0,index-1),max(0,count-rows))
-        pitch=18 if s.readable else 11
+        pitch=18 if s.readable else 12
         for row,item in enumerate(items[start:start+rows]):
-            y=19+row*pitch if s.readable else 18+row*pitch;selected=start+row==index
-            if selected:s.draw.rectangle((1,y-2,126,y+(13 if s.readable else 10)),fill=255)
+            y=19+row*pitch if s.readable else 16+row*pitch;selected=start+row==index
+            if selected:s.draw.rectangle((1,y-2 if s.readable else y,126,y+(13 if s.readable else 11)),fill=255)
             name=item.get('name','?') if isinstance(item,dict) else str(item)
             symbol=item.get('icon','disc') if isinstance(item,dict) else 'disc'
             s.symbol(symbol,3,y+1,invert=selected)
-            s.text(name,16,y,107,size=12 if s.readable else 10,bold=selected,fill=not selected,scroll=selected,h=14 if s.readable else 11)
+            s.text(name,16,y,107,size=12 if s.readable else 10,bold=selected,fill=not selected,scroll=selected,h=14 if s.readable else 12)
     s.footer(help_text or '1 suiv.  2 ouvrir')
     return s
 

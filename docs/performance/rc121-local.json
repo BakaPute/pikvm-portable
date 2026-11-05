@@ -6,324 +6,324 @@
   "profiles": {
     "before": {
       "main": {
-        "mean_ms": 0.063,
-        "p95_ms": 0.107
+        "mean_ms": 0.057,
+        "p95_ms": 0.061
       },
       "battery": {
         "mean_ms": 0.05,
-        "p95_ms": 0.061
+        "p95_ms": 0.053
       },
       "system": {
-        "mean_ms": 0.077,
-        "p95_ms": 0.089
+        "mean_ms": 0.07,
+        "p95_ms": 0.077
       },
       "network": {
         "mean_ms": 0.065,
-        "p95_ms": 0.072
+        "p95_ms": 0.074
       },
       "usb": {
-        "mean_ms": 0.06,
-        "p95_ms": 0.089
+        "mean_ms": 0.057,
+        "p95_ms": 0.062
       },
       "transfer": {
-        "mean_ms": 0.067,
-        "p95_ms": 0.075
+        "mean_ms": 0.071,
+        "p95_ms": 0.133
       },
       "menu": {
         "mean_ms": 0.089,
-        "p95_ms": 0.123
+        "p95_ms": 0.151
       },
       "power": {
-        "mean_ms": 0.086,
-        "p95_ms": 0.11
+        "mean_ms": 0.084,
+        "p95_ms": 0.093
       },
       "wifi": {
-        "mean_ms": 0.083,
-        "p95_ms": 0.137
+        "mean_ms": 0.078,
+        "p95_ms": 0.083
       },
       "menu-network": {
-        "mean_ms": 0.082,
-        "p95_ms": 0.129
+        "mean_ms": 0.08,
+        "p95_ms": 0.094
       },
       "iso-root": {
-        "mean_ms": 0.115,
-        "p95_ms": 0.164
+        "mean_ms": 0.113,
+        "p95_ms": 0.15
       },
       "iso": {
-        "mean_ms": 0.116,
-        "p95_ms": 0.178
+        "mean_ms": 0.114,
+        "p95_ms": 0.163
       },
       "iso-action": {
-        "mean_ms": 0.1,
-        "p95_ms": 0.139
+        "mean_ms": 0.152,
+        "p95_ms": 0.2
       },
       "iso-info": {
-        "mean_ms": 0.08,
-        "p95_ms": 0.144
+        "mean_ms": 0.104,
+        "p95_ms": 0.213
       },
       "iso-connect-confirm": {
-        "mean_ms": 0.084,
-        "p95_ms": 0.156
+        "mean_ms": 0.08,
+        "p95_ms": 0.107
       },
       "iso-eject-confirm": {
-        "mean_ms": 0.06,
-        "p95_ms": 0.075
+        "mean_ms": 0.064,
+        "p95_ms": 0.078
       },
       "power-confirm": {
-        "mean_ms": 0.072,
-        "p95_ms": 0.1
+        "mean_ms": 0.089,
+        "p95_ms": 0.144
       },
       "network-confirm": {
-        "mean_ms": 0.076,
-        "p95_ms": 0.116
+        "mean_ms": 0.097,
+        "p95_ms": 0.154
       },
       "working": {
-        "mean_ms": 0.069,
-        "p95_ms": 0.112
+        "mean_ms": 0.087,
+        "p95_ms": 0.146
       },
       "message": {
-        "mean_ms": 0.053,
-        "p95_ms": 0.092
+        "mean_ms": 0.103,
+        "p95_ms": 0.121
       },
       "qr": {
-        "mean_ms": 0.029,
-        "p95_ms": 0.031
+        "mean_ms": 0.06,
+        "p95_ms": 0.07
       },
       "error": {
-        "mean_ms": 0.033,
-        "p95_ms": 0.048
+        "mean_ms": 0.037,
+        "p95_ms": 0.06
       },
       "notification": {
-        "mean_ms": 0.034,
-        "p95_ms": 0.048
+        "mean_ms": 0.047,
+        "p95_ms": 0.07
       },
       "idle": {
-        "mean_ms": 0.023,
-        "p95_ms": 0.025
+        "mean_ms": 0.029,
+        "p95_ms": 0.047
       },
       "off": {
-        "mean_ms": 0.007,
-        "p95_ms": 0.01
+        "mean_ms": 0.004,
+        "p95_ms": 0.007
       }
     },
     "readable": {
       "main": {
-        "mean_ms": 0.059,
-        "p95_ms": 0.064
+        "mean_ms": 0.076,
+        "p95_ms": 0.133
       },
       "battery": {
         "mean_ms": 0.043,
-        "p95_ms": 0.069
+        "p95_ms": 0.053
       },
       "system": {
-        "mean_ms": 0.058,
-        "p95_ms": 0.066
+        "mean_ms": 0.063,
+        "p95_ms": 0.069
       },
       "system_details": {
-        "mean_ms": 0.048,
-        "p95_ms": 0.051
+        "mean_ms": 0.053,
+        "p95_ms": 0.061
       },
       "network": {
-        "mean_ms": 0.05,
-        "p95_ms": 0.09
+        "mean_ms": 0.051,
+        "p95_ms": 0.081
       },
       "network_details": {
-        "mean_ms": 0.042,
-        "p95_ms": 0.05
+        "mean_ms": 0.044,
+        "p95_ms": 0.052
       },
       "usb": {
-        "mean_ms": 0.056,
-        "p95_ms": 0.06
+        "mean_ms": 0.067,
+        "p95_ms": 0.101
       },
       "transfer": {
-        "mean_ms": 0.068,
-        "p95_ms": 0.113
+        "mean_ms": 0.076,
+        "p95_ms": 0.118
       },
       "menu": {
-        "mean_ms": 0.077,
-        "p95_ms": 0.136
+        "mean_ms": 0.105,
+        "p95_ms": 0.168
       },
       "power": {
-        "mean_ms": 0.074,
-        "p95_ms": 0.088
+        "mean_ms": 0.099,
+        "p95_ms": 0.176
       },
       "wifi": {
-        "mean_ms": 0.074,
-        "p95_ms": 0.088
+        "mean_ms": 0.082,
+        "p95_ms": 0.105
       },
       "menu-network": {
-        "mean_ms": 0.125,
-        "p95_ms": 0.133
+        "mean_ms": 0.151,
+        "p95_ms": 0.189
       },
       "iso-root": {
-        "mean_ms": 0.097,
-        "p95_ms": 0.126
+        "mean_ms": 0.115,
+        "p95_ms": 0.193
       },
       "iso": {
-        "mean_ms": 0.075,
-        "p95_ms": 0.142
+        "mean_ms": 0.083,
+        "p95_ms": 0.151
       },
       "iso-action": {
-        "mean_ms": 0.088,
-        "p95_ms": 0.126
+        "mean_ms": 0.087,
+        "p95_ms": 0.098
       },
       "iso-info": {
-        "mean_ms": 0.079,
-        "p95_ms": 0.143
+        "mean_ms": 0.076,
+        "p95_ms": 0.108
       },
       "iso-connect-confirm": {
-        "mean_ms": 0.079,
-        "p95_ms": 0.103
+        "mean_ms": 0.08,
+        "p95_ms": 0.092
       },
       "iso-eject-confirm": {
-        "mean_ms": 0.064,
-        "p95_ms": 0.094
+        "mean_ms": 0.077,
+        "p95_ms": 0.147
       },
       "power-confirm": {
-        "mean_ms": 0.056,
-        "p95_ms": 0.065
+        "mean_ms": 0.061,
+        "p95_ms": 0.085
       },
       "network-confirm": {
-        "mean_ms": 0.062,
-        "p95_ms": 0.118
+        "mean_ms": 0.075,
+        "p95_ms": 0.115
       },
       "working": {
         "mean_ms": 0.085,
-        "p95_ms": 0.143
+        "p95_ms": 0.093
       },
       "message": {
-        "mean_ms": 0.071,
-        "p95_ms": 0.131
+        "mean_ms": 0.101,
+        "p95_ms": 0.144
       },
       "qr": {
-        "mean_ms": 0.027,
-        "p95_ms": 0.028
+        "mean_ms": 0.028,
+        "p95_ms": 0.029
       },
       "error": {
-        "mean_ms": 0.042,
-        "p95_ms": 0.045
+        "mean_ms": 0.043,
+        "p95_ms": 0.054
       },
       "notification": {
-        "mean_ms": 0.05,
-        "p95_ms": 0.055
+        "mean_ms": 0.051,
+        "p95_ms": 0.058
       },
       "idle": {
-        "mean_ms": 0.025,
-        "p95_ms": 0.027
+        "mean_ms": 0.026,
+        "p95_ms": 0.03
       },
       "off": {
         "mean_ms": 0.004,
-        "p95_ms": 0.006
+        "p95_ms": 0.004
       }
     },
     "compact": {
       "main": {
-        "mean_ms": 0.083,
-        "p95_ms": 0.111
+        "mean_ms": 0.082,
+        "p95_ms": 0.092
       },
       "battery": {
-        "mean_ms": 0.052,
-        "p95_ms": 0.056
+        "mean_ms": 0.053,
+        "p95_ms": 0.057
       },
       "system": {
-        "mean_ms": 0.063,
-        "p95_ms": 0.067
+        "mean_ms": 0.064,
+        "p95_ms": 0.068
       },
       "system_details": {
-        "mean_ms": 0.048,
-        "p95_ms": 0.051
+        "mean_ms": 0.05,
+        "p95_ms": 0.056
       },
       "network": {
-        "mean_ms": 0.046,
-        "p95_ms": 0.087
+        "mean_ms": 0.045,
+        "p95_ms": 0.048
       },
       "network_details": {
-        "mean_ms": 0.045,
-        "p95_ms": 0.083
+        "mean_ms": 0.043,
+        "p95_ms": 0.048
       },
       "usb": {
-        "mean_ms": 0.055,
-        "p95_ms": 0.059
+        "mean_ms": 0.058,
+        "p95_ms": 0.061
       },
       "transfer": {
-        "mean_ms": 0.056,
-        "p95_ms": 0.067
+        "mean_ms": 0.057,
+        "p95_ms": 0.065
       },
       "menu": {
-        "mean_ms": 0.087,
-        "p95_ms": 0.155
+        "mean_ms": 0.084,
+        "p95_ms": 0.096
       },
       "power": {
-        "mean_ms": 0.087,
-        "p95_ms": 0.136
+        "mean_ms": 0.082,
+        "p95_ms": 0.089
       },
       "wifi": {
-        "mean_ms": 0.075,
-        "p95_ms": 0.094
+        "mean_ms": 0.076,
+        "p95_ms": 0.091
       },
       "menu-network": {
-        "mean_ms": 0.082,
-        "p95_ms": 0.118
+        "mean_ms": 0.076,
+        "p95_ms": 0.084
       },
       "iso-root": {
-        "mean_ms": 0.113,
-        "p95_ms": 0.186
+        "mean_ms": 0.114,
+        "p95_ms": 0.191
       },
       "iso": {
-        "mean_ms": 0.116,
-        "p95_ms": 0.203
+        "mean_ms": 0.112,
+        "p95_ms": 0.134
       },
       "iso-action": {
-        "mean_ms": 0.106,
-        "p95_ms": 0.188
+        "mean_ms": 0.102,
+        "p95_ms": 0.158
       },
       "iso-info": {
-        "mean_ms": 0.078,
-        "p95_ms": 0.136
+        "mean_ms": 0.084,
+        "p95_ms": 0.129
       },
       "iso-connect-confirm": {
-        "mean_ms": 0.08,
-        "p95_ms": 0.098
+        "mean_ms": 0.089,
+        "p95_ms": 0.13
       },
       "iso-eject-confirm": {
-        "mean_ms": 0.068,
-        "p95_ms": 0.117
+        "mean_ms": 0.069,
+        "p95_ms": 0.127
       },
       "power-confirm": {
-        "mean_ms": 0.057,
-        "p95_ms": 0.063
+        "mean_ms": 0.072,
+        "p95_ms": 0.122
       },
       "network-confirm": {
-        "mean_ms": 0.061,
-        "p95_ms": 0.098
+        "mean_ms": 0.059,
+        "p95_ms": 0.072
       },
       "working": {
-        "mean_ms": 0.085,
-        "p95_ms": 0.101
+        "mean_ms": 0.099,
+        "p95_ms": 0.155
       },
       "message": {
-        "mean_ms": 0.063,
-        "p95_ms": 0.07
+        "mean_ms": 0.079,
+        "p95_ms": 0.128
       },
       "qr": {
-        "mean_ms": 0.031,
-        "p95_ms": 0.053
+        "mean_ms": 0.03,
+        "p95_ms": 0.038
       },
       "error": {
-        "mean_ms": 0.035,
-        "p95_ms": 0.041
+        "mean_ms": 0.053,
+        "p95_ms": 0.078
       },
       "notification": {
-        "mean_ms": 0.05,
-        "p95_ms": 0.054
+        "mean_ms": 0.063,
+        "p95_ms": 0.105
       },
       "idle": {
         "mean_ms": 0.027,
-        "p95_ms": 0.04
+        "p95_ms": 0.034
       },
       "off": {
-        "mean_ms": 0.005,
-        "p95_ms": 0.008
+        "mean_ms": 0.004,
+        "p95_ms": 0.004
       }
     }
   }

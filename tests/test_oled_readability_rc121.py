@@ -7,7 +7,8 @@ import sys
 import tempfile
 import unittest
 from unittest.mock import Mock,patch
-from PIL import Image,ImageChops
+from PIL import Image,ImageChops,ImageFont
+from functools import lru_cache
 from test_oled_rc12 import SAMPLE,ROOT
 import pikvm_config as config
 import pikvm_oled_ui as ui
@@ -19,6 +20,21 @@ from test_portable_install import portable
 
 
 class LayoutTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        # Exercise the real Pi font on Windows too, when available locally.
+        directory=next((p for p in (Path('/usr/share/fonts/TTF'),Path('/usr/share/fonts/truetype/dejavu'),ROOT/'private/rc121-fonts') if (p/'DejaVuSans.ttf').is_file()),None)
+        cls.original_font=staticmethod(ui.font)
+        if directory:
+            @lru_cache(maxsize=16)
+            def font(size=9,bold=False):return ImageFont.truetype(str(directory/('DejaVuSans-Bold.ttf' if bold else 'DejaVuSans.ttf')),size)
+            ui.font=font
+        ui.bounds.cache_clear();ui.text_mask.cache_clear()
+
+    @classmethod
+    def tearDownClass(cls):
+        ui.font=cls.original_font;ui.bounds.cache_clear();ui.text_mask.cache_clear()
+
     def assert_layout(self,surface):
         self.assertEqual(surface.image.size,(128,64));self.assertEqual(surface.image.mode,'1')
         for i,a in enumerate(surface.text_regions):
@@ -79,12 +95,16 @@ class LayoutTests(unittest.TestCase):
             self.assertGreaterEqual(box[0],factor*4);self.assertGreaterEqual(64-box[2],factor*4)
 
     def test_large_combining_input_never_draws_half_a_glyph(self):
-        frame=ui.Surface(config.defaults());frame.text('e'+'\u0301'*80,3,20,122,size=12,h=12)
-        self.assert_layout(frame);self.assertTrue(any(r['elided'] for r in frame.text_runs) or not frame.text_runs)
+        text='e'+'\u0301'*80;mask=ui.text_mask(ui.clean(text),12)
+        for height in (2,12):
+            frame=ui.Surface(config.defaults());frame.text(text,3,20,122,size=12,h=height)
+            self.assert_layout(frame)
+            if mask.height>height:self.assertTrue(any(r['elided'] for r in frame.text_runs) or not frame.text_runs)
+            else:self.assertEqual(frame.image.crop((3,20,3+mask.width,20+mask.height)).tobytes(),mask.tobytes())
 
     def test_previews_and_optional_physical_output_share_exact_bits_in_both_modes(self):
         settings=Settings(SimpleNamespace(),Path('unused'))
-        with tempfile.TemporaryDirectory(dir=ROOT/'private') as directory:
+        with tempfile.TemporaryDirectory(dir=ROOT) as directory:
             physical=Mock();device=oled.MirrorDevice('status',path=Path(directory)/'oled/frame.json',factory=lambda:physical,background=False)
             for style in ('readable','compact'):
                 values={**config.defaults(),'oled_style':style}
@@ -99,7 +119,7 @@ class LayoutTests(unittest.TestCase):
 class PreferenceTests(unittest.TestCase):
     def test_rc12_compact_preferences_and_order_are_preserved_without_a_write(self):
         old=json.loads((ROOT/'tests/fixtures/rc12-settings.json').read_text(encoding='utf-8'))
-        with tempfile.TemporaryDirectory(dir=ROOT/'private') as directory:
+        with tempfile.TemporaryDirectory(dir=ROOT) as directory:
             target=Path(directory)/'settings.json';target.write_text(json.dumps(old),encoding='utf-8');target.chmod(0o600);raw=target.read_bytes()
             current=config.Store(target).read()
             self.assertTrue(current['healthy']);self.assertEqual(current['migrated_from'],2);self.assertEqual(current['revision'],9)
@@ -109,7 +129,7 @@ class PreferenceTests(unittest.TestCase):
             self.assertEqual(config.defaults()['oled_style'],'readable')
 
     def test_rc12_snapshot_restores_exact_original_preferences_after_rc121_save(self):
-        with tempfile.TemporaryDirectory(dir=ROOT/'private') as directory:
+        with tempfile.TemporaryDirectory(dir=ROOT) as directory:
             root=Path(directory);target=root/'settings.json';raw=(ROOT/'tests/fixtures/rc12-settings.json').read_bytes();target.write_bytes(raw);target.chmod(0o600)
             backup=root/'backup';backup.mkdir();h=portable.helper()
             with patch.object(portable,'preferences_module',return_value=config),patch.object(config,'pst_path',return_value=target),patch.object(config,'pst_commit',side_effect=lambda writer:writer(target)):

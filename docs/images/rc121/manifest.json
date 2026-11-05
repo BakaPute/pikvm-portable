@@ -488,7 +488,7 @@
       "file": "compact-menu.png",
       "width": 128,
       "height": 64,
-      "pixels_sha256": "c12ffb55bfa382bbed9fe5a1a732d5bd9e778a8a115bbf4542efc2192b426863"
+      "pixels_sha256": "66c2eca87f3ee7a6ba87a961a7fc3fc190dca2a6bc95ef70397e4ef9daccf511"
     },
     {
       "profile": "compact",
@@ -496,7 +496,7 @@
       "file": "compact-power.png",
       "width": 128,
       "height": 64,
-      "pixels_sha256": "4a6990f061f7d7a3e7741120e1f72a5ae942380e8e72c72af067c95286aaf4b8"
+      "pixels_sha256": "a7c742db20cb67cda3a75d9bdcafde7814656cb77d8f32e91cb835b00a9ea6f2"
     },
     {
       "profile": "compact",
@@ -504,7 +504,7 @@
       "file": "compact-wifi.png",
       "width": 128,
       "height": 64,
-      "pixels_sha256": "dcd3ff5458178edefa55b011276989240a1c5a903f572890d55ac47d9524496f"
+      "pixels_sha256": "dc2707212d4da70b69ca51dad4758dcce9193a9210fe1ba7d3b05f23c90b1412"
     },
     {
       "profile": "compact",
@@ -512,7 +512,7 @@
       "file": "compact-menu-network.png",
       "width": 128,
       "height": 64,
-      "pixels_sha256": "97e4aeed1ef7bb353db4b412f360f0214cb038567a8e88ea8226e9fe8ae313b3"
+      "pixels_sha256": "ce0d9e07904b60aee6a4bbdb3ba0f0c658c5bd79cb11061de72eae36fa4bff7c"
     },
     {
       "profile": "compact",
@@ -520,7 +520,7 @@
       "file": "compact-iso-root.png",
       "width": 128,
       "height": 64,
-      "pixels_sha256": "ec623e37eefeadcb955542dd410cfbc33bacb9e893a53ad1b409b3d512605fd4"
+      "pixels_sha256": "fe7feee2e54f7e7aba312a7951b1785c373b65c940a37f048c11f59c964c1500"
     },
     {
       "profile": "compact",
@@ -528,7 +528,7 @@
       "file": "compact-iso.png",
       "width": 128,
       "height": 64,
-      "pixels_sha256": "928584773c45a1f64a58a27f4418b359cb3ecb4d75e05f529a69ba375ac1e909"
+      "pixels_sha256": "09d913aaa234b1838235225958ab581b4ce041dc16e0711a5304fdfad105c8b2"
     },
     {
       "profile": "compact",
@@ -536,7 +536,7 @@
       "file": "compact-iso-action.png",
       "width": 128,
       "height": 64,
-      "pixels_sha256": "11e9335c1000b26d68632e5f33f19cf765fdfbbb70fbf34e29c331d3fdc612b1"
+      "pixels_sha256": "0efe5f2a33c896432f687128f0cae2e35e433df4dcef2ce0fe050f0d9674dda8"
     },
     {
       "profile": "compact",
