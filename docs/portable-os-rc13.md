@@ -292,6 +292,12 @@ extérieur à l’exécution, pour UID, clés, absence de sudo/shell/tunnels,
 révocation et récupération root. Les clés privées de test restent dans ce
 conteneur et disparaissent avec lui.
 
+Le test OpenSSH a reproduit un cas réel de `sudo -l -U` : un code de sortie
+0 accompagné d’un refus explicite pour l’utilisateur interrogé. Le contrôle
+accepte uniquement ce refus complet et identifié, sans liste de commandes ;
+une réponse ambiguë, un droit présent ou une erreur de politique bloque le
+provisionnement. Un avertissement DNS isolé reconnu ne remplace jamais ce refus.
+
 Le backend matériel des tests passerelle est synthétique ; ils ne remplacent
 pas une validation de la passerelle contre tous les services KVMD réels du Pi.
 Les fixtures navigateur du moteur natif 4.213 restent inchangées. Aucun compte

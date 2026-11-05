@@ -16,7 +16,7 @@ import uuid
 sys.path.insert(0,'/usr/local/lib/pikvm-portable')
 sys.path.insert(1,str(Path(__file__).resolve().parent))
 from pikvm_security import SecurityStore,SecurityError
-from pikvm_ssh import plan,BROKER,KEY_COMMAND,ssh_options
+from pikvm_ssh import plan,BROKER,KEY_COMMAND,ssh_options,sudo_explicitly_denied
 
 def run(args):return subprocess.run(args,check=True,capture_output=True,text=True,timeout=15,stdin=subprocess.DEVNULL)
 def digest(path):return hashlib.sha256(path.read_bytes()).hexdigest()
@@ -79,7 +79,7 @@ def apply(store,name,approved):
         if set(os.getgrouplist(account,created.pw_gid))!={created.pw_gid}:raise SecurityError('Groupes supplémentaires inattendus ; compte bloqué.',503)
         if Path('/usr/bin/sudo').is_file():
             privilege=subprocess.run(['/usr/bin/sudo','-n','-l','-U',account],capture_output=True,text=True,timeout=10,stdin=subprocess.DEVNULL,env={'PATH':'/usr/bin','LC_ALL':'C'})
-            if privilege.returncode==0 or 'not allowed to run sudo' not in (privilege.stdout+privilege.stderr):raise SecurityError('Droits sudo présents ou non vérifiables ; compte bloqué.',503)
+            if not sudo_explicitly_denied(privilege.returncode,privilege.stdout,privilege.stderr,account):raise SecurityError('Droits sudo présents ou non vérifiables ; compte bloqué.',503)
         # No user-writable shell startup/SSH rc files can precede ForceCommand.
         home=Path(created.pw_dir)
         if home.is_symlink() or home!=Path('/home')/account:raise SecurityError('Home nouveau non reconnu.',503)

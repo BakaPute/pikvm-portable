@@ -15,7 +15,7 @@ ROOT=Path(__file__).resolve().parents[1];sys.path.insert(0,str(ROOT/'scripts'))
 import pikvm_security as security
 import pikvm_access as access
 import pikvm_security_bridge as bridge
-from pikvm_ssh import plan,ssh_options
+from pikvm_ssh import plan,ssh_options,sudo_explicitly_denied
 
 PASSWORD='Synthetic-Administrator-2026!'
 OTHER='Synthetic-Operator-2026!'
@@ -36,6 +36,17 @@ class Fixture(unittest.TestCase):
         self.change('create',name,role=role,password=OTHER,display='Synthetic member');return self.store.principal(name)
 
 class IdentityTests(Fixture):
+    def test_sudo_listing_requires_explicit_complete_denial_even_with_zero_exit(self):
+        denial='User codex is not allowed to run sudo on synthetic-host.\n'
+        warning='sudo: unable to resolve host synthetic-host: Temporary failure in name resolution\n'
+        for code in (0,1):
+            self.assertTrue(sudo_explicitly_denied(code,denial,'','codex'))
+            self.assertTrue(sudo_explicitly_denied(code,denial,warning,'codex'))
+        for code,out,err,user in ((2,denial,'','codex'),(1,'','sudo: a password is required\n','codex'),
+                (0,'User codex may run the following commands: ALL\n','','codex'),(0,denial+'ALL\n','','codex'),
+                (0,denial,'sudo: policy plugin failed\n','codex'),(0,denial,'','other')):
+            self.assertFalse(sudo_explicitly_denied(code,out,err,user))
+
     def test_password_hash_strength_no_export_and_native_collision(self):
         self.create();data=self.store.public(self.store.read());encoded=json.dumps(data)
         self.assertNotIn(OTHER,encoded);self.assertNotIn('pbkdf2',encoded);self.assertNotIn('password',encoded)

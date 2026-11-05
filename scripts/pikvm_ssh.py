@@ -7,6 +7,15 @@ from pikvm_security import username,SecurityError,public_key
 
 BROKER='/usr/local/lib/pikvm-portable/pikvm-maintenance-command'
 KEY_COMMAND='/usr/local/lib/pikvm-portable/pikvm-security-authorized-keys'
+def sudo_explicitly_denied(code,stdout,stderr,account):
+    # A root `sudo -l -U user` query can succeed while listing an explicit
+    # denial. Never infer absence of privileges from a nonzero code alone.
+    denial=re.fullmatch(r'User '+re.escape(account)+r' is not allowed to run sudo on ([A-Za-z0-9_.-]+)\.\n?',stdout)
+    if code not in (0,1) or denial is None:return False
+    if not stderr:return True
+    host=re.escape(denial.group(1))
+    return re.fullmatch(r'sudo: unable to resolve host '+host+r': (?:Temporary failure in name resolution|Name or service not known)\n?',stderr) is not None
+
 def ssh_options(text):
     result={}
     for line in text.splitlines():
