@@ -2,7 +2,7 @@
 
 Projet de PiKVM portable basé sur un Raspberry Pi Zero 2 W.
 
-Candidate Portable OS : [RC12.1 — lisibilité OLED et retour RC12](docs/portable-os-rc121.md).
+Candidate Portable OS : [RC12.1 — lisibilité OLED et retour RC12](docs/portable-os-rc121.md). [Validation sur le Pi](docs/portable-os-rc121-validation.md).
 Les tests automatiques utilisent des images synthétiques ; suivre le précontrôle
 et la procédure de sauvegarde avant toute installation sur le Pi.
 
