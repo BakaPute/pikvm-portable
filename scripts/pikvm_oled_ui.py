@@ -22,11 +22,12 @@ def clean(value,limit=256):
 @lru_cache(maxsize=16)
 def font(size=9,bold=False):
     name='DejaVuSans-Bold.ttf' if bold else 'DejaVuSans.ttf'
-    for directory in ('/usr/share/fonts/TTF','/usr/share/fonts/truetype/dejavu'):
-        path=Path(directory)/name
-        if path.is_file():
-            try:return ImageFont.truetype(str(path),size)
-            except OSError:pass
+    for directory in (Path(__file__).parent/'fonts',Path(__file__).parent.parent/'assets/fonts',Path('/usr/share/fonts/TTF'),Path('/usr/share/fonts/truetype/dejavu')):
+        for filename in dict.fromkeys((name,'DejaVuSans.ttf')):
+            path=directory/filename
+            if path.is_file():
+                try:return ImageFont.truetype(str(path),size)
+                except OSError:pass
     # Pillow's bundled scalable font is also available in offline/headless tests.
     return ImageFont.load_default(size=size)
 
@@ -179,7 +180,7 @@ def percent(value):return '--' if number(value) is None else f'{max(0,min(100,va
 
 
 def render_status(page,data,values,remaining=None,phase=0):
-    data={**data,**{key:number(data.get(key)) for key in ('percent','voltage','cpu','ram','temperature','dbm','free','available_mb')}}
+    data={**data,**{key:number(data.get(key)) for key in ('percent','voltage','cpu','ram','temperature','dbm','free','available_mb','total_mb')}}
     s=Surface(values,phase);timer=f'{remaining}s' if remaining is not None else ''
     size=12 if s.readable else 11
     if page=='main':
@@ -196,17 +197,18 @@ def render_status(page,data,values,remaining=None,phase=0):
         else:s.footer('KVM '+{True:'actif',False:'arrêté',None:'?'}.get(data.get('kvm'),'?'),timer)
     elif page=='battery':
         charge={True:'Charge',False:'Repos',None:'?'}.get(data.get('charging'),'?')
-        s.header('Batterie','battery',charge)
-        s.text(percent(data['percent']),3,19,122 if s.readable else 78,size=24 if s.readable else 22,bold=True,h=26,align=values.get('oled_alignment','left'))
+        s.header('Batterie','battery',timer or charge)
+        s.text(percent(data['percent']),3,19,78,size=24 if s.readable else 22,bold=True,h=26,align=values.get('oled_alignment','left'))
         voltage=f"{data['voltage']:.2f} V" if data['voltage'] is not None else '-- V'
         if s.readable:
+            s.text(charge,82,26,43,size=10,align='right',h=12)
             label='Inconnue' if data['percent'] is None else 'Critique' if data['percent']<=values.get('battery_critical',10) else 'Faible' if data['percent']<=values.get('battery_low',20) else 'Estimée'
             s.text(label,3,49,65,size=11,h=13)
             if values.get('oled_show_voltage',True):s.text(voltage,72,49,53,size=11,h=13,align='right')
         else:
             if values.get('oled_show_voltage',True):s.text(voltage,82,26,43,size=10,align='right',h=12)
             s.bar(3,43,122,8,None if data['percent'] is None else data['percent']/100)
-            s.footer('Mesure absente' if data['percent'] is None else 'Mesure estimée',timer)
+            s.footer('Mesure absente' if data['percent'] is None else charge,timer)
     elif page=='system':
         s.header('Système','system',timer or '1/2')
         temperature=data['temperature']
@@ -225,7 +227,9 @@ def render_status(page,data,values,remaining=None,phase=0):
     elif page=='system_details':
         s.header('Ressources','system',timer or '2/2')
         available=data['available_mb'];available=f'{available:.0f} Mio' if available is not None else '-- Mio'
-        s.metrics([('Libre',available),('Durée',data.get('uptime') or '--')],top=22)
+        total=f"{data['total_mb']:.0f} Mio" if data['total_mb'] is not None else '-- Mio'
+        s.metrics([('Dispo.',available),('Total',total)],top=19,bottom=51,value_size=14)
+        s.footer('RAM '+percent(data['ram']),data.get('uptime') or '--')
     elif page=='network':
         s.header('Réseau','wifi',timer or '1/2')
         s.text((data.get('ip') or 'IP inconnue') if values.get('oled_show_ip',True) else 'IP masquée',3,21,122,size=13,bold=True,scroll=True,h=16)

@@ -67,21 +67,31 @@ def label(value):
         raise SecurityError('Nom affiché invalide.',400)
     return value.strip()
 
-def password_hash(password):
-    if not isinstance(password,str) or not 14<=len(password)<=128 or any(ord(c)<32 for c in password):
-        raise SecurityError('Mot de passe : 14 à 128 caractères, sans contrôle.',400)
+def password_bytes(password):
+    try:raw=password.encode('utf-8') if isinstance(password,str) else None
+    except UnicodeError:raw=None
+    if raw is None or len(raw)>1024:
+        raise SecurityError('Mot de passe requis, 1024 octets UTF-8 maximum.',400)
+    return raw
+
+def password_hash(password,*,strict=False,allow_empty=False):
+    raw=password_bytes(password)
+    if password=='' and allow_empty is not True:
+        raise SecurityError('Confirmation explicite du mot de passe vide requise.',400)
     classes=sum((any(c.islower() for c in password),any(c.isupper() for c in password),any(c.isdigit() for c in password),any(not c.isalnum() for c in password)))
-    if len(set(password))<8 or (classes<3 and not (len(password)>=20 and ' ' in password)):
-        raise SecurityError('Utiliser une phrase de passe longue ou trois familles de caractères.',400)
-    salt=secrets.token_bytes(16);digest=hashlib.pbkdf2_hmac('sha256',password.encode(),salt,ITERATIONS)
+    if strict and (not 14<=len(password)<=128 or any(ord(c)<32 for c in password) or len(set(password))<8 or (classes<3 and not (len(password)>=20 and ' ' in password))):
+        raise SecurityError('Politique stricte : phrase robuste ou 14 caractères et trois familles.',400)
+    salt=secrets.token_bytes(16);digest=hashlib.pbkdf2_hmac('sha256',raw,salt,ITERATIONS)
     return 'pbkdf2_sha256$'+str(ITERATIONS)+'$'+salt.hex()+'$'+digest.hex()
 
 def valid_hash(value):return isinstance(value,str) and re.fullmatch(r'pbkdf2_sha256\$600000\$[a-f0-9]{32}\$[a-f0-9]{64}',value) is not None
 
 def password_matches(password,encoded):
-    if not isinstance(password,str) or len(password)>128 or not valid_hash(encoded):return False
+    try:raw=password_bytes(password)
+    except SecurityError:return False
+    if not valid_hash(encoded):return False
     _,_,salt,expected=encoded.split('$')
-    return hmac.compare_digest(hashlib.pbkdf2_hmac('sha256',password.encode(),bytes.fromhex(salt),ITERATIONS).hex(),expected)
+    return hmac.compare_digest(hashlib.pbkdf2_hmac('sha256',raw,bytes.fromhex(salt),ITERATIONS).hex(),expected)
 
 def permission_list(value):
     if not isinstance(value,list) or len(value)>len(PERMISSIONS) or len(value)!=len(set(value)) or any(p not in PERMISSIONS for p in value):
@@ -107,8 +117,9 @@ def native_admin(owner=''):
     return Principal('@kvmd-administrator',frozenset(PERMISSIONS),owner=owner,native=True)
 
 def validate(document):
-    if not isinstance(document,dict) or set(document)!={'schema','revision','users','roles','history'} or document['schema']!=1 or type(document['revision']) is not int or document['revision']<0:
+    if not isinstance(document,dict) or set(document) not in ({'schema','revision','users','roles','history'},{'schema','revision','users','roles','history','strict_passwords'}) or document['schema']!=1 or type(document['revision']) is not int or document['revision']<0:
         raise ValueError('Security document')
+    if type(document.get('strict_passwords',False)) is not bool:raise ValueError('Password policy')
     if not isinstance(document['users'],dict) or len(document['users'])>64 or not isinstance(document['roles'],dict) or len(document['roles'])>32:
         raise ValueError('Security limits')
     for key,base in ROLES.items():
@@ -191,9 +202,9 @@ class SecurityStore:
                 if fcntl:fcntl.flock(fd,fcntl.LOCK_EX)
                 yield
             finally:os.close(fd)
-    def initialize(self,name,password,actor):
+    def initialize(self,name,password,actor,*,allow_empty=False):
         if not actor.native:raise SecurityError('Initialisation réservée à la récupération KVMD.',403)
-        username(name);encoded=password_hash(password)
+        username(name);encoded=password_hash(password,allow_empty=allow_empty)
         with self.locked():
             if self.path.exists() or self.path.is_symlink():raise SecurityError('Initialisation déjà effectuée ; ne pas écraser.',409)
             document={'schema':1,'revision':0,'users':{},'roles':copy.deepcopy(ROLES),'history':[]}
@@ -209,17 +220,16 @@ class SecurityStore:
     @staticmethod
     def public(document):
         # Never export hashes, tokens, secrets or the private authorization file.
-        return {'revision':document['revision'],'roles':document['roles'],'permissions':PERMISSIONS,
+        return {'revision':document['revision'],'roles':document['roles'],'permissions':PERMISSIONS,'strict_passwords':document.get('strict_passwords',False),
                 'users':[{'name':name,**{k:v for k,v in u.items() if k not in ('password','epoch')},'effective':sorted(effective(document,u)),'identity':'web','linux_applied':False} for name,u in document['users'].items()],
                 'history':document['history'],'native_accounts':'Administrateurs KVMD protégés ; gestion distincte. Aucun compte Linux créé implicitement.'}
     def mutate(self,actor,data,native_users=()):
         if not isinstance(data,dict) or data.get('confirmed') is not True or type(data.get('expected_revision')) is not int:
             raise SecurityError('Confirmation et révision requises.',400)
         action=data.get('action');name=data.get('name')
-        needed={'create':'accounts.create','edit':'accounts.edit','password':'accounts.edit','delete':'accounts.delete','revoke':'sessions.revoke','role':'roles.manage','key_add':'ssh.manage','key_remove':'ssh.manage','ssh':'ssh.manage'}.get(action)
+        needed={'policy':'permissions.manage','create':'accounts.create','edit':'accounts.edit','password':'accounts.edit','delete':'accounts.delete','revoke':'sessions.revoke','role':'roles.manage','key_add':'ssh.manage','key_remove':'ssh.manage','ssh':'ssh.manage'}.get(action)
         if needed is None:raise SecurityError('Action inconnue.',400)
         actor.require(needed)
-        encoded=password_hash(data.get('password')) if action in ('create','password') else None
         with self.locked():
             document=self.read()
             if not actor.native:
@@ -229,7 +239,11 @@ class SecurityStore:
                 if not password_matches(data.get('admin_password'),document['users'][actor.user]['password']):
                     raise SecurityError('Réauthentification requise pour une modification sensible.',403)
             if data['expected_revision']!=document['revision']:raise SecurityError('Configuration modifiée ; recharger avant de réessayer.',409)
-            if action=='role':
+            encoded=password_hash(data.get('password'),strict=document.get('strict_passwords',False),allow_empty=data.get('allow_empty_password') is True) if action in ('create','password') else None
+            if action=='policy':
+                if type(data.get('strict')) is not bool:raise SecurityError('Politique explicite requise.',400)
+                document['strict_passwords']=data['strict'];name='password-policy'
+            elif action=='role':
                 actor.require('permissions.manage')
                 if not isinstance(name,str) or not re.fullmatch('custom_[a-z0-9_]{1,24}',name) or name in ROLES:raise SecurityError('Seuls les rôles personnalisés sont modifiables.',400)
                 permissions=permission_list(data.get('permissions'))

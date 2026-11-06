@@ -49,10 +49,11 @@ class IdentityTests(Fixture):
 
     def test_password_hash_strength_no_export_and_native_collision(self):
         self.create();data=self.store.public(self.store.read());encoded=json.dumps(data)
-        self.assertNotIn(OTHER,encoded);self.assertNotIn('pbkdf2',encoded);self.assertNotIn('password',encoded)
+        self.assertNotIn(OTHER,encoded);self.assertNotIn('pbkdf2',encoded)
+        self.assertTrue(all('password' not in user for user in data['users']))
         self.assertTrue(security.password_matches(PASSWORD,self.encoded))
         for value in ('short','a'*30,'weakpasswordonlylong'):
-            with self.assertRaises(security.SecurityError):security.password_hash(value)
+            with self.assertRaises(security.SecurityError):security.password_hash(value,strict=True)
         with self.assertRaises(security.SecurityError):self.change('create','admin',role='readonly',password=OTHER)
         for name in ('root','kvmd-user','../test','user name','-option','Upper','école'):
             with self.assertRaises(security.SecurityError):security.username(name)

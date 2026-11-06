@@ -240,6 +240,8 @@ def share_power_policy(source):
 
 def file_map():
     result = {}
+    for name in ('DejaVuSans.ttf','LICENSE-DejaVu.txt'):
+        result[LIB/'fonts'/name]=((REPO/'assets/fonts'/name).read_bytes(),0o644)
     for relative, destination in (('web/legacy', '/usr/share/kvmd/web/legacy'),
                                   ('web/extras/portable-os', '/usr/share/kvmd/web/extras/portable-os'),
                                   ('kvmd-extras/portable-os', '/usr/share/kvmd/extras/portable-os')):

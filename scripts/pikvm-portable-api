@@ -208,7 +208,7 @@ class Handler(share.Handler):
                 elif post and route=='activity':result=settings.activity(self.body())
                 elif not post and route=='idle':result=settings.diagnostic()
                 elif post and route=='idle/simulate':result=settings.diagnostic(self.body())
-                elif not post and route=='report':result={'status':backend.status(),'idle':settings.diagnostic(),'settings':settings.export(),'release':'0.2.0-rc.13'}
+                elif not post and route=='report':result={'status':backend.status(),'idle':settings.diagnostic(),'settings':settings.export(),'release':'0.2.0-rc.13.1'}
                 elif not post and route=='integrity':result=settings.integrity()
                 else:raise share.ShareError('Route introuvable.',404)
             elif not post and route == 'status':

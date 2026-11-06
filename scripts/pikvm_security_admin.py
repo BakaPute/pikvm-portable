@@ -49,7 +49,7 @@ class SecurityAdmin:
         if route=='security/initialize':
             if data.get('confirmed') is not True:raise SecurityError('Confirmation requise.',400)
             if data.get('name') in self.natives():raise SecurityError('Choisir une identité distincte des comptes natifs.',403)
-            result=self.store.initialize(data.get('name'),data.get('password'),actor)
+            result=self.store.initialize(data.get('name'),data.get('password'),actor,allow_empty=data.get('allow_empty_password') is True)
         elif route=='security/mutate':result=self.store.mutate(actor,data,self.natives())
         elif route=='security/ssh-plan':
             actor.require('ssh.manage')

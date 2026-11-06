@@ -24,22 +24,34 @@ export function mountUsers(outlet,{api,store}){
         const reload=await work();if(live&&reload!==false)await load();
     });
     async function mutate(data){
+        if(['create','password'].includes(data.action)&&!await passwordChoice(data))return;
         let admin_password;
         if(!actor.native){
-            const credentials=await dialog({title:'Confirmer votre identité',message:'Mot de passe du compte Portable actuel. Il ne sera ni enregistré ni affiché.',fields:[{name:'password',type:'password',label:'Votre mot de passe'}]});
+            const credentials=await dialog({title:'Confirmer votre identité',message:'Mot de passe du compte Portable actuel, y compris vide si ce choix avait été confirmé.',fields:[{name:'password',type:'password',label:'Votre mot de passe',required:false}]});
             if(!credentials)return;admin_password=credentials.password;
         }
-        await request('mutate',{...data,expected_revision:state.revision,confirmed:true,...(admin_password?{admin_password}:{})});
+        await request('mutate',{...data,expected_revision:state.revision,confirmed:true,...(admin_password!==undefined?{admin_password}:{})});
         notify('Modification enregistrée ; les sessions affectées sont révoquées.');
+    }
+    async function passwordChoice(data){
+        if(typeof data.password!=='string')throw Error('Champ mot de passe absent.');
+        if(new TextEncoder().encode(data.password).length>1024)throw Error('Mot de passe : 1024 octets UTF-8 maximum.');
+        if(data.password===''){
+            if(!await dialog({title:'Autoriser un mot de passe vide ?',message:'Ce compte Web pourra se connecter sans secret. Choix volontaire réservé à un réseau local maîtrisé ; aucune modification SSH.',confirm:'Confirmer le mot de passe vide',danger:true}))return false;
+            data.allow_empty_password=true;
+        }
+        const families=[/\p{Ll}/u,/\p{Lu}/u,/\p{N}/u,/[^\p{L}\p{N}]/u].filter(pattern=>pattern.test(data.password)).length;
+        if(data.password.length<14||new Set(data.password).size<8||(families<3&&!(data.password.length>=20&&data.password.includes(' '))))notify('Mot de passe faible : choix accepté selon la politique active.',true);
+        return true;
     }
     async function create(initialize=false){
         const data=await dialog({title:initialize?'Préparer le premier administrateur Portable':'Ajouter un utilisateur',
-            message:'Compte Web distinct de KVMD et de Linux. Aucun SSH ni sudo implicite. Mot de passe robuste de 14 caractères minimum.',
+            message:'Compte Web distinct de KVMD et Linux. Mot de passe libre ; un choix faible est signalé et un choix vide exige une confirmation séparée.',
             fields:[{name:'name',label:'Identifiant'},{name:'display',label:'Nom affiché'},
-                {name:'password',type:'password',label:'Nouveau mot de passe'},
+                {name:'password',type:'password',label:'Nouveau mot de passe',required:false},
                 ...(initialize?[]:[{name:'role',type:'select',label:'Rôle',value:'readonly',options:Object.keys(state.roles)}])],confirm:'Créer'});
         if(!data)return;
-        if(initialize)await request('initialize',{name:data.name,password:data.password,confirmed:true});
+        if(initialize){if(!await passwordChoice(data))return;await request('initialize',{name:data.name,password:data.password,allow_empty_password:data.allow_empty_password===true,confirmed:true});}
         else await mutate({action:'create',...data});
     }
     async function edit(user){
@@ -95,10 +107,11 @@ export function mountUsers(outlet,{api,store}){
     function render(){
         body.replaceChildren();status.textContent='Révision '+state.revision+' · comptes restreints : passerelle dédiée, activation de production distincte.';
         body.append(hint(state.notice||'Les comptes techniques natifs restent protégés.'));
+        if(state.initialized)body.append(button(state.strict_passwords?'Désactiver la politique stricte':'Activer la politique stricte',()=>run(async()=>{if(await dialog({title:'Modifier la politique des mots de passe ?',message:'La politique stricte concerne les nouveaux mots de passe ; les identifiants existants restent utilisables.',confirm:'Confirmer'}))await mutate({action:'policy',strict:!state.strict_passwords});}),'quiet'));
         if(!state.initialized){body.append(card('Initialisation séparée',hint('Les accès KVMD actuels restent intacts. Choisir un nom distinct des comptes natifs.'),button('Préparer la sécurité Portable',()=>run(()=>create(true)),'primary')));return;}
         body.append(row(button('Ajouter un utilisateur',()=>run(()=>create()),'primary'),button('Dupliquer un rôle',()=>run(duplicateRole),'quiet'),button('Préparer le compte Codex',()=>run(async()=>{
             if(state.users.some(u=>u.name==='codex')){await keys(state.users.find(u=>u.name==='codex'));return false;}
-            const data=await dialog({title:'Préparer Codex',message:'Compte Web Maintenance et plan SSH diagnostic. Aucune création Linux ni clé privée générée sur le Pi.',fields:[{name:'password',type:'password',label:'Mot de passe Web distinct'}]});
+            const data=await dialog({title:'Préparer Codex',message:'Compte Web Maintenance et plan SSH diagnostic. Aucune création Linux ni clé privée générée sur le Pi.',fields:[{name:'password',type:'password',label:'Mot de passe Web distinct',required:false}]});
             if(data)await mutate({action:'create',name:'codex',display:'Codex maintenance',role:'maintenance',...data});
         }),'quiet')));
         body.append(table(['Identité','Type / état','Rôle / droits effectifs','Dernière connexion disponible','Actions'],[
@@ -106,7 +119,7 @@ export function mountUsers(outlet,{api,store}){
             ...state.users.map(user=>[user.display+' ('+user.name+')','Web · '+(user.enabled?'Actif':'Désactivé')+' · '+(user.linux_applied?'Linux '+user.linux_user+' · UID '+user.linux_uid:'Linux non provisionné'),state.roles[user.role].label+' · '+user.effective.length+' droits',user.last_login?new Date(user.last_login*1000).toLocaleString():'Aucune trace disponible',row(
                 button('Modifier',()=>run(()=>edit(user)),'quiet',{'aria-label':'Modifier '+user.name}),
                 button('Permissions',()=>permissions(user),'quiet',{'aria-label':'Permissions '+user.name}),
-                button('Mot de passe',()=>run(async()=>{const data=await dialog({title:'Nouveau mot de passe · '+user.name,message:'Les sessions existantes seront révoquées.',fields:[{name:'password',type:'password',label:'Nouveau mot de passe'}]});if(data)await mutate({action:'password',name:user.name,...data});}),'quiet'),
+                button('Mot de passe',()=>run(async()=>{const data=await dialog({title:'Nouveau mot de passe · '+user.name,message:'Les sessions existantes seront révoquées.',fields:[{name:'password',type:'password',label:'Nouveau mot de passe',required:false}]});if(data)await mutate({action:'password',name:user.name,...data});}),'quiet'),
                 button('SSH / clés',()=>keys(user),'quiet',{'aria-label':'SSH '+user.name}),
                 button('Révoquer les sessions',()=>run(async()=>{if(await dialog({title:'Révoquer les sessions ?',message:user.name,confirm:'Révoquer'}))await mutate({action:'revoke',name:user.name});}),'quiet'),
                 button('Supprimer',()=>run(async()=>{if(await dialog({title:'Supprimer ce compte Web ?',message:'Les connexions SSH gérées seront refusées ; aucun compte Linux, répertoire ni donnée ISO ne sera effacé.',confirm:'Supprimer',danger:true}))await mutate({action:'delete',name:user.name});}),'quiet',{'aria-label':'Supprimer '+user.name}))])

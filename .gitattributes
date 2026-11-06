@@ -30,3 +30,6 @@ scripts/pikvm_access.py text eol=lf
 scripts/pikvm_ssh.py text eol=lf
 scripts/pikvm-security-* text eol=lf
 scripts/pikvm-maintenance-command text eol=lf
+
+# Bundled OLED fonts are byte-stable binary assets.
+assets/fonts/*.ttf binary

@@ -73,7 +73,7 @@ class Settings:
             if not path.is_symlink() and path.stat().st_size<1024:installed=json.loads(path.read_text(encoding='utf-8')).get('installed_at')
         except (OSError,ValueError,AttributeError):pass
         return {**document,'fields':FIELDS,'categories':CATEGORIES,'defaults':defaults(),'limitations':LIMITATIONS,
-                'release':'0.2.0-rc.13','installed_at':installed,'restart_required':[],
+                'release':'0.2.0-rc.13.1','installed_at':installed,'restart_required':[],
                 'persistence':'PST KVMD : bail natif en écriture, jamais de remount racine ou MSD'}
 
     def apply(self,data,reset=False):

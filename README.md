@@ -2,7 +2,7 @@
 
 Projet de PiKVM portable basé sur un Raspberry Pi Zero 2 W.
 
-Candidate Portable OS : [RC13 — utilisateurs, permissions et migration contrôlée](docs/portable-os-rc13.md), sans déploiement automatique d’authentification. Version conservée sur le Pi : [RC12.1](docs/portable-os-rc121-validation.md).
+Candidate Portable OS : [RC13.1 — mots de passe Web, OLED, RAM et préparation HTTPS](docs/portable-os-rc13.1.md). RC13 est installée sur le Pi ; RC13.1 et les certificats ne sont pas déployés automatiquement.
 Les tests automatiques utilisent des images synthétiques ; suivre le précontrôle
 et la procédure de sauvegarde avant toute installation sur le Pi.
 

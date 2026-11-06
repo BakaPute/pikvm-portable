@@ -1,0 +1,17 @@
+# Inactive CSR template. No production key/CA is generated or installed by RC13.1.
+# DNS entries require explicit local DNS setup before use.
+[req]
+prompt = no
+distinguished_name = subject
+req_extensions = server_req
+[subject]
+CN = PiKVM Portable OS
+[server_req]
+basicConstraints = critical,CA:FALSE
+keyUsage = critical,digitalSignature,keyEncipherment
+extendedKeyUsage = serverAuth
+subjectAltName = @names
+[names]
+IP.1 = 192.168.168.99
+DNS.1 = pikvm.home.arpa
+DNS.2 = share.pikvm.home.arpa

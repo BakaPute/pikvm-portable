@@ -15,6 +15,17 @@ from pikvm_security_gateway import Gateway
 
 PASSWORD='Synthetic-Gateway-2026!'
 class GatewayTests(unittest.IsolatedAsyncioTestCase):
+    async def test_explicit_empty_web_login_and_missing_password_are_distinct(self):
+        self.change('password','viewer',password='',allow_empty_password=True)
+        client=TestClient(self.server,cookie_jar=CookieJar(unsafe=True));await client.start_server();self.clients.append(client)
+        response=await client.post('/api/auth/login',headers=self.origin(),json={'user':'viewer'})
+        self.assertEqual(response.status,401)
+        response=await client.post('/api/auth/login',headers=self.origin(),json={'user':'viewer','passwd':''})
+        self.assertEqual(response.status,200)
+        self.assertEqual((await client.get('/api/auth/check')).status,200)
+        self.assertEqual((await client.post('/api/auth/logout',headers=self.origin(),json={})).status,200)
+        self.assertEqual((await client.get('/api/auth/check')).status,401)
+
     async def asyncSetUp(self):
         self.directory=tempfile.TemporaryDirectory(dir=ROOT);self.addCleanup(self.directory.cleanup);self.root=Path(self.directory.name)
         self.store=SecurityStore(self.root/'security.json',writer=lambda f:f(),lock_path=self.root/'lock',strict=False)
