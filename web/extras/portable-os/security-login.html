@@ -1,1 +1,13 @@
-<!doctype html><html lang="fr"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Connexion · Portable OS</title><link rel="stylesheet" href="/extras/portable-os/security-login.css"><main><h1>PiKVM Portable OS</h1><p>Compte Portable restreint. Les comptes administrateurs KVMD utilisent leur accès habituel.</p><form><label>Identifiant<input name="user" autocomplete="username" required></label><label>Mot de passe<input name="passwd" type="password" autocomplete="current-password"></label><button>Se connecter</button></form><p role="alert"></p></main><script type="module" src="/extras/portable-os/security-login.js"></script></html>
+<!doctype html>
+<html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Connexion utilisateur · Portable OS</title><link rel="icon" href="/extras/portable-os/logo.svg"><link rel="stylesheet" href="/extras/portable-os/security-login.css"></head>
+<body><main><header><img src="/extras/portable-os/logo.svg" width="44" height="44" alt=""><div>PiKVM<span>PORTABLE OS · UTILISATEURS</span></div></header>
+<p class="eyebrow">VOTRE ESPACE AUTORISÉ</p><h1>Se connecter à Portable OS</h1>
+<p>Utilisez votre compte Portable, par exemple <strong>baka</strong>. Vos permissions personnelles s’appliqueront à chaque opération.</p>
+<form><label>Identifiant Portable<input name="user" autocomplete="username" autocapitalize="none" spellcheck="false" required></label>
+<label>Mot de passe<input name="passwd" type="password" autocomplete="current-password" aria-describedby="password-help"></label>
+<p id="password-help" class="help">Un mot de passe vide fonctionne uniquement si ce choix a été confirmé par un administrateur.</p>
+<button>Se connecter</button></form><p role="alert" aria-live="polite"></p>
+<aside><strong>Administration PiKVM distincte</strong><p>Le compte KVMD <code>admin</code> utilise son adresse d’administration habituelle. Un compte Portable n’est ni un administrateur KVMD, ni un compte SSH Linux.</p></aside>
+<footer>Connexion HTTPS dédiée · aucune permission accordée par cette page</footer></main>
+<script type="module" src="/extras/portable-os/security-login.js"></script></body></html>

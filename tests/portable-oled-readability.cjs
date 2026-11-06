@@ -36,6 +36,7 @@ const fs=require('node:fs');
         await selector.selectOption('system_details');await page.getByText(/Même moteur natif.*données d’exemple/).waitFor();
         await page.getByRole('button',{name:'Appliquer',exact:true}).click();
         await page.waitForFunction(async()=>{const r=await(await fetch('/extras/portable-os/api/settings')).json();return r.result.values.oled_style==='readable'&&r.result.values.oled_pages.find(p=>p.id==='system_details').seconds===7;});
+        await page.getByText('Préférences validées et enregistrées.',{exact:true}).waitFor();
         await page.reload();await nav.getByRole('button',{name:'OLED et écrans',exact:true}).click();
         assert.equal(await page.locator('[data-setting="oled_style"]').inputValue(),'readable');
         assert.equal(await page.getByLabel('Durée Mémoire et durée',{exact:true}).inputValue(),'7');

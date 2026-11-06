@@ -1,7 +1,7 @@
 {
   "reviewed": false,
   "kvmd": "4.213",
-  "origin": "https://portable.example.invalid:8443",
+  "origin": "https://share.pikvm.home.arpa:8443",
   "application_integrity_sha256": "REPLACE_WITH_REVIEWED_INSTALLED_INTEGRITY_JSON_SHA256",
   "native_test_report_sha256": "REPLACE_WITH_COMPLETED_NATIVE_TEST_REPORT_SHA256"
 }

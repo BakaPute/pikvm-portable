@@ -66,6 +66,16 @@ jobs:
           node tests/portable-oled-rc12.cjs
           node tests/portable-oled-readability.cjs
           node tests/portable-users.cjs
+          node tests/portable-permissions-rc132.cjs
+      - name: Test real Portable login with isolated gateway and synthetic accounts
+        env:
+          NODE_PATH: ${{ runner.temp }}/portable-browser-tools/node_modules
+        run: |
+          python tests/portable-gateway-preview.py > "$RUNNER_TEMP/portable-gateway.log" 2>&1 &
+          PORTABLE_GATEWAY_PID=$!
+          trap 'kill "$PORTABLE_GATEWAY_PID" 2>/dev/null || true' EXIT
+          python -c "import urllib.request,time; time.sleep(2); assert urllib.request.urlopen('http://127.0.0.1:8766/login/').status == 200"
+          node tests/portable-portal-rc132.cjs
       - uses: actions/upload-artifact@v4
         if: always()
         with:

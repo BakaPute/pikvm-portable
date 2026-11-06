@@ -99,8 +99,10 @@ class Gateway:
                     response=web.json_response({'ok':True,'result':{}})
                     response.set_cookie(COOKIE,token,httponly=True,secure=self.secure,samesite='Strict',path='/',max_age=1800)
                     return response
+                if path=='/api/portable-entry' and request.method=='GET':
+                    return web.json_response({'ok':True,'result':{'kind':'portable-permissions-gateway','native':False}},headers={'Cache-Control':'no-store'})
                 # Only login assets may be fetched before authentication.
-                if path in ('/login','/login/','/login/index.html','/extras/portable-os/security-login.js','/extras/portable-os/security-login.css'):
+                if path in ('/login','/login/','/login/index.html','/extras/portable-os/security-login.js','/extras/portable-os/security-login.css','/extras/portable-os/logo.svg'):
                     name='extras/portable-os/security-login.html' if path.startswith('/login') else path.lstrip('/')
                     return self.static(name)
                 actor=await self.actor(request)

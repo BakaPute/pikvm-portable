@@ -2,16 +2,44 @@
 from pathlib import Path
 from functools import lru_cache
 import json
+import os
+import signal
+import subprocess
+import sys
+import threading
+from urllib.parse import urlsplit
 from pikvm_security import SecurityStore,SecurityError,native_admin,PERMISSIONS,ROLES,protected_file
 from pikvm_security_bridge import Audit
 
+_NATIVE_CONFIG_LOCK=threading.Lock()
+
 @lru_cache(maxsize=1)
-def native_auth_path():
-    from kvmd.apps import init
-    auth=init(prog='portable-security-identity',load_auth=True).config.kvmd.auth
-    if not auth.enabled or auth.internal.type!='htpasswd' or auth.external.type:
+def _native_auth_path():
+    # Reading the native config must not retain KVMD/aiohttp in this API merely
+    # to list account names. The isolated reader returns no password/hash/token.
+    code="from kvmd.apps import init; import json; a=init(prog='portable-security-identity',load_auth=True).config.kvmd.auth; print(json.dumps({'enabled':a.enabled,'internal':a.internal.type,'external':a.external.type,'file':a.internal.file}))"
+    child=subprocess.Popen([sys.executable,'-I','-B','-c',code],stdin=subprocess.DEVNULL,stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True,encoding='utf-8',start_new_session=True)
+    try:
+        out,_=child.communicate(timeout=15)
+    except subprocess.TimeoutExpired:
+        if os.name=='posix':os.killpg(child.pid,signal.SIGKILL)
+        else:child.kill()
+        child.communicate();raise SecurityError('Lecture de configuration native expirée.',503) from None
+    if child.returncode or len(out)>4096:raise SecurityError('Configuration native indisponible.',503)
+    try:
+        auth=json.loads(out)
+        if set(auth)!={'enabled','internal','external','file'} or any(not isinstance(auth[key],str) for key in ('internal','external','file')):raise ValueError()
+        path=Path(auth['file'])
+        if not path.is_absolute() or '..' in path.parts:raise ValueError()
+    except (ValueError,TypeError,KeyError):raise SecurityError('Configuration native non reconnue.',503) from None
+    if auth['enabled'] is not True or auth['internal']!='htpasswd' or auth['external']:
         raise SecurityError('RC13 prend en charge htpasswd interne actif uniquement ; accès natifs conservés, mutation bloquée.',503)
-    return Path(auth.internal.file)
+    return path
+
+def native_auth_path():
+    # Single-flight cold lookup: concurrent UI reads must not spawn readers.
+    with _NATIVE_CONFIG_LOCK:return _native_auth_path()
+native_auth_path.cache_clear=_native_auth_path.cache_clear
 
 def native_users(path=None):
     path=Path(path) if path is not None else native_auth_path()
@@ -41,7 +69,13 @@ class SecurityAdmin:
             for user in document.get('users',[]):
                 times=[e['at'] for e in events if e.get('actor')==user['name'] and e.get('event')=='login' and e.get('allowed')]
                 user['last_login']=max(times) if times else None
-            return {**document,'native_users':[{'name':n,'identity':'kvmd','protected':True,'role':'administrator'} for n in self.natives()],
+            portal={'url':'https://share.pikvm.home.arpa:8443/login/','configured':False,'validation':'Activation et certificat de confiance à approuver séparément.'}
+            activation=Path('/etc/kvmd/portable-security-activation.json')
+            if activation.exists():
+                protected_file(activation);settings=json.loads(activation.read_text(encoding='utf-8'));origin=urlsplit(settings.get('origin',''))
+                if settings.get('reviewed') is True and origin.scheme=='https' and origin.hostname and not (origin.username or origin.password or origin.path or origin.query or origin.fragment):
+                    portal.update(url=settings['origin']+'/login/',configured=True)
+            return {**document,'portal':portal,'native_users':[{'name':n,'identity':'kvmd','protected':True,'role':'administrator'} for n in self.natives()],
                     'production_activation':False,'notice':'Les comptes Web restreints utilisent la passerelle dédiée. Aucun compte KVMD/Linux n’est créé automatiquement. SSH et activation nécessitent une procédure explicite.'}
         if route=='security/audit' and data is None:
             actor.require('audit.view');return {'entries':self.audit.read(),'retention':'Boot courant, 200 événements ; changements persistants dans les révisions.'}

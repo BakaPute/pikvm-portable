@@ -1,3 +1,4 @@
+import {editPermissions} from '../core/permission-editor.js';
 import {el,button,card,hint,row,field,dialog,table as uiTable,guarded,notify} from '../core/ui.js';
 
 function table(headers,rows){
@@ -24,14 +25,15 @@ export function mountUsers(outlet,{api,store}){
         const reload=await work();if(live&&reload!==false)await load();
     });
     async function mutate(data){
-        if(['create','password'].includes(data.action)&&!await passwordChoice(data))return;
+        if(['create','password'].includes(data.action)&&!await passwordChoice(data))return false;
         let admin_password;
         if(!actor.native){
             const credentials=await dialog({title:'Confirmer votre identité',message:'Mot de passe du compte Portable actuel, y compris vide si ce choix avait été confirmé.',fields:[{name:'password',type:'password',label:'Votre mot de passe',required:false}]});
-            if(!credentials)return;admin_password=credentials.password;
+            if(!credentials)return false;admin_password=credentials.password;
         }
         await request('mutate',{...data,expected_revision:state.revision,confirmed:true,...(admin_password!==undefined?{admin_password}:{})});
         notify('Modification enregistrée ; les sessions affectées sont révoquées.');
+        return true;
     }
     async function passwordChoice(data){
         if(typeof data.password!=='string')throw Error('Champ mot de passe absent.');
@@ -59,22 +61,13 @@ export function mountUsers(outlet,{api,store}){
             fields:[{name:'display',label:'Nom affiché',value:user.display},{name:'role',type:'select',label:'Rôle',options:Object.keys(state.roles),value:user.role},{name:'enabled',type:'checkbox',label:'Compte activé',value:user.enabled}]});
         if(data)await mutate({action:'edit',name:user.name,changes:data});
     }
-    async function permissions(user){
-        const form=el('form'),host=el('dialog',{'aria-label':'Permissions de '+user.name}),selectors={};
-        form.append(el('h2',{},'Permissions de '+user.name),hint('Rôle hérité, autorisation ou refus explicite. Refus prioritaire. La console native exige clavier, macros et souris ensemble ; sinon vidéo sans WebSocket natif. Les permissions HID partielles restent utilisables par les API HTTP autorisées. Les voies non filtrables restent interdites.'));
-        const rows=Object.entries(state.permissions).map(([key,title])=>{
-            const select=el('select',{'aria-label':key});
-            for(const [value,text] of [['inherit','Hériter'],['allow','Autoriser'],['deny','Refuser']])select.append(el('option',{value},text));
-            select.value=user.deny.includes(key)?'deny':user.allow.includes(key)?'allow':'inherit';selectors[key]=select;
-            return [title+' · '+key,select,user.effective.includes(key)?'Autorisé':'Refusé'];
-        });
-        form.append(table(['Permission','Choix','Droit effectif actuel'],rows),row(button('Annuler',()=>{host.close();host.remove();},'quiet'),el('button',{type:'submit',class:'primary'},'Enregistrer les permissions')));
-        form.onsubmit=event=>{
-            event.preventDefault();const allow=[],deny=[];
-            for(const [key,select] of Object.entries(selectors)){if(select.value==='allow')allow.push(key);if(select.value==='deny')deny.push(key);}
-            host.close();host.remove();run(()=>mutate({action:'edit',name:user.name,changes:{allow,deny}}));
-        };
-        host.oncancel=()=>host.remove();host.append(form);document.getElementById('dialogs').append(host);host.showModal();
+    function permissions(user){
+        editPermissions({user,roles:state.roles,permissions:state.permissions,actor,onSave:async changes=>{
+            if(store.data.session!=='ready')throw Error('Session requise.');
+            const saved=await mutate({action:'edit',name:user.name,changes});
+            if(saved===false)return false;
+            if(live)await load();return true;
+        }});
     }
     async function keys(user){
         const pane=el('section',{},el('h3',{},'SSH · '+user.name),hint('Le provisionnement Linux initial exige une opération root distincte et vérifiée. Aucun sudo. Une fois provisionné : clés/activation vérifiées à chaque connexion, commande de diagnostic forcée, aucun shell ni tunnel.'));
@@ -107,6 +100,9 @@ export function mountUsers(outlet,{api,store}){
     function render(){
         body.replaceChildren();status.textContent='Révision '+state.revision+' · comptes restreints : passerelle dédiée, activation de production distincte.';
         body.append(hint(state.notice||'Les comptes techniques natifs restent protégés.'));
+        if(state.portal)body.append(card('Connexion des comptes Portable',hint('Ces identifiants ne fonctionnent pas sur la connexion administrateur PiKVM. Utilisez l’entrée HTTPS Portable dédiée.'),
+            el('a',{href:state.portal.url,target:'_blank',rel:'noopener'},state.portal.url),
+            hint(state.portal.configured?'Origine configurée ; disponibilité et validation natives à contrôler.':'URL prévue : DNS, certificat de confiance et passerelle ne sont pas encore activés.')));
         if(state.initialized)body.append(button(state.strict_passwords?'Désactiver la politique stricte':'Activer la politique stricte',()=>run(async()=>{if(await dialog({title:'Modifier la politique des mots de passe ?',message:'La politique stricte concerne les nouveaux mots de passe ; les identifiants existants restent utilisables.',confirm:'Confirmer'}))await mutate({action:'policy',strict:!state.strict_passwords});}),'quiet'));
         if(!state.initialized){body.append(card('Initialisation séparée',hint('Les accès KVMD actuels restent intacts. Choisir un nom distinct des comptes natifs.'),button('Préparer la sécurité Portable',()=>run(()=>create(true)),'primary')));return;}
         body.append(row(button('Ajouter un utilisateur',()=>run(()=>create()),'primary'),button('Dupliquer un rôle',()=>run(duplicateRole),'quiet'),button('Préparer le compte Codex',()=>run(async()=>{

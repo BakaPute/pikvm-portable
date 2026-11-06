@@ -73,7 +73,7 @@ class Settings:
             if not path.is_symlink() and path.stat().st_size<1024:installed=json.loads(path.read_text(encoding='utf-8')).get('installed_at')
         except (OSError,ValueError,AttributeError):pass
         return {**document,'fields':FIELDS,'categories':CATEGORIES,'defaults':defaults(),'limitations':LIMITATIONS,
-                'release':'0.2.0-rc.13.1','installed_at':installed,'restart_required':[],
+                'release':'0.2.0-rc.13.2','installed_at':installed,'restart_required':[],
                 'persistence':'PST KVMD : bail natif en écriture, jamais de remount racine ou MSD'}
 
     def apply(self,data,reset=False):
@@ -140,7 +140,7 @@ class Settings:
             result=[]
             for name,digest in entries.items():
                 path=Path(name)
-                if not path.is_absolute() or '..' in path.parts or not name.startswith(('/usr/local/bin/','/usr/local/lib/pikvm-portable/','/usr/share/kvmd/web/','/usr/share/kvmd/extras/','/etc/systemd/system/pikvm-portable-api.service')):raise ValueError()
+                if not path.is_absolute() or '..' in path.parts or not (name.startswith(('/usr/local/bin/','/usr/local/lib/pikvm-portable/','/usr/share/kvmd/web/','/usr/share/kvmd/extras/')) or name in ('/etc/systemd/system/pikvm-portable-api.service','/etc/systemd/system/pikvm-security-gateway.service')):raise ValueError()
                 okay=not path.is_symlink() and path.is_file() and path.stat().st_size<1048576 and hashlib.sha256(path.read_bytes()).hexdigest()==digest
                 result.append({'file':name,'valid':okay})
             return {'files':result,'valid':all(r['valid'] for r in result),'scope':'Fichiers de l’installateur Portable OS ; ne contrôle pas les données ISO ni tout Python système.'}

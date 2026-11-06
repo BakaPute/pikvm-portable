@@ -46,6 +46,7 @@ store.subscribe(data => {
     for (const [name, resource] of Object.entries(data.resources)) if (resource.stale)
         stale.append(el('span', {}, `${name} : ${resource.error} `));
     document.getElementById('session-alert').hidden = data.session !== 'expired';
+    document.getElementById('account-label').textContent=data.session==='expired'?'Session expirée':data.identity?`${data.identity.user} · ${data.access?'Portable':'KVMD'}`:'Vérification du compte…';
     document.getElementById('test-alert').hidden = store.get('system')?.test_mode !== true;
     document.getElementById('activity-label').textContent = data.transfer || (data.operation ? 'Opération en cours…' : 'Session PiKVM');
     if (data.session === 'expired') poller.stop();
@@ -63,7 +64,8 @@ document.getElementById('logout').onclick = () => context.action(async () => {
     await api.native('auth/logout', undefined, 'POST'); location.assign('/login/');
 });
 async function start() {
-    try { const identity=await api.native('auth/check');store.update({session:'ready',access:identity.permissions?identity:null});
+    try { const identity=await api.native('auth/check');store.update({session:'ready',identity:{user:identity.user||'Administration native'},access:identity.permissions?identity:null});
+        document.getElementById('fallback-link').hidden=!!identity.permissions;
         for(const link of nav.querySelectorAll('[data-route]'))link.hidden=!moduleAllowed(store,link.dataset.route);
     }
     catch (error) { store.update({session: 'expired'}); notify(error.message, true); return; }

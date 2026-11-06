@@ -72,10 +72,12 @@ def sample(proc=Path('/proc'), threads=True, cgroup_root=Path('/sys/fs/cgroup'))
         info=stat(path/'stat')
         if not info:continue
         status=fields(path/'status');io=fields(path/'io');memory=fields(path/'smaps_rollup')
+        private=[number(memory.get(key)) for key in ('Private_Clean','Private_Dirty')]
+        uss=sum(private)+(number(memory.get('Private_Hugetlb')) or 0) if all(value is not None for value in private) else None
         try:fds=sum(1 for _ in (path/'fd').iterdir())
         except OSError:fds=None
         info.update(service=service,rss_kib=number(status.get('VmRSS')),
-            pss_kib=number(memory.get('Pss')),threads=number(status.get('Threads')),fds=fds,
+            pss_kib=number(memory.get('Pss')),uss_kib=uss,threads=number(status.get('Threads')),fds=fds,
             io={key:number(io.get(key)) for key in ('rchar','wchar','syscr','syscw','read_bytes','write_bytes')},
             wchan=text(path/'wchan').strip() or None,
             voluntary_switches=number(status.get('voluntary_ctxt_switches')),
@@ -126,7 +128,7 @@ def summarize(current):
         'processes':len(items),
         'cgroup':current.get('cgroups',{}).get(name),
         **{field:sum(item[field] for item in items) if all(item.get(field) is not None for item in items) else None
-           for field in ('rss_kib','pss_kib','threads','fds','cpu_percent_one_core')}}
+           for field in ('rss_kib','pss_kib','uss_kib','threads','fds','cpu_percent_one_core')}}
         for name,items in services.items()}
     return current
 

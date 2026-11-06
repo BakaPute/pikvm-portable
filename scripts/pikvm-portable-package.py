@@ -8,8 +8,8 @@ from pathlib import Path
 import tarfile
 
 ROOT = Path(__file__).resolve().parent.parent
-RELEASE = 'pikvm-portable-os-0.2.0-rc.13.1'
-FILES = ('docs/performance/rc131-render-local.json','docs/images/rc131/comparison.png','docs/performance/rc131-pi-readonly.json','config/tls/pikvm-server-request.cnf','assets/fonts/DejaVuSans.ttf','assets/fonts/LICENSE-DejaVu.txt','docs/portable-os-rc13.1.md','docs/portable-os-rc13.md','docs/performance/rc13-local.json','config/portable-security/nginx.example.conf','config/portable-security/activation.example.json','config/portable-security/native-tests.example.json','systemd/pikvm-security-gateway.service',
+RELEASE = 'pikvm-portable-os-0.2.0-rc.13.2'
+FILES = ('docs/portable-os-rc13.2.md','docs/performance/rc132-pi-readonly.json','docs/images/rc132/permissions-before-desktop.png','docs/images/rc132/permissions-after-desktop.png','docs/images/rc132/permissions-before-mobile.png','docs/images/rc132/permissions-after-mobile.png','docs/images/rc132/portal-desktop.png','docs/images/rc132/portal-mobile.png','docs/performance/rc131-render-local.json','docs/images/rc131/comparison.png','docs/performance/rc131-pi-readonly.json','config/tls/pikvm-server-request.cnf','assets/fonts/DejaVuSans.ttf','assets/fonts/LICENSE-DejaVu.txt','docs/portable-os-rc13.1.md','docs/portable-os-rc13.md','docs/performance/rc13-local.json','config/portable-security/nginx.example.conf','config/portable-security/activation.example.json','config/portable-security/native-tests.example.json','systemd/pikvm-security-gateway.service',
          'scripts/pikvm_security.py','scripts/pikvm_access.py','scripts/pikvm_security_bridge.py','scripts/pikvm_security_admin.py','scripts/pikvm_security_gateway.py','scripts/pikvm_security_migration.py','scripts/pikvm_ssh.py','scripts/pikvm-maintenance-command','scripts/pikvm-security-authorized-keys','scripts/pikvm-security-ssh',
          'docs/portable-os-rc121.md','docs/performance/rc121-local.json','docs/images/rc121/comparison.png',
          'docs/portable-os-rc12.md','docs/performance/rc12-local.json','docs/images/rc12-oled.png',

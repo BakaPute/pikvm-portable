@@ -15,6 +15,27 @@ from pikvm_security_gateway import Gateway
 
 PASSWORD='Synthetic-Gateway-2026!'
 class GatewayTests(unittest.IsolatedAsyncioTestCase):
+    async def test_all_five_roles_login_and_native_paths_remain_separate(self):
+        for name,role in [('supervisor','administrator'),('operator','operator'),('viewer','readonly'),('basic','user'),('maint','maintenance')]:
+            client=await self.client(name)
+            identity=(await (await client.get('/api/auth/check')).json())['result']
+            self.assertEqual(identity['user'],name);self.assertFalse(identity['native'])
+            self.assertEqual(set(identity['permissions']),set(ROLES[role]['permissions']))
+            for path in ('/legacy/','/extras/webterm/ws','/redfish/v1','/janus/ws','/api/media/ws','/vnc'):
+                self.assertEqual((await client.get(path)).status,403,(name,path))
+            response=await client.post('/api/hid/events/send_key?key=KeyA&state=true',headers=self.origin(),json={})
+            self.assertEqual(response.status,200 if role in ('administrator','operator') else 403)
+            self.change('revoke',name);self.assertEqual((await client.get('/api/auth/check')).status,401)
+
+    async def test_portable_login_rejects_native_admin_and_public_assets_do_not_open_native_paths(self):
+        client=TestClient(self.server,cookie_jar=CookieJar(unsafe=True));await client.start_server();self.clients.append(client)
+        response=await client.post('/api/auth/login',headers=self.origin(),json={'user':'admin','passwd':PASSWORD})
+        self.assertEqual(response.status,401)
+        entry=await client.get('/api/portable-entry');self.assertEqual(entry.status,200);self.assertEqual((await entry.json())['result']['kind'],'portable-permissions-gateway')
+        for path in ('/login/','/extras/portable-os/security-login.css','/extras/portable-os/security-login.js','/extras/portable-os/logo.svg'):
+            self.assertEqual((await client.get(path)).status,200,path)
+        self.assertEqual((await client.get('/kvm/')).status,401)
+
     async def test_explicit_empty_web_login_and_missing_password_are_distinct(self):
         self.change('password','viewer',password='',allow_empty_password=True)
         client=TestClient(self.server,cookie_jar=CookieJar(unsafe=True));await client.start_server();self.clients.append(client)
@@ -30,7 +51,7 @@ class GatewayTests(unittest.IsolatedAsyncioTestCase):
         self.directory=tempfile.TemporaryDirectory(dir=ROOT);self.addCleanup(self.directory.cleanup);self.root=Path(self.directory.name)
         self.store=SecurityStore(self.root/'security.json',writer=lambda f:f(),lock_path=self.root/'lock',strict=False)
         encoded=password_hash(PASSWORD)
-        self.store.write({'schema':1,'revision':0,'users':{name:self.store.new_user(name,encoded,role) for name,role in [('supervisor','administrator'),('operator','operator'),('viewer','readonly')]},'roles':copy.deepcopy(ROLES),'history':[]})
+        self.store.write({'schema':1,'revision':0,'users':{name:self.store.new_user(name,encoded,role) for name,role in [('supervisor','administrator'),('operator','operator'),('viewer','readonly'),('basic','user'),('maint','maintenance')]},'roles':copy.deepcopy(ROLES),'history':[]})
         self.seen=[];self.events=[];self.native_ws=set()
         async def upstream(request):
             self.seen.append((request.method,request.path,dict(request.headers),request.raw_path))

@@ -1,0 +1,3610 @@
+{
+  "date": "2026-11-06",
+  "production_release": "RC13.1",
+  "actual_scenario": "Web page open, no HDMI source, user confirmed no requested transitions",
+  "three_scenario_comparison_valid": false,
+  "production_rc132_after_measured": false,
+  "global_production_gain_mib": null,
+  "memavailable_kib_range": [
+    53220,
+    54408
+  ],
+  "service_medians": {
+    "kvmd-janus.service": {
+      "pss_kib": 38205,
+      "uss_kib": 37588,
+      "rss_kib": 45172,
+      "cpu_percent_one_core": 0.905
+    },
+    "kvmd-media.service": {
+      "pss_kib": 23258,
+      "uss_kib": 23064,
+      "rss_kib": 26768,
+      "cpu_percent_one_core": 0.0
+    },
+    "kvmd-nginx.service": {
+      "pss_kib": 8486,
+      "uss_kib": 4752,
+      "rss_kib": 30976,
+      "cpu_percent_one_core": 0.0
+    },
+    "kvmd-pst.service": {
+      "pss_kib": 22658,
+      "uss_kib": 22336,
+      "rss_kib": 26756,
+      "cpu_percent_one_core": 0.0
+    },
+    "kvmd-webterm.service": {
+      "pss_kib": 982,
+      "uss_kib": 848,
+      "rss_kib": 2672,
+      "cpu_percent_one_core": 0.0
+    },
+    "kvmd.service": {
+      "pss_kib": 56513,
+      "uss_kib": 27580,
+      "rss_kib": 167528,
+      "cpu_percent_one_core": 4.695
+    },
+    "pikvm-button-menu.service": {
+      "pss_kib": 9098,
+      "uss_kib": 8792,
+      "rss_kib": 13372,
+      "cpu_percent_one_core": 9.057
+    },
+    "pikvm-oled-custom.service": {
+      "pss_kib": 12825,
+      "uss_kib": 11984,
+      "rss_kib": 17692,
+      "cpu_percent_one_core": 7.4915
+    },
+    "pikvm-portable-api.service": {
+      "pss_kib": 31294,
+      "uss_kib": 29512,
+      "rss_kib": 37932,
+      "cpu_percent_one_core": 1.267
+    },
+    "pikvm-share-api.service": {
+      "pss_kib": 9850,
+      "uss_kib": 9612,
+      "rss_kib": 13632,
+      "cpu_percent_one_core": 0.0
+    },
+    "wifi-wizard-api.service": {
+      "pss_kib": 9604,
+      "uss_kib": 9308,
+      "rss_kib": 13808,
+      "cpu_percent_one_core": 0.0
+    }
+  },
+  "samples": [
+    {
+      "index": 0,
+      "meminfo_kib": {
+        "MemTotal": 398472,
+        "MemFree": 9772,
+        "MemAvailable": 53984,
+        "Buffers": 3320,
+        "Cached": 90120,
+        "Shmem": 44432,
+        "Slab": 33000,
+        "SReclaimable": 7452
+      },
+      "services": {
+        "kvmd-pst.service": {
+          "processes": 1,
+          "cgroup": {
+            "identity": [
+              23,
+              1394
+            ],
+            "usage_usec": 7353310,
+            "memory_current_bytes": null,
+            "pids_current": 1
+          },
+          "rss_kib": 26756,
+          "pss_kib": 22659,
+          "threads": 1,
+          "fds": 7,
+          "cpu_percent_one_core": null,
+          "uss_kib": 22336
+        },
+        "kvmd-webterm.service": {
+          "processes": 1,
+          "cgroup": {
+            "identity": [
+              23,
+              1463
+            ],
+            "usage_usec": 314327,
+            "memory_current_bytes": null,
+            "pids_current": 1
+          },
+          "rss_kib": 2672,
+          "pss_kib": 982,
+          "threads": 1,
+          "fds": 13,
+          "cpu_percent_one_core": null,
+          "uss_kib": 848
+        },
+        "kvmd.service": {
+          "processes": 5,
+          "cgroup": {
+            "identity": [
+              23,
+              1670
+            ],
+            "usage_usec": 7245781965,
+            "memory_current_bytes": null,
+            "pids_current": 23
+          },
+          "rss_kib": 167528,
+          "pss_kib": 56513,
+          "threads": 23,
+          "fds": 150,
+          "cpu_percent_one_core": null,
+          "uss_kib": 27580
+        },
+        "kvmd-janus.service": {
+          "processes": 2,
+          "cgroup": {
+            "identity": [
+              23,
+              1693
+            ],
+            "usage_usec": 981780257,
+            "memory_current_bytes": null,
+            "pids_current": 16
+          },
+          "rss_kib": 45172,
+          "pss_kib": 38205,
+          "threads": 16,
+          "fds": 21,
+          "cpu_percent_one_core": null,
+          "uss_kib": 37588
+        },
+        "kvmd-media.service": {
+          "processes": 1,
+          "cgroup": {
+            "identity": [
+              23,
+              1716
+            ],
+            "usage_usec": 36137224,
+            "memory_current_bytes": null,
+            "pids_current": 1
+          },
+          "rss_kib": 26768,
+          "pss_kib": 23258,
+          "threads": 1,
+          "fds": 7,
+          "cpu_percent_one_core": null,
+          "uss_kib": 23064
+        },
+        "kvmd-nginx.service": {
+          "processes": 5,
+          "cgroup": {
+            "identity": [
+              23,
+              1739
+            ],
+            "usage_usec": 336829806,
+            "memory_current_bytes": null,
+            "pids_current": 5
+          },
+          "rss_kib": 30976,
+          "pss_kib": 8487,
+          "threads": 5,
+          "fds": 71,
+          "cpu_percent_one_core": null,
+          "uss_kib": 4752
+        },
+        "pikvm-share-api.service": {
+          "processes": 1,
+          "cgroup": {
+            "identity": [
+              23,
+              1946
+            ],
+            "usage_usec": 12855500,
+            "memory_current_bytes": null,
+            "pids_current": 1
+          },
+          "rss_kib": 13632,
+          "pss_kib": 9850,
+          "threads": 1,
+          "fds": 5,
+          "cpu_percent_one_core": null,
+          "uss_kib": 9612
+        },
+        "wifi-wizard-api.service": {
+          "processes": 1,
+          "cgroup": {
+            "identity": [
+              23,
+              2061
+            ],
+            "usage_usec": 66009278,
+            "memory_current_bytes": null,
+            "pids_current": 1
+          },
+          "rss_kib": 13808,
+          "pss_kib": 9606,
+          "threads": 1,
+          "fds": 4,
+          "cpu_percent_one_core": null,
+          "uss_kib": 9308
+        },
+        "pikvm-oled-custom.service": {
+          "processes": 1,
+          "cgroup": {
+            "identity": [
+              23,
+              2084
+            ],
+            "usage_usec": 577792054,
+            "memory_current_bytes": null,
+            "pids_current": 8
+          },
+          "rss_kib": 17692,
+          "pss_kib": 12828,
+          "threads": 8,
+          "fds": 4,
+          "cpu_percent_one_core": null,
+          "uss_kib": 11984
+        },
+        "pikvm-button-menu.service": {
+          "processes": 1,
+          "cgroup": {
+            "identity": [
+              23,
+              2107
+            ],
+            "usage_usec": 983496896,
+            "memory_current_bytes": null,
+            "pids_current": 5
+          },
+          "rss_kib": 13372,
+          "pss_kib": 9098,
+          "threads": 5,
+          "fds": 4,
+          "cpu_percent_one_core": null,
+          "uss_kib": 8792
+        },
+        "pikvm-portable-api.service": {
+          "processes": 1,
+          "cgroup": {
+            "identity": [
+              23,
+              2130
+            ],
+            "usage_usec": 141398070,
+            "memory_current_bytes": null,
+            "pids_current": 2
+          },
+          "rss_kib": 37932,
+          "pss_kib": 31297,
+          "threads": 2,
+          "fds": 4,
+          "cpu_percent_one_core": null,
+          "uss_kib": 29512
+        }
+      },
+      "pss_tracked_kib": 222783,
+      "psi": "some avg10=0.20 avg60=0.14 avg300=0.03 total=4406774\nfull avg10=0.15 avg60=0.11 avg300=0.02 total=3767142\n",
+      "auth_negative_status": 401,
+      "auth_negative_latency_ms": 40.20904599747155,
+      "requested_phase": "idle",
+      "actual_scenario": "web_open_no_hdmi_user_confirmed"
+    },
+    {
+      "index": 1,
+      "meminfo_kib": {
+        "MemTotal": 398472,
+        "MemFree": 10576,
+        "MemAvailable": 54372,
+        "Buffers": 3452,
+        "Cached": 89548,
+        "Shmem": 44432,
+        "Slab": 33012,
+        "SReclaimable": 7476
+      },
+      "services": {
+        "kvmd-pst.service": {
+          "processes": 1,
+          "cgroup": {
+            "identity": [
+              23,
+              1394
+            ],
+            "usage_usec": 7353310,
+            "memory_current_bytes": null,
+            "pids_current": 1,
+            "cpu_percent_one_core": 0.0
+          },
+          "rss_kib": 26756,
+          "pss_kib": 22658,
+          "threads": 1,
+          "fds": 7,
+          "cpu_percent_one_core": 0.0,
+          "uss_kib": 22336
+        },
+        "kvmd-webterm.service": {
+          "processes": 1,
+          "cgroup": {
+            "identity": [
+              23,
+              1463
+            ],
+            "usage_usec": 314327,
+            "memory_current_bytes": null,
+            "pids_current": 1,
+            "cpu_percent_one_core": 0.0
+          },
+          "rss_kib": 2672,
+          "pss_kib": 982,
+          "threads": 1,
+          "fds": 13,
+          "cpu_percent_one_core": 0.0,
+          "uss_kib": 848
+        },
+        "kvmd.service": {
+          "processes": 5,
+          "cgroup": {
+            "identity": [
+              23,
+              1670
+            ],
+            "usage_usec": 7245966709,
+            "memory_current_bytes": null,
+            "pids_current": 23,
+            "cpu_percent_one_core": 5.554
+          },
+          "rss_kib": 167528,
+          "pss_kib": 56513,
+          "threads": 23,
+          "fds": 150,
+          "cpu_percent_one_core": 5.41,
+          "uss_kib": 27580
+        },
+        "kvmd-janus.service": {
+          "processes": 2,
+          "cgroup": {
+            "identity": [
+              23,
+              1693
+            ],
+            "usage_usec": 981807185,
+            "memory_current_bytes": null,
+            "pids_current": 16,
+            "cpu_percent_one_core": 0.809
+          },
+          "rss_kib": 45172,
+          "pss_kib": 38205,
+          "threads": 16,
+          "fds": 21,
+          "cpu_percent_one_core": 0.601,
+          "uss_kib": 37588
+        },
+        "kvmd-media.service": {
+          "processes": 1,
+          "cgroup": {
+            "identity": [
+              23,
+              1716
+            ],
+            "usage_usec": 36138409,
+            "memory_current_bytes": null,
+            "pids_current": 1,
+            "cpu_percent_one_core": 0.036
+          },
+          "rss_kib": 26768,
+          "pss_kib": 23258,
+          "threads": 1,
+          "fds": 7,
+          "cpu_percent_one_core": 0.0,
+          "uss_kib": 23064
+        },
+        "kvmd-nginx.service": {
+          "processes": 5,
+          "cgroup": {
+            "identity": [
+              23,
+              1739
+            ],
+            "usage_usec": 336829806,
+            "memory_current_bytes": null,
+            "pids_current": 5,
+            "cpu_percent_one_core": 0.0
+          },
+          "rss_kib": 30976,
+          "pss_kib": 8486,
+          "threads": 5,
+          "fds": 71,
+          "cpu_percent_one_core": 0.0,
+          "uss_kib": 4752
+        },
+        "pikvm-share-api.service": {
+          "processes": 1,
+          "cgroup": {
+            "identity": [
+              23,
+              1946
+            ],
+            "usage_usec": 12856233,
+            "memory_current_bytes": null,
+            "pids_current": 1,
+            "cpu_percent_one_core": 0.022
+          },
+          "rss_kib": 13632,
+          "pss_kib": 9850,
+          "threads": 1,
+          "fds": 5,
+          "cpu_percent_one_core": 0.0,
+          "uss_kib": 9612
+        },
+        "wifi-wizard-api.service": {
+          "processes": 1,
+          "cgroup": {
+            "identity": [
+              23,
+              2061
+            ],
+            "usage_usec": 66009999,
+            "memory_current_bytes": null,
+            "pids_current": 1,
+            "cpu_percent_one_core": 0.022
+          },
+          "rss_kib": 13808,
+          "pss_kib": 9604,
+          "threads": 1,
+          "fds": 4,
+          "cpu_percent_one_core": 0.0,
+          "uss_kib": 9308
+        },
+        "pikvm-oled-custom.service": {
+          "processes": 1,
+          "cgroup": {
+            "identity": [
+              23,
+              2084
+            ],
+            "usage_usec": 578049633,
+            "memory_current_bytes": null,
+            "pids_current": 8,
+            "cpu_percent_one_core": 7.743
+          },
+          "rss_kib": 17692,
+          "pss_kib": 12825,
+          "threads": 8,
+          "fds": 4,
+          "cpu_percent_one_core": 6.613,
+          "uss_kib": 11984
+        },
+        "pikvm-button-menu.service": {
+          "processes": 1,
+          "cgroup": {
+            "identity": [
+              23,
+              2107
+            ],
+            "usage_usec": 984063191,
+            "memory_current_bytes": null,
+            "pids_current": 5,
+            "cpu_percent_one_core": 17.023
+          },
+          "rss_kib": 13372,
+          "pss_kib": 9098,
+          "threads": 5,
+          "fds": 4,
+          "cpu_percent_one_core": 9.018,
+          "uss_kib": 8792
+        },
+        "pikvm-portable-api.service": {
+          "processes": 1,
+          "cgroup": {
+            "identity": [
+              23,
+              2130
+            ],
+            "usage_usec": 141448230,
+            "memory_current_bytes": null,
+            "pids_current": 2,
+            "cpu_percent_one_core": 1.508
+          },
+          "rss_kib": 37932,
+          "pss_kib": 31294,
+          "threads": 2,
+          "fds": 4,
+          "cpu_percent_one_core": 1.503,
+          "uss_kib": 29512
+        }
+      },
+      "pss_tracked_kib": 222773,
+      "psi": "some avg10=0.16 avg60=0.14 avg300=0.03 total=4406932\nfull avg10=0.12 avg60=0.11 avg300=0.02 total=3767301\n",
+      "auth_negative_status": 401,
+      "auth_negative_latency_ms": 5.357432004529983,
+      "requested_phase": "idle",
+      "actual_scenario": "web_open_no_hdmi_user_confirmed"
+    },
+    {
+      "index": 2,
+      "meminfo_kib": {
+        "MemTotal": 398472,
+        "MemFree": 10612,
+        "MemAvailable": 54408,
+        "Buffers": 3452,
+        "Cached": 89548,
+        "Shmem": 44432,
+        "Slab": 33012,
+        "SReclaimable": 7476
+      },
+      "services": {
+        "kvmd-pst.service": {
+          "processes": 1,
+          "cgroup": {
+            "identity": [
+              23,
+              1394
+            ],
+            "usage_usec": 7353310,
+            "memory_current_bytes": null,
+            "pids_current": 1,
+            "cpu_percent_one_core": 0.0
+          },
+          "rss_kib": 26756,
+          "pss_kib": 22658,
+          "threads": 1,
+          "fds": 7,
+          "cpu_percent_one_core": 0.0,
+          "uss_kib": 22336
+        },
+        "kvmd-webterm.service": {
+          "processes": 1,
+          "cgroup": {
+            "identity": [
+              23,
+              1463
+            ],
+            "usage_usec": 314327,
+            "memory_current_bytes": null,
+            "pids_current": 1,
+            "cpu_percent_one_core": 0.0
+          },
+          "rss_kib": 2672,
+          "pss_kib": 982,
+          "threads": 1,
+          "fds": 13,
+          "cpu_percent_one_core": 0.0,
+          "uss_kib": 848
+        },
+        "kvmd.service": {
+          "processes": 5,
+          "cgroup": {
+            "identity": [
+              23,
+              1670
+            ],
+            "usage_usec": 7246106788,
+            "memory_current_bytes": null,
+            "pids_current": 23,
+            "cpu_percent_one_core": 4.263
+          },
+          "rss_kib": 167528,
+          "pss_kib": 56513,
+          "threads": 23,
+          "fds": 150,
+          "cpu_percent_one_core": 4.26,
+          "uss_kib": 27580
+        },
+        "kvmd-janus.service": {
+          "processes": 2,
+          "cgroup": {
+            "identity": [
+              23,
+              1693
+            ],
+            "usage_usec": 981843062,
+            "memory_current_bytes": null,
+            "pids_current": 16,
+            "cpu_percent_one_core": 1.092
+          },
+          "rss_kib": 45172,
+          "pss_kib": 38205,
+          "threads": 16,
+          "fds": 21,
+          "cpu_percent_one_core": 1.217,
+          "uss_kib": 37588
+        },
+        "kvmd-media.service": {
+          "processes": 1,
+          "cgroup": {
+            "identity": [
+              23,
+              1716
+            ],
+            "usage_usec": 36139682,
+            "memory_current_bytes": null,
+            "pids_current": 1,
+            "cpu_percent_one_core": 0.039
+          },
+          "rss_kib": 26768,
+          "pss_kib": 23258,
+          "threads": 1,
+          "fds": 7,
+          "cpu_percent_one_core": 0.0,
+          "uss_kib": 23064
+        },
+        "kvmd-nginx.service": {
+          "processes": 5,
+          "cgroup": {
+            "identity": [
+              23,
+              1739
+            ],
+            "usage_usec": 336829806,
+            "memory_current_bytes": null,
+            "pids_current": 5,
+            "cpu_percent_one_core": 0.0
+          },
+          "rss_kib": 30976,
+          "pss_kib": 8486,
+          "threads": 5,
+          "fds": 71,
+          "cpu_percent_one_core": 0.0,
+          "uss_kib": 4752
+        },
+        "pikvm-share-api.service": {
+          "processes": 1,
+          "cgroup": {
+            "identity": [
+              23,
+              1946
+            ],
+            "usage_usec": 12856891,
+            "memory_current_bytes": null,
+            "pids_current": 1,
+            "cpu_percent_one_core": 0.02
+          },
+          "rss_kib": 13632,
+          "pss_kib": 9850,
+          "threads": 1,
+          "fds": 5,
+          "cpu_percent_one_core": 0.0,
+          "uss_kib": 9612
+        },
+        "wifi-wizard-api.service": {
+          "processes": 1,
+          "cgroup": {
+            "identity": [
+              23,
+              2061
+            ],
+            "usage_usec": 66010563,
+            "memory_current_bytes": null,
+            "pids_current": 1,
+            "cpu_percent_one_core": 0.017
+          },
+          "rss_kib": 13808,
+          "pss_kib": 9604,
+          "threads": 1,
+          "fds": 4,
+          "cpu_percent_one_core": 0.304,
+          "uss_kib": 9308
+        },
+        "pikvm-oled-custom.service": {
+          "processes": 1,
+          "cgroup": {
+            "identity": [
+              23,
+              2084
+            ],
+            "usage_usec": 578315573,
+            "memory_current_bytes": null,
+            "pids_current": 8,
+            "cpu_percent_one_core": 8.094
+          },
+          "rss_kib": 17692,
+          "pss_kib": 12825,
+          "threads": 8,
+          "fds": 4,
+          "cpu_percent_one_core": 7.304,
+          "uss_kib": 11984
+        },
+        "pikvm-button-menu.service": {
+          "processes": 1,
+          "cgroup": {
+            "identity": [
+              23,
+              2107
+            ],
+            "usage_usec": 984621762,
+            "memory_current_bytes": null,
+            "pids_current": 5,
+            "cpu_percent_one_core": 17.0
+          },
+          "rss_kib": 13372,
+          "pss_kib": 9098,
+          "threads": 5,
+          "fds": 4,
+          "cpu_percent_one_core": 9.131,
+          "uss_kib": 8792
+        },
+        "pikvm-portable-api.service": {
+          "processes": 1,
+          "cgroup": {
+            "identity": [
+              23,
+              2130
+            ],
+            "usage_usec": 141497461,
+            "memory_current_bytes": null,
+            "pids_current": 2,
+            "cpu_percent_one_core": 1.498
+          },
+          "rss_kib": 37932,
+          "pss_kib": 31294,
+          "threads": 2,
+          "fds": 4,
+          "cpu_percent_one_core": 1.522,
+          "uss_kib": 29512
+        }
+      },
+      "pss_tracked_kib": 222773,
+      "psi": "some avg10=0.11 avg60=0.13 avg300=0.03 total=4406932\nfull avg10=0.08 avg60=0.10 avg300=0.02 total=3767301\n",
+      "auth_negative_status": 401,
+      "auth_negative_latency_ms": 7.929508006782271,
+      "requested_phase": "idle",
+      "actual_scenario": "web_open_no_hdmi_user_confirmed"
+    },
+    {
+      "index": 3,
+      "meminfo_kib": {
+        "MemTotal": 398472,
+        "MemFree": 10408,
+        "MemAvailable": 54204,
+        "Buffers": 3452,
+        "Cached": 89548,
+        "Shmem": 44432,
+        "Slab": 33032,
+        "SReclaimable": 7476
+      },
+      "services": {
+        "kvmd-pst.service": {
+          "processes": 1,
+          "cgroup": {
+            "identity": [
+              23,
+              1394
+            ],
+            "usage_usec": 7353310,
+            "memory_current_bytes": null,
+            "pids_current": 1,
+            "cpu_percent_one_core": 0.0
+          },
+          "rss_kib": 26756,
+          "pss_kib": 22658,
+          "threads": 1,
+          "fds": 7,
+          "cpu_percent_one_core": 0.0,
+          "uss_kib": 22336
+        },
+        "kvmd-webterm.service": {
+          "processes": 1,
+          "cgroup": {
+            "identity": [
+              23,
+              1463
+            ],
+            "usage_usec": 314327,
+            "memory_current_bytes": null,
+            "pids_current": 1,
+            "cpu_percent_one_core": 0.0
+          },
+          "rss_kib": 2672,
+          "pss_kib": 982,
+          "threads": 1,
+          "fds": 13,
+          "cpu_percent_one_core": 0.0,
+          "uss_kib": 848
+        },
+        "kvmd.service": {
+          "processes": 5,
+          "cgroup": {
+            "identity": [
+              23,
+              1670
+            ],
+            "usage_usec": 7246283888,
+            "memory_current_bytes": null,
+            "pids_current": 23,
+            "cpu_percent_one_core": 5.387
+          },
+          "rss_kib": 167528,
+          "pss_kib": 56512,
+          "threads": 23,
+          "fds": 150,
+          "cpu_percent_one_core": 4.563000000000001,
+          "uss_kib": 27580
+        },
+        "kvmd-janus.service": {
+          "processes": 2,
+          "cgroup": {
+            "identity": [
+              23,
+              1693
+            ],
+            "usage_usec": 981869188,
+            "memory_current_bytes": null,
+            "pids_current": 16,
+            "cpu_percent_one_core": 0.795
+          },
+          "rss_kib": 45172,
+          "pss_kib": 38205,
+          "threads": 16,
+          "fds": 21,
+          "cpu_percent_one_core": 0.608,
+          "uss_kib": 37588
+        },
+        "kvmd-media.service": {
+          "processes": 1,
+          "cgroup": {
+            "identity": [
+              23,
+              1716
+            ],
+            "usage_usec": 36141300,
+            "memory_current_bytes": null,
+            "pids_current": 1,
+            "cpu_percent_one_core": 0.049
+          },
+          "rss_kib": 26768,
+          "pss_kib": 23258,
+          "threads": 1,
+          "fds": 7,
+          "cpu_percent_one_core": 0.304,
+          "uss_kib": 23064
+        },
+        "kvmd-nginx.service": {
+          "processes": 5,
+          "cgroup": {
+            "identity": [
+              23,
+              1739
+            ],
+            "usage_usec": 336829806,
+            "memory_current_bytes": null,
+            "pids_current": 5,
+            "cpu_percent_one_core": 0.0
+          },
+          "rss_kib": 30976,
+          "pss_kib": 8486,
+          "threads": 5,
+          "fds": 71,
+          "cpu_percent_one_core": 0.0,
+          "uss_kib": 4752
+        },
+        "pikvm-share-api.service": {
+          "processes": 1,
+          "cgroup": {
+            "identity": [
+              23,
+              1946
+            ],
+            "usage_usec": 12857600,
+            "memory_current_bytes": null,
+            "pids_current": 1,
+            "cpu_percent_one_core": 0.022
+          },
+          "rss_kib": 13632,
+          "pss_kib": 9850,
+          "threads": 1,
+          "fds": 5,
+          "cpu_percent_one_core": 0.304,
+          "uss_kib": 9612
+        },
+        "wifi-wizard-api.service": {
+          "processes": 1,
+          "cgroup": {
+            "identity": [
+              23,
+              2061
+            ],
+            "usage_usec": 66011391,
+            "memory_current_bytes": null,
+            "pids_current": 1,
+            "cpu_percent_one_core": 0.025
+          },
+          "rss_kib": 13808,
+          "pss_kib": 9604,
+          "threads": 1,
+          "fds": 4,
+          "cpu_percent_one_core": 0.0,
+          "uss_kib": 9308
+        },
+        "pikvm-oled-custom.service": {
+          "processes": 1,
+          "cgroup": {
+            "identity": [
+              23,
+              2084
+            ],
+            "usage_usec": 578597016,
+            "memory_current_bytes": null,
+            "pids_current": 8,
+            "cpu_percent_one_core": 8.56
+          },
+          "rss_kib": 17692,
+          "pss_kib": 12825,
+          "threads": 8,
+          "fds": 4,
+          "cpu_percent_one_core": 7.908,
+          "uss_kib": 11984
+        },
+        "pikvm-button-menu.service": {
+          "processes": 1,
+          "cgroup": {
+            "identity": [
+              23,
+              2107
+            ],
+            "usage_usec": 985159574,
+            "memory_current_bytes": null,
+            "pids_current": 5,
+            "cpu_percent_one_core": 16.358
+          },
+          "rss_kib": 13372,
+          "pss_kib": 9098,
+          "threads": 5,
+          "fds": 4,
+          "cpu_percent_one_core": 8.212,
+          "uss_kib": 8792
+        },
+        "pikvm-portable-api.service": {
+          "processes": 1,
+          "cgroup": {
+            "identity": [
+              23,
+              2130
+            ],
+            "usage_usec": 141501573,
+            "memory_current_bytes": null,
+            "pids_current": 2,
+            "cpu_percent_one_core": 0.125
+          },
+          "rss_kib": 37932,
+          "pss_kib": 31294,
+          "threads": 2,
+          "fds": 4,
+          "cpu_percent_one_core": 0.0,
+          "uss_kib": 29512
+        }
+      },
+      "pss_tracked_kib": 222772,
+      "psi": "some avg10=0.07 avg60=0.12 avg300=0.03 total=4406932\nfull avg10=0.05 avg60=0.10 avg300=0.02 total=3767301\n",
+      "auth_negative_status": 401,
+      "auth_negative_latency_ms": 4.755193993332796,
+      "requested_phase": "idle",
+      "actual_scenario": "web_open_no_hdmi_user_confirmed"
+    },
+    {
+      "index": 4,
+      "meminfo_kib": {
+        "MemTotal": 398472,
+        "MemFree": 10388,
+        "MemAvailable": 54184,
+        "Buffers": 3452,
+        "Cached": 89548,
+        "Shmem": 44432,
+        "Slab": 33040,
+        "SReclaimable": 7476
+      },
+      "services": {
+        "kvmd-pst.service": {
+          "processes": 1,
+          "cgroup": {
+            "identity": [
+              23,
+              1394
+            ],
+            "usage_usec": 7353310,
+            "memory_current_bytes": null,
+            "pids_current": 1,
+            "cpu_percent_one_core": 0.0
+          },
+          "rss_kib": 26756,
+          "pss_kib": 22658,
+          "threads": 1,
+          "fds": 7,
+          "cpu_percent_one_core": 0.0,
+          "uss_kib": 22336
+        },
+        "kvmd-webterm.service": {
+          "processes": 1,
+          "cgroup": {
+            "identity": [
+              23,
+              1463
+            ],
+            "usage_usec": 314327,
+            "memory_current_bytes": null,
+            "pids_current": 1,
+            "cpu_percent_one_core": 0.0
+          },
+          "rss_kib": 2672,
+          "pss_kib": 982,
+          "threads": 1,
+          "fds": 13,
+          "cpu_percent_one_core": 0.0,
+          "uss_kib": 848
+        },
+        "kvmd.service": {
+          "processes": 5,
+          "cgroup": {
+            "identity": [
+              23,
+              1670
+            ],
+            "usage_usec": 7246460293,
+            "memory_current_bytes": null,
+            "pids_current": 23,
+            "cpu_percent_one_core": 5.348
+          },
+          "rss_kib": 167528,
+          "pss_kib": 56513,
+          "threads": 23,
+          "fds": 150,
+          "cpu_percent_one_core": 4.852,
+          "uss_kib": 27580
+        },
+        "kvmd-janus.service": {
+          "processes": 2,
+          "cgroup": {
+            "identity": [
+              23,
+              1693
+            ],
+            "usage_usec": 981895172,
+            "memory_current_bytes": null,
+            "pids_current": 16,
+            "cpu_percent_one_core": 0.788
+          },
+          "rss_kib": 45172,
+          "pss_kib": 38205,
+          "threads": 16,
+          "fds": 21,
+          "cpu_percent_one_core": 0.91,
+          "uss_kib": 37588
+        },
+        "kvmd-media.service": {
+          "processes": 1,
+          "cgroup": {
+            "identity": [
+              23,
+              1716
+            ],
+            "usage_usec": 36142512,
+            "memory_current_bytes": null,
+            "pids_current": 1,
+            "cpu_percent_one_core": 0.037
+          },
+          "rss_kib": 26768,
+          "pss_kib": 23258,
+          "threads": 1,
+          "fds": 7,
+          "cpu_percent_one_core": 0.0,
+          "uss_kib": 23064
+        },
+        "kvmd-nginx.service": {
+          "processes": 5,
+          "cgroup": {
+            "identity": [
+              23,
+              1739
+            ],
+            "usage_usec": 336829806,
+            "memory_current_bytes": null,
+            "pids_current": 5,
+            "cpu_percent_one_core": 0.0
+          },
+          "rss_kib": 30976,
+          "pss_kib": 8486,
+          "threads": 5,
+          "fds": 71,
+          "cpu_percent_one_core": 0.0,
+          "uss_kib": 4752
+        },
+        "pikvm-share-api.service": {
+          "processes": 1,
+          "cgroup": {
+            "identity": [
+              23,
+              1946
+            ],
+            "usage_usec": 12858162,
+            "memory_current_bytes": null,
+            "pids_current": 1,
+            "cpu_percent_one_core": 0.017
+          },
+          "rss_kib": 13632,
+          "pss_kib": 9850,
+          "threads": 1,
+          "fds": 5,
+          "cpu_percent_one_core": 0.0,
+          "uss_kib": 9612
+        },
+        "wifi-wizard-api.service": {
+          "processes": 1,
+          "cgroup": {
+            "identity": [
+              23,
+              2061
+            ],
+            "usage_usec": 66011972,
+            "memory_current_bytes": null,
+            "pids_current": 1,
+            "cpu_percent_one_core": 0.018
+          },
+          "rss_kib": 13808,
+          "pss_kib": 9604,
+          "threads": 1,
+          "fds": 4,
+          "cpu_percent_one_core": 0.0,
+          "uss_kib": 9308
+        },
+        "pikvm-oled-custom.service": {
+          "processes": 1,
+          "cgroup": {
+            "identity": [
+              23,
+              2084
+            ],
+            "usage_usec": 578879231,
+            "memory_current_bytes": null,
+            "pids_current": 8,
+            "cpu_percent_one_core": 8.556
+          },
+          "rss_kib": 17692,
+          "pss_kib": 12825,
+          "threads": 8,
+          "fds": 4,
+          "cpu_percent_one_core": 8.186,
+          "uss_kib": 11984
+        },
+        "pikvm-button-menu.service": {
+          "processes": 1,
+          "cgroup": {
+            "identity": [
+              23,
+              2107
+            ],
+            "usage_usec": 985718529,
+            "memory_current_bytes": null,
+            "pids_current": 5,
+            "cpu_percent_one_core": 16.947
+          },
+          "rss_kib": 13372,
+          "pss_kib": 9098,
+          "threads": 5,
+          "fds": 4,
+          "cpu_percent_one_core": 9.096,
+          "uss_kib": 8792
+        },
+        "pikvm-portable-api.service": {
+          "processes": 1,
+          "cgroup": {
+            "identity": [
+              23,
+              2130
+            ],
+            "usage_usec": 141551068,
+            "memory_current_bytes": null,
+            "pids_current": 2,
+            "cpu_percent_one_core": 1.501
+          },
+          "rss_kib": 37932,
+          "pss_kib": 31294,
+          "threads": 2,
+          "fds": 4,
+          "cpu_percent_one_core": 1.516,
+          "uss_kib": 29512
+        }
+      },
+      "pss_tracked_kib": 222773,
+      "psi": "some avg10=0.06 avg60=0.11 avg300=0.03 total=4406933\nfull avg10=0.04 avg60=0.09 avg300=0.02 total=3767301\n",
+      "auth_negative_status": 401,
+      "auth_negative_latency_ms": 4.707226005848497,
+      "requested_phase": "idle",
+      "actual_scenario": "web_open_no_hdmi_user_confirmed"
+    },
+    {
+      "index": 0,
+      "meminfo_kib": {
+        "MemTotal": 398472,
+        "MemFree": 9892,
+        "MemAvailable": 53220,
+        "Buffers": 3448,
+        "Cached": 89084,
+        "Shmem": 44432,
+        "Slab": 33048,
+        "SReclaimable": 7476
+      },
+      "services": {
+        "kvmd-pst.service": {
+          "processes": 1,
+          "cgroup": {
+            "identity": [
+              23,
+              1394
+            ],
+            "usage_usec": 7353310,
+            "memory_current_bytes": null,
+            "pids_current": 1,
+            "cpu_percent_one_core": 0.0
+          },
+          "rss_kib": 26756,
+          "pss_kib": 22658,
+          "threads": 1,
+          "fds": 7,
+          "cpu_percent_one_core": 0.0,
+          "uss_kib": 22336
+        },
+        "kvmd-webterm.service": {
+          "processes": 1,
+          "cgroup": {
+            "identity": [
+              23,
+              1463
+            ],
+            "usage_usec": 314381,
+            "memory_current_bytes": null,
+            "pids_current": 1,
+            "cpu_percent_one_core": 0.0
+          },
+          "rss_kib": 2672,
+          "pss_kib": 982,
+          "threads": 1,
+          "fds": 13,
+          "cpu_percent_one_core": 0.0,
+          "uss_kib": 848
+        },
+        "kvmd.service": {
+          "processes": 5,
+          "cgroup": {
+            "identity": [
+              23,
+              1670
+            ],
+            "usage_usec": 7247598343,
+            "memory_current_bytes": null,
+            "pids_current": 23,
+            "cpu_percent_one_core": 4.885
+          },
+          "rss_kib": 167528,
+          "pss_kib": 56512,
+          "threads": 23,
+          "fds": 150,
+          "cpu_percent_one_core": 4.593,
+          "uss_kib": 27580
+        },
+        "kvmd-janus.service": {
+          "processes": 2,
+          "cgroup": {
+            "identity": [
+              23,
+              1693
+            ],
+            "usage_usec": 982095543,
+            "memory_current_bytes": null,
+            "pids_current": 16,
+            "cpu_percent_one_core": 0.86
+          },
+          "rss_kib": 45172,
+          "pss_kib": 38205,
+          "threads": 16,
+          "fds": 21,
+          "cpu_percent_one_core": 0.8160000000000001,
+          "uss_kib": 37588
+        },
+        "kvmd-media.service": {
+          "processes": 1,
+          "cgroup": {
+            "identity": [
+              23,
+              1716
+            ],
+            "usage_usec": 36151850,
+            "memory_current_bytes": null,
+            "pids_current": 1,
+            "cpu_percent_one_core": 0.04
+          },
+          "rss_kib": 26768,
+          "pss_kib": 23257,
+          "threads": 1,
+          "fds": 7,
+          "cpu_percent_one_core": 0.043,
+          "uss_kib": 23064
+        },
+        "kvmd-nginx.service": {
+          "processes": 5,
+          "cgroup": {
+            "identity": [
+              23,
+              1739
+            ],
+            "usage_usec": 336829806,
+            "memory_current_bytes": null,
+            "pids_current": 5,
+            "cpu_percent_one_core": 0.0
+          },
+          "rss_kib": 30976,
+          "pss_kib": 8486,
+          "threads": 5,
+          "fds": 71,
+          "cpu_percent_one_core": 0.0,
+          "uss_kib": 4752
+        },
+        "pikvm-share-api.service": {
+          "processes": 1,
+          "cgroup": {
+            "identity": [
+              23,
+              1946
+            ],
+            "usage_usec": 12862927,
+            "memory_current_bytes": null,
+            "pids_current": 1,
+            "cpu_percent_one_core": 0.02
+          },
+          "rss_kib": 13632,
+          "pss_kib": 9850,
+          "threads": 1,
+          "fds": 5,
+          "cpu_percent_one_core": 0.043,
+          "uss_kib": 9612
+        },
+        "wifi-wizard-api.service": {
+          "processes": 1,
+          "cgroup": {
+            "identity": [
+              23,
+              2061
+            ],
+            "usage_usec": 66017138,
+            "memory_current_bytes": null,
+            "pids_current": 1,
+            "cpu_percent_one_core": 0.022
+          },
+          "rss_kib": 13808,
+          "pss_kib": 9604,
+          "threads": 1,
+          "fds": 4,
+          "cpu_percent_one_core": 0.0,
+          "uss_kib": 9308
+        },
+        "pikvm-oled-custom.service": {
+          "processes": 1,
+          "cgroup": {
+            "identity": [
+              23,
+              2084
+            ],
+            "usage_usec": 581234873,
+            "memory_current_bytes": null,
+            "pids_current": 8,
+            "cpu_percent_one_core": 10.111
+          },
+          "rss_kib": 17692,
+          "pss_kib": 12825,
+          "threads": 8,
+          "fds": 4,
+          "cpu_percent_one_core": 7.383,
+          "uss_kib": 11984
+        },
+        "pikvm-button-menu.service": {
+          "processes": 1,
+          "cgroup": {
+            "identity": [
+              23,
+              2107
+            ],
+            "usage_usec": 989592007,
+            "memory_current_bytes": null,
+            "pids_current": 6,
+            "cpu_percent_one_core": 16.626
+          },
+          "rss_kib": 13372,
+          "pss_kib": 9098,
+          "threads": 5,
+          "fds": 4,
+          "cpu_percent_one_core": 8.799,
+          "uss_kib": 8792
+        },
+        "pikvm-portable-api.service": {
+          "processes": 1,
+          "cgroup": {
+            "identity": [
+              23,
+              2130
+            ],
+            "usage_usec": 141792254,
+            "memory_current_bytes": null,
+            "pids_current": 2,
+            "cpu_percent_one_core": 1.035
+          },
+          "rss_kib": 37932,
+          "pss_kib": 31294,
+          "threads": 2,
+          "fds": 4,
+          "cpu_percent_one_core": 1.03,
+          "uss_kib": 29512
+        }
+      },
+      "pss_tracked_kib": 222771,
+      "psi": "some avg10=0.00 avg60=0.07 avg300=0.02 total=4407403\nfull avg10=0.00 avg60=0.06 avg300=0.02 total=3767760\n",
+      "auth_negative_status": 401,
+      "auth_negative_latency_ms": 5.3884219960309565,
+      "requested_phase": "web",
+      "actual_scenario": "web_open_no_hdmi_user_confirmed"
+    },
+    {
+      "index": 1,
+      "meminfo_kib": {
+        "MemTotal": 398472,
+        "MemFree": 10500,
+        "MemAvailable": 53828,
+        "Buffers": 3448,
+        "Cached": 89084,
+        "Shmem": 44432,
+        "Slab": 33024,
+        "SReclaimable": 7476
+      },
+      "services": {
+        "kvmd-pst.service": {
+          "processes": 1,
+          "cgroup": {
+            "identity": [
+              23,
+              1394
+            ],
+            "usage_usec": 7353310,
+            "memory_current_bytes": null,
+            "pids_current": 1,
+            "cpu_percent_one_core": 0.0
+          },
+          "rss_kib": 26756,
+          "pss_kib": 22658,
+          "threads": 1,
+          "fds": 7,
+          "cpu_percent_one_core": 0.0,
+          "uss_kib": 22336
+        },
+        "kvmd-webterm.service": {
+          "processes": 1,
+          "cgroup": {
+            "identity": [
+              23,
+              1463
+            ],
+            "usage_usec": 314381,
+            "memory_current_bytes": null,
+            "pids_current": 1,
+            "cpu_percent_one_core": 0.0
+          },
+          "rss_kib": 2672,
+          "pss_kib": 982,
+          "threads": 1,
+          "fds": 13,
+          "cpu_percent_one_core": 0.0,
+          "uss_kib": 848
+        },
+        "kvmd.service": {
+          "processes": 5,
+          "cgroup": {
+            "identity": [
+              23,
+              1670
+            ],
+            "usage_usec": 7247770872,
+            "memory_current_bytes": null,
+            "pids_current": 23,
+            "cpu_percent_one_core": 5.243
+          },
+          "rss_kib": 167528,
+          "pss_kib": 56513,
+          "threads": 23,
+          "fds": 150,
+          "cpu_percent_one_core": 4.8629999999999995,
+          "uss_kib": 27580
+        },
+        "kvmd-janus.service": {
+          "processes": 2,
+          "cgroup": {
+            "identity": [
+              23,
+              1693
+            ],
+            "usage_usec": 982132318,
+            "memory_current_bytes": null,
+            "pids_current": 16,
+            "cpu_percent_one_core": 1.118
+          },
+          "rss_kib": 45172,
+          "pss_kib": 38205,
+          "threads": 16,
+          "fds": 21,
+          "cpu_percent_one_core": 1.216,
+          "uss_kib": 37588
+        },
+        "kvmd-media.service": {
+          "processes": 1,
+          "cgroup": {
+            "identity": [
+              23,
+              1716
+            ],
+            "usage_usec": 36153031,
+            "memory_current_bytes": null,
+            "pids_current": 1,
+            "cpu_percent_one_core": 0.036
+          },
+          "rss_kib": 26768,
+          "pss_kib": 23258,
+          "threads": 1,
+          "fds": 7,
+          "cpu_percent_one_core": 0.0,
+          "uss_kib": 23064
+        },
+        "kvmd-nginx.service": {
+          "processes": 5,
+          "cgroup": {
+            "identity": [
+              23,
+              1739
+            ],
+            "usage_usec": 336829806,
+            "memory_current_bytes": null,
+            "pids_current": 5,
+            "cpu_percent_one_core": 0.0
+          },
+          "rss_kib": 30976,
+          "pss_kib": 8486,
+          "threads": 5,
+          "fds": 71,
+          "cpu_percent_one_core": 0.0,
+          "uss_kib": 4752
+        },
+        "pikvm-share-api.service": {
+          "processes": 1,
+          "cgroup": {
+            "identity": [
+              23,
+              1946
+            ],
+            "usage_usec": 12863634,
+            "memory_current_bytes": null,
+            "pids_current": 1,
+            "cpu_percent_one_core": 0.021
+          },
+          "rss_kib": 13632,
+          "pss_kib": 9850,
+          "threads": 1,
+          "fds": 5,
+          "cpu_percent_one_core": 0.0,
+          "uss_kib": 9612
+        },
+        "wifi-wizard-api.service": {
+          "processes": 1,
+          "cgroup": {
+            "identity": [
+              23,
+              2061
+            ],
+            "usage_usec": 66017900,
+            "memory_current_bytes": null,
+            "pids_current": 1,
+            "cpu_percent_one_core": 0.023
+          },
+          "rss_kib": 13808,
+          "pss_kib": 9604,
+          "threads": 1,
+          "fds": 4,
+          "cpu_percent_one_core": 0.0,
+          "uss_kib": 9308
+        },
+        "pikvm-oled-custom.service": {
+          "processes": 1,
+          "cgroup": {
+            "identity": [
+              23,
+              2084
+            ],
+            "usage_usec": 581504729,
+            "memory_current_bytes": null,
+            "pids_current": 8,
+            "cpu_percent_one_core": 8.2
+          },
+          "rss_kib": 17692,
+          "pss_kib": 12825,
+          "threads": 8,
+          "fds": 4,
+          "cpu_percent_one_core": 7.597,
+          "uss_kib": 11984
+        },
+        "pikvm-button-menu.service": {
+          "processes": 1,
+          "cgroup": {
+            "identity": [
+              23,
+              2107
+            ],
+            "usage_usec": 990155210,
+            "memory_current_bytes": null,
+            "pids_current": 5,
+            "cpu_percent_one_core": 17.114
+          },
+          "rss_kib": 13372,
+          "pss_kib": 9098,
+          "threads": 5,
+          "fds": 4,
+          "cpu_percent_one_core": 9.116,
+          "uss_kib": 8792
+        },
+        "pikvm-portable-api.service": {
+          "processes": 1,
+          "cgroup": {
+            "identity": [
+              23,
+              2130
+            ],
+            "usage_usec": 141796778,
+            "memory_current_bytes": null,
+            "pids_current": 2,
+            "cpu_percent_one_core": 0.137
+          },
+          "rss_kib": 37932,
+          "pss_kib": 31294,
+          "threads": 2,
+          "fds": 4,
+          "cpu_percent_one_core": 0.304,
+          "uss_kib": 29512
+        }
+      },
+      "pss_tracked_kib": 222773,
+      "psi": "some avg10=0.00 avg60=0.07 avg300=0.02 total=4407403\nfull avg10=0.00 avg60=0.05 avg300=0.02 total=3767760\n",
+      "auth_negative_status": 401,
+      "auth_negative_latency_ms": 4.700091012637131,
+      "requested_phase": "web",
+      "actual_scenario": "web_open_no_hdmi_user_confirmed"
+    },
+    {
+      "index": 2,
+      "meminfo_kib": {
+        "MemTotal": 398472,
+        "MemFree": 10532,
+        "MemAvailable": 53860,
+        "Buffers": 3448,
+        "Cached": 89084,
+        "Shmem": 44432,
+        "Slab": 33028,
+        "SReclaimable": 7476
+      },
+      "services": {
+        "kvmd-pst.service": {
+          "processes": 1,
+          "cgroup": {
+            "identity": [
+              23,
+              1394
+            ],
+            "usage_usec": 7353310,
+            "memory_current_bytes": null,
+            "pids_current": 1,
+            "cpu_percent_one_core": 0.0
+          },
+          "rss_kib": 26756,
+          "pss_kib": 22658,
+          "threads": 1,
+          "fds": 7,
+          "cpu_percent_one_core": 0.0,
+          "uss_kib": 22336
+        },
+        "kvmd-webterm.service": {
+          "processes": 1,
+          "cgroup": {
+            "identity": [
+              23,
+              1463
+            ],
+            "usage_usec": 314381,
+            "memory_current_bytes": null,
+            "pids_current": 1,
+            "cpu_percent_one_core": 0.0
+          },
+          "rss_kib": 2672,
+          "pss_kib": 982,
+          "threads": 1,
+          "fds": 13,
+          "cpu_percent_one_core": 0.0,
+          "uss_kib": 848
+        },
+        "kvmd.service": {
+          "processes": 5,
+          "cgroup": {
+            "identity": [
+              23,
+              1670
+            ],
+            "usage_usec": 7247912181,
+            "memory_current_bytes": null,
+            "pids_current": 23,
+            "cpu_percent_one_core": 4.3
+          },
+          "rss_kib": 167528,
+          "pss_kib": 56513,
+          "threads": 23,
+          "fds": 150,
+          "cpu_percent_one_core": 3.9560000000000004,
+          "uss_kib": 27580
+        },
+        "kvmd-janus.service": {
+          "processes": 2,
+          "cgroup": {
+            "identity": [
+              23,
+              1693
+            ],
+            "usage_usec": 982157651,
+            "memory_current_bytes": null,
+            "pids_current": 16,
+            "cpu_percent_one_core": 0.771
+          },
+          "rss_kib": 45172,
+          "pss_kib": 38205,
+          "threads": 16,
+          "fds": 21,
+          "cpu_percent_one_core": 0.913,
+          "uss_kib": 37588
+        },
+        "kvmd-media.service": {
+          "processes": 1,
+          "cgroup": {
+            "identity": [
+              23,
+              1716
+            ],
+            "usage_usec": 36154803,
+            "memory_current_bytes": null,
+            "pids_current": 1,
+            "cpu_percent_one_core": 0.054
+          },
+          "rss_kib": 26768,
+          "pss_kib": 23258,
+          "threads": 1,
+          "fds": 7,
+          "cpu_percent_one_core": 0.0,
+          "uss_kib": 23064
+        },
+        "kvmd-nginx.service": {
+          "processes": 5,
+          "cgroup": {
+            "identity": [
+              23,
+              1739
+            ],
+            "usage_usec": 336829806,
+            "memory_current_bytes": null,
+            "pids_current": 5,
+            "cpu_percent_one_core": 0.0
+          },
+          "rss_kib": 30976,
+          "pss_kib": 8486,
+          "threads": 5,
+          "fds": 71,
+          "cpu_percent_one_core": 0.0,
+          "uss_kib": 4752
+        },
+        "pikvm-share-api.service": {
+          "processes": 1,
+          "cgroup": {
+            "identity": [
+              23,
+              1946
+            ],
+            "usage_usec": 12864261,
+            "memory_current_bytes": null,
+            "pids_current": 1,
+            "cpu_percent_one_core": 0.019
+          },
+          "rss_kib": 13632,
+          "pss_kib": 9850,
+          "threads": 1,
+          "fds": 5,
+          "cpu_percent_one_core": 0.0,
+          "uss_kib": 9612
+        },
+        "wifi-wizard-api.service": {
+          "processes": 1,
+          "cgroup": {
+            "identity": [
+              23,
+              2061
+            ],
+            "usage_usec": 66018472,
+            "memory_current_bytes": null,
+            "pids_current": 1,
+            "cpu_percent_one_core": 0.017
+          },
+          "rss_kib": 13808,
+          "pss_kib": 9604,
+          "threads": 1,
+          "fds": 4,
+          "cpu_percent_one_core": 0.0,
+          "uss_kib": 9308
+        },
+        "pikvm-oled-custom.service": {
+          "processes": 1,
+          "cgroup": {
+            "identity": [
+              23,
+              2084
+            ],
+            "usage_usec": 581768338,
+            "memory_current_bytes": null,
+            "pids_current": 8,
+            "cpu_percent_one_core": 8.022
+          },
+          "rss_kib": 17692,
+          "pss_kib": 12825,
+          "threads": 8,
+          "fds": 4,
+          "cpu_percent_one_core": 7.608,
+          "uss_kib": 11984
+        },
+        "pikvm-button-menu.service": {
+          "processes": 1,
+          "cgroup": {
+            "identity": [
+              23,
+              2107
+            ],
+            "usage_usec": 990713048,
+            "memory_current_bytes": null,
+            "pids_current": 5,
+            "cpu_percent_one_core": 16.977
+          },
+          "rss_kib": 13372,
+          "pss_kib": 9098,
+          "threads": 5,
+          "fds": 4,
+          "cpu_percent_one_core": 9.13,
+          "uss_kib": 8792
+        },
+        "pikvm-portable-api.service": {
+          "processes": 1,
+          "cgroup": {
+            "identity": [
+              23,
+              2130
+            ],
+            "usage_usec": 141846042,
+            "memory_current_bytes": null,
+            "pids_current": 2,
+            "cpu_percent_one_core": 1.499
+          },
+          "rss_kib": 37932,
+          "pss_kib": 31294,
+          "threads": 2,
+          "fds": 4,
+          "cpu_percent_one_core": 1.522,
+          "uss_kib": 29512
+        }
+      },
+      "pss_tracked_kib": 222773,
+      "psi": "some avg10=0.00 avg60=0.06 avg300=0.02 total=4407403\nfull avg10=0.00 avg60=0.05 avg300=0.01 total=3767760\n",
+      "auth_negative_status": 401,
+      "auth_negative_latency_ms": 4.701132012996823,
+      "requested_phase": "web",
+      "actual_scenario": "web_open_no_hdmi_user_confirmed"
+    },
+    {
+      "index": 3,
+      "meminfo_kib": {
+        "MemTotal": 398472,
+        "MemFree": 11008,
+        "MemAvailable": 54336,
+        "Buffers": 3448,
+        "Cached": 89084,
+        "Shmem": 44432,
+        "Slab": 33036,
+        "SReclaimable": 7476
+      },
+      "services": {
+        "kvmd-pst.service": {
+          "processes": 1,
+          "cgroup": {
+            "identity": [
+              23,
+              1394
+            ],
+            "usage_usec": 7353310,
+            "memory_current_bytes": null,
+            "pids_current": 1,
+            "cpu_percent_one_core": 0.0
+          },
+          "rss_kib": 26756,
+          "pss_kib": 22658,
+          "threads": 1,
+          "fds": 7,
+          "cpu_percent_one_core": 0.0,
+          "uss_kib": 22336
+        },
+        "kvmd-webterm.service": {
+          "processes": 1,
+          "cgroup": {
+            "identity": [
+              23,
+              1463
+            ],
+            "usage_usec": 314381,
+            "memory_current_bytes": null,
+            "pids_current": 1,
+            "cpu_percent_one_core": 0.0
+          },
+          "rss_kib": 2672,
+          "pss_kib": 982,
+          "threads": 1,
+          "fds": 13,
+          "cpu_percent_one_core": 0.0,
+          "uss_kib": 848
+        },
+        "kvmd.service": {
+          "processes": 5,
+          "cgroup": {
+            "identity": [
+              23,
+              1670
+            ],
+            "usage_usec": 7248090044,
+            "memory_current_bytes": null,
+            "pids_current": 23,
+            "cpu_percent_one_core": 5.398
+          },
+          "rss_kib": 167528,
+          "pss_kib": 56512,
+          "threads": 23,
+          "fds": 150,
+          "cpu_percent_one_core": 5.463,
+          "uss_kib": 27580
+        },
+        "kvmd-janus.service": {
+          "processes": 2,
+          "cgroup": {
+            "identity": [
+              23,
+              1693
+            ],
+            "usage_usec": 982185193,
+            "memory_current_bytes": null,
+            "pids_current": 16,
+            "cpu_percent_one_core": 0.836
+          },
+          "rss_kib": 45172,
+          "pss_kib": 38205,
+          "threads": 16,
+          "fds": 21,
+          "cpu_percent_one_core": 0.607,
+          "uss_kib": 37588
+        },
+        "kvmd-media.service": {
+          "processes": 1,
+          "cgroup": {
+            "identity": [
+              23,
+              1716
+            ],
+            "usage_usec": 36156150,
+            "memory_current_bytes": null,
+            "pids_current": 1,
+            "cpu_percent_one_core": 0.041
+          },
+          "rss_kib": 26768,
+          "pss_kib": 23258,
+          "threads": 1,
+          "fds": 7,
+          "cpu_percent_one_core": 0.0,
+          "uss_kib": 23064
+        },
+        "kvmd-nginx.service": {
+          "processes": 5,
+          "cgroup": {
+            "identity": [
+              23,
+              1739
+            ],
+            "usage_usec": 336829806,
+            "memory_current_bytes": null,
+            "pids_current": 5,
+            "cpu_percent_one_core": 0.0
+          },
+          "rss_kib": 30976,
+          "pss_kib": 8485,
+          "threads": 5,
+          "fds": 71,
+          "cpu_percent_one_core": 0.0,
+          "uss_kib": 4752
+        },
+        "pikvm-share-api.service": {
+          "processes": 1,
+          "cgroup": {
+            "identity": [
+              23,
+              1946
+            ],
+            "usage_usec": 12865005,
+            "memory_current_bytes": null,
+            "pids_current": 1,
+            "cpu_percent_one_core": 0.023
+          },
+          "rss_kib": 13632,
+          "pss_kib": 9850,
+          "threads": 1,
+          "fds": 5,
+          "cpu_percent_one_core": 0.0,
+          "uss_kib": 9612
+        },
+        "wifi-wizard-api.service": {
+          "processes": 1,
+          "cgroup": {
+            "identity": [
+              23,
+              2061
+            ],
+            "usage_usec": 66019226,
+            "memory_current_bytes": null,
+            "pids_current": 1,
+            "cpu_percent_one_core": 0.023
+          },
+          "rss_kib": 13808,
+          "pss_kib": 9604,
+          "threads": 1,
+          "fds": 4,
+          "cpu_percent_one_core": 0.0,
+          "uss_kib": 9308
+        },
+        "pikvm-oled-custom.service": {
+          "processes": 1,
+          "cgroup": {
+            "identity": [
+              23,
+              2084
+            ],
+            "usage_usec": 582253648,
+            "memory_current_bytes": null,
+            "pids_current": 8,
+            "cpu_percent_one_core": 14.728
+          },
+          "rss_kib": 17692,
+          "pss_kib": 12825,
+          "threads": 8,
+          "fds": 4,
+          "cpu_percent_one_core": 8.497,
+          "uss_kib": 11984
+        },
+        "pikvm-button-menu.service": {
+          "processes": 1,
+          "cgroup": {
+            "identity": [
+              23,
+              2107
+            ],
+            "usage_usec": 991256968,
+            "memory_current_bytes": null,
+            "pids_current": 5,
+            "cpu_percent_one_core": 16.507
+          },
+          "rss_kib": 13372,
+          "pss_kib": 9098,
+          "threads": 5,
+          "fds": 4,
+          "cpu_percent_one_core": 8.194,
+          "uss_kib": 8792
+        },
+        "pikvm-portable-api.service": {
+          "processes": 1,
+          "cgroup": {
+            "identity": [
+              23,
+              2130
+            ],
+            "usage_usec": 141849910,
+            "memory_current_bytes": null,
+            "pids_current": 2,
+            "cpu_percent_one_core": 0.117
+          },
+          "rss_kib": 37932,
+          "pss_kib": 31294,
+          "threads": 2,
+          "fds": 4,
+          "cpu_percent_one_core": 0.0,
+          "uss_kib": 29512
+        }
+      },
+      "pss_tracked_kib": 222771,
+      "psi": "some avg10=0.00 avg60=0.06 avg300=0.02 total=4407404\nfull avg10=0.00 avg60=0.05 avg300=0.01 total=3767761\n",
+      "auth_negative_status": 401,
+      "auth_negative_latency_ms": 4.698372009443119,
+      "requested_phase": "web",
+      "actual_scenario": "web_open_no_hdmi_user_confirmed"
+    },
+    {
+      "index": 4,
+      "meminfo_kib": {
+        "MemTotal": 398472,
+        "MemFree": 10404,
+        "MemAvailable": 53732,
+        "Buffers": 3448,
+        "Cached": 89084,
+        "Shmem": 44432,
+        "Slab": 33004,
+        "SReclaimable": 7476
+      },
+      "services": {
+        "kvmd-pst.service": {
+          "processes": 1,
+          "cgroup": {
+            "identity": [
+              23,
+              1394
+            ],
+            "usage_usec": 7353310,
+            "memory_current_bytes": null,
+            "pids_current": 1,
+            "cpu_percent_one_core": 0.0
+          },
+          "rss_kib": 26756,
+          "pss_kib": 22658,
+          "threads": 1,
+          "fds": 7,
+          "cpu_percent_one_core": 0.0,
+          "uss_kib": 22336
+        },
+        "kvmd-webterm.service": {
+          "processes": 1,
+          "cgroup": {
+            "identity": [
+              23,
+              1463
+            ],
+            "usage_usec": 314381,
+            "memory_current_bytes": null,
+            "pids_current": 1,
+            "cpu_percent_one_core": 0.0
+          },
+          "rss_kib": 2672,
+          "pss_kib": 982,
+          "threads": 1,
+          "fds": 13,
+          "cpu_percent_one_core": 0.0,
+          "uss_kib": 848
+        },
+        "kvmd.service": {
+          "processes": 5,
+          "cgroup": {
+            "identity": [
+              23,
+              1670
+            ],
+            "usage_usec": 7248262550,
+            "memory_current_bytes": null,
+            "pids_current": 23,
+            "cpu_percent_one_core": 5.246
+          },
+          "rss_kib": 167528,
+          "pss_kib": 56512,
+          "threads": 23,
+          "fds": 150,
+          "cpu_percent_one_core": 4.865,
+          "uss_kib": 27580
+        },
+        "kvmd-janus.service": {
+          "processes": 2,
+          "cgroup": {
+            "identity": [
+              23,
+              1693
+            ],
+            "usage_usec": 982222202,
+            "memory_current_bytes": null,
+            "pids_current": 16,
+            "cpu_percent_one_core": 1.125
+          },
+          "rss_kib": 45172,
+          "pss_kib": 38205,
+          "threads": 16,
+          "fds": 21,
+          "cpu_percent_one_core": 1.216,
+          "uss_kib": 37588
+        },
+        "kvmd-media.service": {
+          "processes": 1,
+          "cgroup": {
+            "identity": [
+              23,
+              1716
+            ],
+            "usage_usec": 36157364,
+            "memory_current_bytes": null,
+            "pids_current": 1,
+            "cpu_percent_one_core": 0.037
+          },
+          "rss_kib": 26768,
+          "pss_kib": 23258,
+          "threads": 1,
+          "fds": 7,
+          "cpu_percent_one_core": 0.0,
+          "uss_kib": 23064
+        },
+        "kvmd-nginx.service": {
+          "processes": 5,
+          "cgroup": {
+            "identity": [
+              23,
+              1739
+            ],
+            "usage_usec": 336829806,
+            "memory_current_bytes": null,
+            "pids_current": 5,
+            "cpu_percent_one_core": 0.0
+          },
+          "rss_kib": 30976,
+          "pss_kib": 8486,
+          "threads": 5,
+          "fds": 71,
+          "cpu_percent_one_core": 0.0,
+          "uss_kib": 4752
+        },
+        "pikvm-share-api.service": {
+          "processes": 1,
+          "cgroup": {
+            "identity": [
+              23,
+              1946
+            ],
+            "usage_usec": 12865659,
+            "memory_current_bytes": null,
+            "pids_current": 1,
+            "cpu_percent_one_core": 0.02
+          },
+          "rss_kib": 13632,
+          "pss_kib": 9850,
+          "threads": 1,
+          "fds": 5,
+          "cpu_percent_one_core": 0.0,
+          "uss_kib": 9612
+        },
+        "wifi-wizard-api.service": {
+          "processes": 1,
+          "cgroup": {
+            "identity": [
+              23,
+              2061
+            ],
+            "usage_usec": 66019847,
+            "memory_current_bytes": null,
+            "pids_current": 1,
+            "cpu_percent_one_core": 0.019
+          },
+          "rss_kib": 13808,
+          "pss_kib": 9604,
+          "threads": 1,
+          "fds": 4,
+          "cpu_percent_one_core": 0.0,
+          "uss_kib": 9308
+        },
+        "pikvm-oled-custom.service": {
+          "processes": 1,
+          "cgroup": {
+            "identity": [
+              23,
+              2084
+            ],
+            "usage_usec": 582533578,
+            "memory_current_bytes": null,
+            "pids_current": 8,
+            "cpu_percent_one_core": 8.512
+          },
+          "rss_kib": 17692,
+          "pss_kib": 12825,
+          "threads": 8,
+          "fds": 4,
+          "cpu_percent_one_core": 6.994,
+          "uss_kib": 11984
+        },
+        "pikvm-button-menu.service": {
+          "processes": 1,
+          "cgroup": {
+            "identity": [
+              23,
+              2107
+            ],
+            "usage_usec": 991815897,
+            "memory_current_bytes": null,
+            "pids_current": 5,
+            "cpu_percent_one_core": 16.996
+          },
+          "rss_kib": 13372,
+          "pss_kib": 9098,
+          "threads": 5,
+          "fds": 4,
+          "cpu_percent_one_core": 9.427,
+          "uss_kib": 8792
+        },
+        "pikvm-portable-api.service": {
+          "processes": 1,
+          "cgroup": {
+            "identity": [
+              23,
+              2130
+            ],
+            "usage_usec": 141901972,
+            "memory_current_bytes": null,
+            "pids_current": 2,
+            "cpu_percent_one_core": 1.583
+          },
+          "rss_kib": 37932,
+          "pss_kib": 31294,
+          "threads": 2,
+          "fds": 4,
+          "cpu_percent_one_core": 1.52,
+          "uss_kib": 29512
+        }
+      },
+      "pss_tracked_kib": 222772,
+      "psi": "some avg10=0.00 avg60=0.06 avg300=0.02 total=4407404\nfull avg10=0.00 avg60=0.04 avg300=0.01 total=3767761\n",
+      "auth_negative_status": 401,
+      "auth_negative_latency_ms": 4.776497007696889,
+      "requested_phase": "web",
+      "actual_scenario": "web_open_no_hdmi_user_confirmed"
+    },
+    {
+      "index": 0,
+      "meminfo_kib": {
+        "MemTotal": 398472,
+        "MemFree": 10824,
+        "MemAvailable": 54152,
+        "Buffers": 3448,
+        "Cached": 89084,
+        "Shmem": 44432,
+        "Slab": 33012,
+        "SReclaimable": 7476
+      },
+      "services": {
+        "kvmd-pst.service": {
+          "processes": 1,
+          "cgroup": {
+            "identity": [
+              23,
+              1394
+            ],
+            "usage_usec": 7353310,
+            "memory_current_bytes": null,
+            "pids_current": 1,
+            "cpu_percent_one_core": 0.0
+          },
+          "rss_kib": 26756,
+          "pss_kib": 22658,
+          "threads": 1,
+          "fds": 7,
+          "cpu_percent_one_core": 0.0,
+          "uss_kib": 22336
+        },
+        "kvmd-webterm.service": {
+          "processes": 1,
+          "cgroup": {
+            "identity": [
+              23,
+              1463
+            ],
+            "usage_usec": 314501,
+            "memory_current_bytes": null,
+            "pids_current": 1,
+            "cpu_percent_one_core": 0.001
+          },
+          "rss_kib": 2672,
+          "pss_kib": 982,
+          "threads": 1,
+          "fds": 13,
+          "cpu_percent_one_core": 0.0,
+          "uss_kib": 848
+        },
+        "kvmd.service": {
+          "processes": 5,
+          "cgroup": {
+            "identity": [
+              23,
+              1670
+            ],
+            "usage_usec": 7249404688,
+            "memory_current_bytes": null,
+            "pids_current": 23,
+            "cpu_percent_one_core": 4.904
+          },
+          "rss_kib": 167528,
+          "pss_kib": 56513,
+          "threads": 23,
+          "fds": 150,
+          "cpu_percent_one_core": 4.552,
+          "uss_kib": 27580
+        },
+        "kvmd-janus.service": {
+          "processes": 2,
+          "cgroup": {
+            "identity": [
+              23,
+              1693
+            ],
+            "usage_usec": 982416325,
+            "memory_current_bytes": null,
+            "pids_current": 16,
+            "cpu_percent_one_core": 0.834
+          },
+          "rss_kib": 45172,
+          "pss_kib": 38205,
+          "threads": 16,
+          "fds": 21,
+          "cpu_percent_one_core": 0.816,
+          "uss_kib": 37588
+        },
+        "kvmd-media.service": {
+          "processes": 1,
+          "cgroup": {
+            "identity": [
+              23,
+              1716
+            ],
+            "usage_usec": 36167201,
+            "memory_current_bytes": null,
+            "pids_current": 1,
+            "cpu_percent_one_core": 0.042
+          },
+          "rss_kib": 26768,
+          "pss_kib": 23258,
+          "threads": 1,
+          "fds": 7,
+          "cpu_percent_one_core": 0.043,
+          "uss_kib": 23064
+        },
+        "kvmd-nginx.service": {
+          "processes": 5,
+          "cgroup": {
+            "identity": [
+              23,
+              1739
+            ],
+            "usage_usec": 336829806,
+            "memory_current_bytes": null,
+            "pids_current": 5,
+            "cpu_percent_one_core": 0.0
+          },
+          "rss_kib": 30976,
+          "pss_kib": 8486,
+          "threads": 5,
+          "fds": 71,
+          "cpu_percent_one_core": 0.0,
+          "uss_kib": 4752
+        },
+        "pikvm-share-api.service": {
+          "processes": 1,
+          "cgroup": {
+            "identity": [
+              23,
+              1946
+            ],
+            "usage_usec": 12870361,
+            "memory_current_bytes": null,
+            "pids_current": 1,
+            "cpu_percent_one_core": 0.02
+          },
+          "rss_kib": 13632,
+          "pss_kib": 9850,
+          "threads": 1,
+          "fds": 5,
+          "cpu_percent_one_core": 0.043,
+          "uss_kib": 9612
+        },
+        "wifi-wizard-api.service": {
+          "processes": 1,
+          "cgroup": {
+            "identity": [
+              23,
+              2061
+            ],
+            "usage_usec": 66024751,
+            "memory_current_bytes": null,
+            "pids_current": 1,
+            "cpu_percent_one_core": 0.021
+          },
+          "rss_kib": 13808,
+          "pss_kib": 9604,
+          "threads": 1,
+          "fds": 4,
+          "cpu_percent_one_core": 0.043,
+          "uss_kib": 9308
+        },
+        "pikvm-oled-custom.service": {
+          "processes": 1,
+          "cgroup": {
+            "identity": [
+              23,
+              2084
+            ],
+            "usage_usec": 584663197,
+            "memory_current_bytes": null,
+            "pids_current": 8,
+            "cpu_percent_one_core": 9.144
+          },
+          "rss_kib": 17692,
+          "pss_kib": 12825,
+          "threads": 8,
+          "fds": 4,
+          "cpu_percent_one_core": 7.386,
+          "uss_kib": 11984
+        },
+        "pikvm-button-menu.service": {
+          "processes": 1,
+          "cgroup": {
+            "identity": [
+              23,
+              2107
+            ],
+            "usage_usec": 995700854,
+            "memory_current_bytes": null,
+            "pids_current": 5,
+            "cpu_percent_one_core": 16.682
+          },
+          "rss_kib": 13372,
+          "pss_kib": 9098,
+          "threads": 5,
+          "fds": 4,
+          "cpu_percent_one_core": 8.76,
+          "uss_kib": 8792
+        },
+        "pikvm-portable-api.service": {
+          "processes": 1,
+          "cgroup": {
+            "identity": [
+              23,
+              2130
+            ],
+            "usage_usec": 142140814,
+            "memory_current_bytes": null,
+            "pids_current": 2,
+            "cpu_percent_one_core": 1.026
+          },
+          "rss_kib": 37932,
+          "pss_kib": 31294,
+          "threads": 2,
+          "fds": 4,
+          "cpu_percent_one_core": 1.031,
+          "uss_kib": 29512
+        }
+      },
+      "pss_tracked_kib": 222773,
+      "psi": "some avg10=0.00 avg60=0.03 avg300=0.01 total=4407404\nfull avg10=0.00 avg60=0.03 avg300=0.01 total=3767761\n",
+      "auth_negative_status": 401,
+      "auth_negative_latency_ms": 5.367746009142138,
+      "requested_phase": "kvm",
+      "actual_scenario": "web_open_no_hdmi_user_confirmed"
+    },
+    {
+      "index": 1,
+      "meminfo_kib": {
+        "MemTotal": 398472,
+        "MemFree": 10208,
+        "MemAvailable": 53536,
+        "Buffers": 3448,
+        "Cached": 89084,
+        "Shmem": 44432,
+        "Slab": 33012,
+        "SReclaimable": 7476
+      },
+      "services": {
+        "kvmd-pst.service": {
+          "processes": 1,
+          "cgroup": {
+            "identity": [
+              23,
+              1394
+            ],
+            "usage_usec": 7353310,
+            "memory_current_bytes": null,
+            "pids_current": 1,
+            "cpu_percent_one_core": 0.0
+          },
+          "rss_kib": 26756,
+          "pss_kib": 22658,
+          "threads": 1,
+          "fds": 7,
+          "cpu_percent_one_core": 0.0,
+          "uss_kib": 22336
+        },
+        "kvmd-webterm.service": {
+          "processes": 1,
+          "cgroup": {
+            "identity": [
+              23,
+              1463
+            ],
+            "usage_usec": 314501,
+            "memory_current_bytes": null,
+            "pids_current": 1,
+            "cpu_percent_one_core": 0.0
+          },
+          "rss_kib": 2672,
+          "pss_kib": 982,
+          "threads": 1,
+          "fds": 13,
+          "cpu_percent_one_core": 0.0,
+          "uss_kib": 848
+        },
+        "kvmd.service": {
+          "processes": 5,
+          "cgroup": {
+            "identity": [
+              23,
+              1670
+            ],
+            "usage_usec": 7249582750,
+            "memory_current_bytes": null,
+            "pids_current": 23,
+            "cpu_percent_one_core": 5.339
+          },
+          "rss_kib": 167528,
+          "pss_kib": 56513,
+          "threads": 23,
+          "fds": 150,
+          "cpu_percent_one_core": 4.797000000000001,
+          "uss_kib": 27580
+        },
+        "kvmd-janus.service": {
+          "processes": 2,
+          "cgroup": {
+            "identity": [
+              23,
+              1693
+            ],
+            "usage_usec": 982443611,
+            "memory_current_bytes": null,
+            "pids_current": 16,
+            "cpu_percent_one_core": 0.818
+          },
+          "rss_kib": 45172,
+          "pss_kib": 38204,
+          "threads": 16,
+          "fds": 21,
+          "cpu_percent_one_core": 0.9,
+          "uss_kib": 37588
+        },
+        "kvmd-media.service": {
+          "processes": 1,
+          "cgroup": {
+            "identity": [
+              23,
+              1716
+            ],
+            "usage_usec": 36168343,
+            "memory_current_bytes": null,
+            "pids_current": 1,
+            "cpu_percent_one_core": 0.034
+          },
+          "rss_kib": 26768,
+          "pss_kib": 23258,
+          "threads": 1,
+          "fds": 7,
+          "cpu_percent_one_core": 0.0,
+          "uss_kib": 23064
+        },
+        "kvmd-nginx.service": {
+          "processes": 5,
+          "cgroup": {
+            "identity": [
+              23,
+              1739
+            ],
+            "usage_usec": 336829806,
+            "memory_current_bytes": null,
+            "pids_current": 5,
+            "cpu_percent_one_core": 0.0
+          },
+          "rss_kib": 30976,
+          "pss_kib": 8486,
+          "threads": 5,
+          "fds": 71,
+          "cpu_percent_one_core": 0.0,
+          "uss_kib": 4752
+        },
+        "pikvm-share-api.service": {
+          "processes": 1,
+          "cgroup": {
+            "identity": [
+              23,
+              1946
+            ],
+            "usage_usec": 12870956,
+            "memory_current_bytes": null,
+            "pids_current": 1,
+            "cpu_percent_one_core": 0.018
+          },
+          "rss_kib": 13632,
+          "pss_kib": 9850,
+          "threads": 1,
+          "fds": 5,
+          "cpu_percent_one_core": 0.0,
+          "uss_kib": 9612
+        },
+        "wifi-wizard-api.service": {
+          "processes": 1,
+          "cgroup": {
+            "identity": [
+              23,
+              2061
+            ],
+            "usage_usec": 66025380,
+            "memory_current_bytes": null,
+            "pids_current": 1,
+            "cpu_percent_one_core": 0.019
+          },
+          "rss_kib": 13808,
+          "pss_kib": 9604,
+          "threads": 1,
+          "fds": 4,
+          "cpu_percent_one_core": 0.0,
+          "uss_kib": 9308
+        },
+        "pikvm-oled-custom.service": {
+          "processes": 1,
+          "cgroup": {
+            "identity": [
+              23,
+              2084
+            ],
+            "usage_usec": 585209371,
+            "memory_current_bytes": null,
+            "pids_current": 8,
+            "cpu_percent_one_core": 16.376
+          },
+          "rss_kib": 17692,
+          "pss_kib": 12825,
+          "threads": 8,
+          "fds": 4,
+          "cpu_percent_one_core": 10.195,
+          "uss_kib": 11984
+        },
+        "pikvm-button-menu.service": {
+          "processes": 1,
+          "cgroup": {
+            "identity": [
+              23,
+              2107
+            ],
+            "usage_usec": 996265778,
+            "memory_current_bytes": null,
+            "pids_current": 5,
+            "cpu_percent_one_core": 16.939
+          },
+          "rss_kib": 13372,
+          "pss_kib": 9098,
+          "threads": 5,
+          "fds": 4,
+          "cpu_percent_one_core": 9.295,
+          "uss_kib": 8792
+        },
+        "pikvm-portable-api.service": {
+          "processes": 1,
+          "cgroup": {
+            "identity": [
+              23,
+              2130
+            ],
+            "usage_usec": 142144753,
+            "memory_current_bytes": null,
+            "pids_current": 2,
+            "cpu_percent_one_core": 0.118
+          },
+          "rss_kib": 37932,
+          "pss_kib": 31294,
+          "threads": 2,
+          "fds": 4,
+          "cpu_percent_one_core": 0.3,
+          "uss_kib": 29512
+        }
+      },
+      "pss_tracked_kib": 222772,
+      "psi": "some avg10=0.00 avg60=0.03 avg300=0.01 total=4407404\nfull avg10=0.00 avg60=0.02 avg300=0.01 total=3767761\n",
+      "auth_negative_status": 401,
+      "auth_negative_latency_ms": 4.99134098936338,
+      "requested_phase": "kvm",
+      "actual_scenario": "web_open_no_hdmi_user_confirmed"
+    },
+    {
+      "index": 2,
+      "meminfo_kib": {
+        "MemTotal": 398472,
+        "MemFree": 10188,
+        "MemAvailable": 53716,
+        "Buffers": 3448,
+        "Cached": 89284,
+        "Shmem": 44432,
+        "Slab": 33028,
+        "SReclaimable": 7476
+      },
+      "services": {
+        "kvmd-pst.service": {
+          "processes": 1,
+          "cgroup": {
+            "identity": [
+              23,
+              1394
+            ],
+            "usage_usec": 7353310,
+            "memory_current_bytes": null,
+            "pids_current": 1,
+            "cpu_percent_one_core": 0.0
+          },
+          "rss_kib": 26756,
+          "pss_kib": 22658,
+          "threads": 1,
+          "fds": 7,
+          "cpu_percent_one_core": 0.0,
+          "uss_kib": 22336
+        },
+        "kvmd-webterm.service": {
+          "processes": 1,
+          "cgroup": {
+            "identity": [
+              23,
+              1463
+            ],
+            "usage_usec": 314501,
+            "memory_current_bytes": null,
+            "pids_current": 1,
+            "cpu_percent_one_core": 0.0
+          },
+          "rss_kib": 2672,
+          "pss_kib": 982,
+          "threads": 1,
+          "fds": 13,
+          "cpu_percent_one_core": 0.0,
+          "uss_kib": 848
+        },
+        "kvmd.service": {
+          "processes": 5,
+          "cgroup": {
+            "identity": [
+              23,
+              1670
+            ],
+            "usage_usec": 7249760255,
+            "memory_current_bytes": null,
+            "pids_current": 23,
+            "cpu_percent_one_core": 5.397
+          },
+          "rss_kib": 167528,
+          "pss_kib": 56513,
+          "threads": 23,
+          "fds": 150,
+          "cpu_percent_one_core": 5.4719999999999995,
+          "uss_kib": 27580
+        },
+        "kvmd-janus.service": {
+          "processes": 2,
+          "cgroup": {
+            "identity": [
+              23,
+              1693
+            ],
+            "usage_usec": 982480392,
+            "memory_current_bytes": null,
+            "pids_current": 16,
+            "cpu_percent_one_core": 1.118
+          },
+          "rss_kib": 45172,
+          "pss_kib": 38205,
+          "threads": 16,
+          "fds": 21,
+          "cpu_percent_one_core": 1.216,
+          "uss_kib": 37588
+        },
+        "kvmd-media.service": {
+          "processes": 1,
+          "cgroup": {
+            "identity": [
+              23,
+              1716
+            ],
+            "usage_usec": 36169557,
+            "memory_current_bytes": null,
+            "pids_current": 1,
+            "cpu_percent_one_core": 0.037
+          },
+          "rss_kib": 26768,
+          "pss_kib": 23258,
+          "threads": 1,
+          "fds": 7,
+          "cpu_percent_one_core": 0.0,
+          "uss_kib": 23064
+        },
+        "kvmd-nginx.service": {
+          "processes": 5,
+          "cgroup": {
+            "identity": [
+              23,
+              1739
+            ],
+            "usage_usec": 336829806,
+            "memory_current_bytes": null,
+            "pids_current": 5,
+            "cpu_percent_one_core": 0.0
+          },
+          "rss_kib": 30976,
+          "pss_kib": 8486,
+          "threads": 5,
+          "fds": 71,
+          "cpu_percent_one_core": 0.0,
+          "uss_kib": 4752
+        },
+        "pikvm-share-api.service": {
+          "processes": 1,
+          "cgroup": {
+            "identity": [
+              23,
+              1946
+            ],
+            "usage_usec": 12871720,
+            "memory_current_bytes": null,
+            "pids_current": 1,
+            "cpu_percent_one_core": 0.023
+          },
+          "rss_kib": 13632,
+          "pss_kib": 9850,
+          "threads": 1,
+          "fds": 5,
+          "cpu_percent_one_core": 0.0,
+          "uss_kib": 9612
+        },
+        "wifi-wizard-api.service": {
+          "processes": 1,
+          "cgroup": {
+            "identity": [
+              23,
+              2061
+            ],
+            "usage_usec": 66026214,
+            "memory_current_bytes": null,
+            "pids_current": 1,
+            "cpu_percent_one_core": 0.025
+          },
+          "rss_kib": 13808,
+          "pss_kib": 9603,
+          "threads": 1,
+          "fds": 4,
+          "cpu_percent_one_core": 0.0,
+          "uss_kib": 9308
+        },
+        "pikvm-oled-custom.service": {
+          "processes": 1,
+          "cgroup": {
+            "identity": [
+              23,
+              2084
+            ],
+            "usage_usec": 585481330,
+            "memory_current_bytes": null,
+            "pids_current": 8,
+            "cpu_percent_one_core": 8.269
+          },
+          "rss_kib": 17692,
+          "pss_kib": 12825,
+          "threads": 8,
+          "fds": 4,
+          "cpu_percent_one_core": 6.689,
+          "uss_kib": 11984
+        },
+        "pikvm-button-menu.service": {
+          "processes": 1,
+          "cgroup": {
+            "identity": [
+              23,
+              2107
+            ],
+            "usage_usec": 996806764,
+            "memory_current_bytes": null,
+            "pids_current": 5,
+            "cpu_percent_one_core": 16.45
+          },
+          "rss_kib": 13372,
+          "pss_kib": 9098,
+          "threads": 5,
+          "fds": 4,
+          "cpu_percent_one_core": 8.21,
+          "uss_kib": 8792
+        },
+        "pikvm-portable-api.service": {
+          "processes": 1,
+          "cgroup": {
+            "identity": [
+              23,
+              2130
+            ],
+            "usage_usec": 142194128,
+            "memory_current_bytes": null,
+            "pids_current": 2,
+            "cpu_percent_one_core": 1.501
+          },
+          "rss_kib": 37932,
+          "pss_kib": 31294,
+          "threads": 2,
+          "fds": 4,
+          "cpu_percent_one_core": 1.52,
+          "uss_kib": 29512
+        }
+      },
+      "pss_tracked_kib": 222772,
+      "psi": "some avg10=0.00 avg60=0.03 avg300=0.01 total=4409927\nfull avg10=0.00 avg60=0.02 avg300=0.01 total=3770204\n",
+      "auth_negative_status": 401,
+      "auth_negative_latency_ms": 6.107744004111737,
+      "requested_phase": "kvm",
+      "actual_scenario": "web_open_no_hdmi_user_confirmed"
+    },
+    {
+      "index": 3,
+      "meminfo_kib": {
+        "MemTotal": 398472,
+        "MemFree": 9976,
+        "MemAvailable": 53504,
+        "Buffers": 3448,
+        "Cached": 89284,
+        "Shmem": 44432,
+        "Slab": 33032,
+        "SReclaimable": 7476
+      },
+      "services": {
+        "kvmd-pst.service": {
+          "processes": 1,
+          "cgroup": {
+            "identity": [
+              23,
+              1394
+            ],
+            "usage_usec": 7353310,
+            "memory_current_bytes": null,
+            "pids_current": 1,
+            "cpu_percent_one_core": 0.0
+          },
+          "rss_kib": 26756,
+          "pss_kib": 22658,
+          "threads": 1,
+          "fds": 7,
+          "cpu_percent_one_core": 0.0,
+          "uss_kib": 22336
+        },
+        "kvmd-webterm.service": {
+          "processes": 1,
+          "cgroup": {
+            "identity": [
+              23,
+              1463
+            ],
+            "usage_usec": 314501,
+            "memory_current_bytes": null,
+            "pids_current": 1,
+            "cpu_percent_one_core": 0.0
+          },
+          "rss_kib": 2672,
+          "pss_kib": 982,
+          "threads": 1,
+          "fds": 13,
+          "cpu_percent_one_core": 0.0,
+          "uss_kib": 848
+        },
+        "kvmd.service": {
+          "processes": 5,
+          "cgroup": {
+            "identity": [
+              23,
+              1670
+            ],
+            "usage_usec": 7249902925,
+            "memory_current_bytes": null,
+            "pids_current": 23,
+            "cpu_percent_one_core": 4.309
+          },
+          "rss_kib": 167528,
+          "pss_kib": 56512,
+          "threads": 23,
+          "fds": 150,
+          "cpu_percent_one_core": 4.228,
+          "uss_kib": 27580
+        },
+        "kvmd-janus.service": {
+          "processes": 2,
+          "cgroup": {
+            "identity": [
+              23,
+              1693
+            ],
+            "usage_usec": 982507304,
+            "memory_current_bytes": null,
+            "pids_current": 16,
+            "cpu_percent_one_core": 0.813
+          },
+          "rss_kib": 45172,
+          "pss_kib": 38205,
+          "threads": 16,
+          "fds": 21,
+          "cpu_percent_one_core": 0.604,
+          "uss_kib": 37588
+        },
+        "kvmd-media.service": {
+          "processes": 1,
+          "cgroup": {
+            "identity": [
+              23,
+              1716
+            ],
+            "usage_usec": 36170910,
+            "memory_current_bytes": null,
+            "pids_current": 1,
+            "cpu_percent_one_core": 0.041
+          },
+          "rss_kib": 26768,
+          "pss_kib": 23257,
+          "threads": 1,
+          "fds": 7,
+          "cpu_percent_one_core": 0.302,
+          "uss_kib": 23064
+        },
+        "kvmd-nginx.service": {
+          "processes": 5,
+          "cgroup": {
+            "identity": [
+              23,
+              1739
+            ],
+            "usage_usec": 336829806,
+            "memory_current_bytes": null,
+            "pids_current": 5,
+            "cpu_percent_one_core": 0.0
+          },
+          "rss_kib": 30976,
+          "pss_kib": 8486,
+          "threads": 5,
+          "fds": 71,
+          "cpu_percent_one_core": 0.0,
+          "uss_kib": 4752
+        },
+        "pikvm-share-api.service": {
+          "processes": 1,
+          "cgroup": {
+            "identity": [
+              23,
+              1946
+            ],
+            "usage_usec": 12872531,
+            "memory_current_bytes": null,
+            "pids_current": 1,
+            "cpu_percent_one_core": 0.024
+          },
+          "rss_kib": 13632,
+          "pss_kib": 9850,
+          "threads": 1,
+          "fds": 5,
+          "cpu_percent_one_core": 0.0,
+          "uss_kib": 9612
+        },
+        "wifi-wizard-api.service": {
+          "processes": 1,
+          "cgroup": {
+            "identity": [
+              23,
+              2061
+            ],
+            "usage_usec": 66026963,
+            "memory_current_bytes": null,
+            "pids_current": 1,
+            "cpu_percent_one_core": 0.023
+          },
+          "rss_kib": 13808,
+          "pss_kib": 9604,
+          "threads": 1,
+          "fds": 4,
+          "cpu_percent_one_core": 0.0,
+          "uss_kib": 9308
+        },
+        "pikvm-oled-custom.service": {
+          "processes": 1,
+          "cgroup": {
+            "identity": [
+              23,
+              2084
+            ],
+            "usage_usec": 586000560,
+            "memory_current_bytes": null,
+            "pids_current": 8,
+            "cpu_percent_one_core": 15.682
+          },
+          "rss_kib": 17692,
+          "pss_kib": 12825,
+          "threads": 8,
+          "fds": 4,
+          "cpu_percent_one_core": 8.758,
+          "uss_kib": 11984
+        },
+        "pikvm-button-menu.service": {
+          "processes": 1,
+          "cgroup": {
+            "identity": [
+              23,
+              2107
+            ],
+            "usage_usec": 997372854,
+            "memory_current_bytes": null,
+            "pids_current": 5,
+            "cpu_percent_one_core": 17.097
+          },
+          "rss_kib": 13372,
+          "pss_kib": 9098,
+          "threads": 5,
+          "fds": 4,
+          "cpu_percent_one_core": 9.362,
+          "uss_kib": 8792
+        },
+        "pikvm-portable-api.service": {
+          "processes": 1,
+          "cgroup": {
+            "identity": [
+              23,
+              2130
+            ],
+            "usage_usec": 142246794,
+            "memory_current_bytes": null,
+            "pids_current": 2,
+            "cpu_percent_one_core": 1.591
+          },
+          "rss_kib": 37932,
+          "pss_kib": 31294,
+          "threads": 2,
+          "fds": 4,
+          "cpu_percent_one_core": 1.51,
+          "uss_kib": 29512
+        }
+      },
+      "pss_tracked_kib": 222771,
+      "psi": "some avg10=0.00 avg60=0.03 avg300=0.01 total=4409927\nfull avg10=0.00 avg60=0.02 avg300=0.00 total=3770204\n",
+      "auth_negative_status": 401,
+      "auth_negative_latency_ms": 4.821185008040629,
+      "requested_phase": "kvm",
+      "actual_scenario": "web_open_no_hdmi_user_confirmed"
+    },
+    {
+      "index": 4,
+      "meminfo_kib": {
+        "MemTotal": 398472,
+        "MemFree": 10140,
+        "MemAvailable": 53668,
+        "Buffers": 3448,
+        "Cached": 89284,
+        "Shmem": 44432,
+        "Slab": 33020,
+        "SReclaimable": 7476
+      },
+      "services": {
+        "kvmd-pst.service": {
+          "processes": 1,
+          "cgroup": {
+            "identity": [
+              23,
+              1394
+            ],
+            "usage_usec": 7353310,
+            "memory_current_bytes": null,
+            "pids_current": 1,
+            "cpu_percent_one_core": 0.0
+          },
+          "rss_kib": 26756,
+          "pss_kib": 22657,
+          "threads": 1,
+          "fds": 7,
+          "cpu_percent_one_core": 0.0,
+          "uss_kib": 22336
+        },
+        "kvmd-webterm.service": {
+          "processes": 1,
+          "cgroup": {
+            "identity": [
+              23,
+              1463
+            ],
+            "usage_usec": 314501,
+            "memory_current_bytes": null,
+            "pids_current": 1,
+            "cpu_percent_one_core": 0.0
+          },
+          "rss_kib": 2672,
+          "pss_kib": 981,
+          "threads": 1,
+          "fds": 13,
+          "cpu_percent_one_core": 0.0,
+          "uss_kib": 848
+        },
+        "kvmd.service": {
+          "processes": 5,
+          "cgroup": {
+            "identity": [
+              23,
+              1670
+            ],
+            "usage_usec": 7250082416,
+            "memory_current_bytes": null,
+            "pids_current": 23,
+            "cpu_percent_one_core": 5.461
+          },
+          "rss_kib": 167528,
+          "pss_kib": 56512,
+          "threads": 23,
+          "fds": 150,
+          "cpu_percent_one_core": 4.564,
+          "uss_kib": 27580
+        },
+        "kvmd-janus.service": {
+          "processes": 2,
+          "cgroup": {
+            "identity": [
+              23,
+              1693
+            ],
+            "usage_usec": 982532886,
+            "memory_current_bytes": null,
+            "pids_current": 16,
+            "cpu_percent_one_core": 0.778
+          },
+          "rss_kib": 45172,
+          "pss_kib": 38205,
+          "threads": 16,
+          "fds": 21,
+          "cpu_percent_one_core": 0.913,
+          "uss_kib": 37588
+        },
+        "kvmd-media.service": {
+          "processes": 1,
+          "cgroup": {
+            "identity": [
+              23,
+              1716
+            ],
+            "usage_usec": 36172608,
+            "memory_current_bytes": null,
+            "pids_current": 1,
+            "cpu_percent_one_core": 0.052
+          },
+          "rss_kib": 26768,
+          "pss_kib": 23258,
+          "threads": 1,
+          "fds": 7,
+          "cpu_percent_one_core": 0.0,
+          "uss_kib": 23064
+        },
+        "kvmd-nginx.service": {
+          "processes": 5,
+          "cgroup": {
+            "identity": [
+              23,
+              1739
+            ],
+            "usage_usec": 336829806,
+            "memory_current_bytes": null,
+            "pids_current": 5,
+            "cpu_percent_one_core": 0.0
+          },
+          "rss_kib": 30976,
+          "pss_kib": 8486,
+          "threads": 5,
+          "fds": 71,
+          "cpu_percent_one_core": 0.0,
+          "uss_kib": 4752
+        },
+        "pikvm-share-api.service": {
+          "processes": 1,
+          "cgroup": {
+            "identity": [
+              23,
+              1946
+            ],
+            "usage_usec": 12873078,
+            "memory_current_bytes": null,
+            "pids_current": 1,
+            "cpu_percent_one_core": 0.017
+          },
+          "rss_kib": 13632,
+          "pss_kib": 9850,
+          "threads": 1,
+          "fds": 5,
+          "cpu_percent_one_core": 0.0,
+          "uss_kib": 9612
+        },
+        "wifi-wizard-api.service": {
+          "processes": 1,
+          "cgroup": {
+            "identity": [
+              23,
+              2061
+            ],
+            "usage_usec": 66027519,
+            "memory_current_bytes": null,
+            "pids_current": 1,
+            "cpu_percent_one_core": 0.017
+          },
+          "rss_kib": 13808,
+          "pss_kib": 9604,
+          "threads": 1,
+          "fds": 4,
+          "cpu_percent_one_core": 0.0,
+          "uss_kib": 9308
+        },
+        "pikvm-oled-custom.service": {
+          "processes": 1,
+          "cgroup": {
+            "identity": [
+              23,
+              2084
+            ],
+            "usage_usec": 586273364,
+            "memory_current_bytes": null,
+            "pids_current": 8,
+            "cpu_percent_one_core": 8.3
+          },
+          "rss_kib": 17692,
+          "pss_kib": 12825,
+          "threads": 8,
+          "fds": 4,
+          "cpu_percent_one_core": 6.998,
+          "uss_kib": 11984
+        },
+        "pikvm-button-menu.service": {
+          "processes": 1,
+          "cgroup": {
+            "identity": [
+              23,
+              2107
+            ],
+            "usage_usec": 997928643,
+            "memory_current_bytes": null,
+            "pids_current": 5,
+            "cpu_percent_one_core": 16.91
+          },
+          "rss_kib": 13372,
+          "pss_kib": 9098,
+          "threads": 5,
+          "fds": 4,
+          "cpu_percent_one_core": 8.823,
+          "uss_kib": 8792
+        },
+        "pikvm-portable-api.service": {
+          "processes": 1,
+          "cgroup": {
+            "identity": [
+              23,
+              2130
+            ],
+            "usage_usec": 142250998,
+            "memory_current_bytes": null,
+            "pids_current": 2,
+            "cpu_percent_one_core": 0.128
+          },
+          "rss_kib": 37932,
+          "pss_kib": 31294,
+          "threads": 2,
+          "fds": 4,
+          "cpu_percent_one_core": 0.0,
+          "uss_kib": 29512
+        }
+      },
+      "pss_tracked_kib": 222770,
+      "psi": "some avg10=0.00 avg60=0.02 avg300=0.01 total=4409927\nfull avg10=0.00 avg60=0.02 avg300=0.00 total=3770204\n",
+      "auth_negative_status": 401,
+      "auth_negative_latency_ms": 4.7685290046501905,
+      "requested_phase": "kvm",
+      "actual_scenario": "web_open_no_hdmi_user_confirmed"
+    }
+  ],
+  "isolated_native_lookup": {
+    "scope": "Ephemeral processes on the real Pi, not a service deployment; three pairs",
+    "medians": {
+      "baseline": {
+        "pss_kib": 32084,
+        "uss_kib": 31392,
+        "rss_kib": 36456,
+        "lookup_wall_seconds": 5.865345008991426,
+        "cpu_with_children_seconds": 4.288157805
+      },
+      "candidate": {
+        "pss_kib": 12127,
+        "uss_kib": 11456,
+        "rss_kib": 16348,
+        "lookup_wall_seconds": 7.293040108997957,
+        "cpu_with_children_seconds": 5.616062718
+      }
+    },
+    "parent_pss_saved_mib": 19.4892578125,
+    "samples": [
+      {
+        "label": "baseline",
+        "repeat": 0,
+        "rss_kib": 36356,
+        "pss_kib": 28903,
+        "uss_kib": 26928,
+        "lookup_wall_seconds": 5.938625000999309,
+        "cpu_with_children_seconds": 4.288157805,
+        "native_names_count": 1
+      },
+      {
+        "label": "candidate",
+        "repeat": 0,
+        "rss_kib": 13732,
+        "pss_kib": 9561,
+        "uss_kib": 9032,
+        "lookup_wall_seconds": 7.818476643995382,
+        "cpu_with_children_seconds": 5.616062718,
+        "native_names_count": 1
+      },
+      {
+        "label": "baseline",
+        "repeat": 1,
+        "rss_kib": 36848,
+        "pss_kib": 32422,
+        "uss_kib": 31644,
+        "lookup_wall_seconds": 5.865345008991426,
+        "cpu_with_children_seconds": 4.331747231,
+        "native_names_count": 1
+      },
+      {
+        "label": "candidate",
+        "repeat": 1,
+        "rss_kib": 16348,
+        "pss_kib": 12159,
+        "uss_kib": 11536,
+        "lookup_wall_seconds": 7.244197808991885,
+        "cpu_with_children_seconds": 5.615136933,
+        "native_names_count": 1
+      },
+      {
+        "label": "baseline",
+        "repeat": 2,
+        "rss_kib": 36456,
+        "pss_kib": 32084,
+        "uss_kib": 31392,
+        "lookup_wall_seconds": 5.349755346993334,
+        "cpu_with_children_seconds": 4.256718121,
+        "native_names_count": 1
+      },
+      {
+        "label": "candidate",
+        "repeat": 2,
+        "rss_kib": 16408,
+        "pss_kib": 12127,
+        "uss_kib": 11456,
+        "lookup_wall_seconds": 7.293040108997957,
+        "cpu_with_children_seconds": 5.653771558000001,
+        "native_names_count": 1
+      }
+    ]
+  },
+  "limitations": [
+    "No valid idle/Web/KVM scenario comparison",
+    "No HDMI video stability validation",
+    "No multi-hour leak claim",
+    "Negative auth latency is HTTP 401 only, not an authenticated workload",
+    "Lookup saving is conditional: PST writes can import KVMD later in the API"
+  ]
+}

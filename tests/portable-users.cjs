@@ -89,6 +89,7 @@ const {chromium}=require('playwright'),assert=require('node:assert/strict'),fs=r
         viewer.on('request',request=>reads.push(new URL(request.url()).pathname));
         await viewer.route('**/api/auth/check',route=>route.fulfill({contentType:'application/json',body:JSON.stringify({ok:true,result:{user:'viewer',native:false,permissions:['kvm.video','system.diagnostics','oled.view']}})}));
         await viewer.goto(url+'#kvm');await viewer.getByRole('region',{name:'Console KVM en lecture seule'}).waitFor();
+        await viewer.getByText('viewer · Portable',{exact:true}).waitFor();
         await viewer.getByAltText('Vidéo KVM en lecture seule',{exact:true}).waitFor();
         assert.ok(!reads.includes('/kvm/'));assert.ok(!reads.includes('/api/ws'));
         assert.equal(await viewer.getByRole('button',{name:'Activer clavier / souris',exact:true}).count(),0);
